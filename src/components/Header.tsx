@@ -16,7 +16,7 @@ interface HeaderProps {
   onOpenNewTask?: () => void;
 }
 
-export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenNewTask }: HeaderProps) {
+export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps) {
   const sync = useSync();
   const { activeTimer, formattedTime, isTimerRunning, pauseTimer, resumeTimer, stopTimer } = useTimer();
 
@@ -28,9 +28,12 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenNewTask 
   const SyncBadge = () => {
     if (sync.warningIfStale) {
       return (
-        <button onClick={() => sync.triggerSync()} className="g-badge animate-pulse"
-          style={{ borderColor: 'rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)', color: 'rgba(239,68,68,0.9)' }}
-          title="Changes stale — click to retry">
+        <button
+          onClick={() => sync.triggerSync()}
+          className="v-pill-btn animate-pulse"
+          style={{ padding: '4px 10px', fontSize: 11, borderColor: 'rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.15)', color: '#f87171' }}
+          title="Changes stale — click to retry"
+        >
           <AlertTriangle size={11} />
           <span>{sync.unsyncedCount} stale</span>
         </button>
@@ -39,116 +42,135 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenNewTask 
     switch (sync.status) {
       case 'offline':
         return (
-          <div className="g-badge" style={{ borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.07)', color: 'rgba(234,179,8,0.8)' }}>
-            <WifiOff size={11} /><span>Offline</span>
+          <div className="v-pill-btn" style={{ padding: '4px 10px', fontSize: 11, borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.1)', color: '#facc15' }}>
+            <WifiOff size={11} />
+            <span>Offline</span>
           </div>
         );
       case 'syncing':
         return (
-          <div className="g-badge" style={{ borderColor: 'rgba(99,102,241,0.3)', background: 'rgba(99,102,241,0.07)', color: 'rgba(99,102,241,0.9)' }}>
-            <RefreshCw size={11} className="animate-spin" /><span>Syncing</span>
+          <div className="v-pill-btn" style={{ padding: '4px 10px', fontSize: 11, borderColor: 'rgba(99,102,241,0.35)', background: 'rgba(99,102,241,0.15)', color: '#a5b4fc' }}>
+            <RefreshCw size={11} className="animate-spin" />
+            <span>Syncing</span>
           </div>
         );
       case 'auth_required':
         return (
-          <button onClick={onOpenLogin} className="g-badge" style={{ borderColor: 'rgba(139,92,246,0.35)', background: 'rgba(139,92,246,0.08)', color: 'rgba(139,92,246,0.9)', cursor: 'pointer' }}>
-            <Lock size={11} /><span>Login to Sync</span>
+          <button
+            onClick={onOpenLogin}
+            className="v-pill-btn"
+            style={{ padding: '4px 10px', fontSize: 11, borderColor: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.15)', color: '#ffffff' }}
+          >
+            <Lock size={11} />
+            <span>Login to Sync</span>
           </button>
         );
       case 'changes_waiting':
         return (
-          <button onClick={() => sync.triggerSync()} className="g-badge" style={{ borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.07)', color: 'rgba(234,179,8,0.8)', cursor: 'pointer' }}>
-            <Clock size={11} /><span>{sync.unsyncedCount} waiting</span>
+          <button
+            onClick={() => sync.triggerSync()}
+            className="v-pill-btn"
+            style={{ padding: '4px 10px', fontSize: 11, borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.1)', color: '#facc15' }}
+          >
+            <Clock size={11} />
+            <span>{sync.unsyncedCount} waiting</span>
           </button>
         );
       default:
         return (
-          <div className="g-badge" style={{ borderColor: 'rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.07)', color: 'rgba(34,197,94,0.8)' }}
-            title={sync.lastSyncedAt ? `Last sync: ${formatTime(sync.lastSyncedAt)}` : ''}>
-            <CheckCircle2 size={11} /><span>Saved</span>
-            {sync.lastSyncedAt && <span style={{ color: 'rgba(34,197,94,0.5)', fontSize: 10 }}>· {formatTime(sync.lastSyncedAt)}</span>}
+          <div
+            className="v-pill-btn"
+            style={{ padding: '4px 12px', fontSize: 11, borderColor: 'rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.9)' }}
+            title={sync.lastSyncedAt ? `Last sync: ${formatTime(sync.lastSyncedAt)}` : 'Synced with Cloud'}
+          >
+            <CheckCircle2 size={11} style={{ color: '#4ade80' }} />
+            <span>Saved</span>
+            {sync.lastSyncedAt && (
+              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10 }}>· {formatTime(sync.lastSyncedAt)}</span>
+            )}
           </div>
         );
     }
   };
 
   return (
-    <header style={{
-      background: 'rgba(7,7,8,0.92)',
-      borderBottom: '1px solid rgba(255,255,255,0.07)',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
-      position: 'sticky',
-      top: 0,
-      zIndex: 30,
-    }}>
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 20px', height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 10,
-            background: 'linear-gradient(135deg, rgba(139,92,246,0.3), rgba(99,102,241,0.2))',
-            border: '1px solid rgba(139,92,246,0.35)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 16px rgba(139,92,246,0.2)',
-          }}>
-            <span style={{ fontSize: 16 }}>🌙</span>
-          </div>
-          <div>
-            <div className="font-bloody" style={{ fontSize: 18, color: 'rgba(255,255,255,0.9)', lineHeight: 1 }}>
-              Night Planner
-            </div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.08em' }}>
-              PLAN WITH INTENTION
-            </div>
-          </div>
-        </div>
+    <header
+      style={{
+        width: '100%',
+        maxWidth: 960,
+        margin: '0 auto',
+        padding: '16px 20px 8px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+        position: 'relative',
+        zIndex: 40,
+      }}
+    >
+      {/* Left Title / Spatial Capsule */}
+      <div className="v-pill-btn" style={{ padding: '6px 14px', background: 'rgba(28,28,34,0.7)', cursor: 'default' }}>
+        <span style={{ fontSize: 14 }}>🌙</span>
+        <span className="font-bloody" style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.04em' }}>
+          Night Planner
+        </span>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}>SPATIAL</span>
+      </div>
 
-        {/* PC Active Timer */}
-        {isPC && activeTimer && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '6px 14px 6px 10px',
-            background: 'rgba(18,18,20,0.95)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 999,
-            boxShadow: '0 0 12px rgba(0,0,0,0.4)',
-          }}>
-            <div className="g-timer-dot" style={{ color: activeTimer.sectionColor || '#8b5cf6', background: activeTimer.sectionColor || '#8b5cf6' }} />
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {activeTimer.taskTitle}
-            </span>
-            <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.9)', minWidth: 56 }}>
-              {formattedTime}
-            </span>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {isTimerRunning ? (
-                <button onClick={pauseTimer} className="g-icon-btn" style={{ width: 26, height: 26 }} aria-label="Pause">
-                  <Pause size={12} />
-                </button>
-              ) : (
-                <button onClick={resumeTimer} className="g-icon-btn" style={{ width: 26, height: 26 }} aria-label="Resume">
-                  <Play size={12} />
-                </button>
-              )}
-              <button onClick={stopTimer} className="g-icon-btn" style={{ width: 26, height: 26, color: 'rgba(239,68,68,0.7)', borderColor: 'rgba(239,68,68,0.2)' }} aria-label="Stop">
-                <Square size={12} />
+      {/* Active Timer Pill */}
+      {activeTimer && (
+        <div
+          className="v-pill-btn"
+          style={{
+            padding: '5px 12px 5px 8px',
+            background: 'rgba(20,20,25,0.85)',
+            borderColor: 'rgba(255,255,255,0.3)',
+          }}
+        >
+          <div
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: activeTimer.sectionColor || '#3b82f6',
+              boxShadow: `0 0 8px ${activeTimer.sectionColor || '#3b82f6'}`,
+              animation: 'timerPulse 1.4s infinite',
+            }}
+          />
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {activeTimer.taskTitle}
+          </span>
+          <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#ffffff' }}>
+            {formattedTime}
+          </span>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {isTimerRunning ? (
+              <button onClick={pauseTimer} className="v-circle-btn" style={{ width: 24, height: 24 }} aria-label="Pause">
+                <Pause size={10} />
               </button>
-            </div>
+            ) : (
+              <button onClick={resumeTimer} className="v-circle-btn" style={{ width: 24, height: 24 }} aria-label="Resume">
+                <Play size={10} />
+              </button>
+            )}
+            <button onClick={stopTimer} className="v-circle-btn" style={{ width: 24, height: 24, color: '#f87171' }} aria-label="Stop">
+              <Square size={10} />
+            </button>
           </div>
-        )}
-
-        {/* Right controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          <SyncBadge />
-          <button
-            onClick={onToggleTheme}
-            className="g-icon-btn"
-            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-          >
-            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
         </div>
+      )}
+
+      {/* Right Controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <SyncBadge />
+        <button
+          onClick={onToggleTheme}
+          className="v-circle-btn"
+          style={{ width: 34, height: 34 }}
+          aria-label={`Switch theme`}
+        >
+          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
       </div>
     </header>
   );

@@ -5,7 +5,7 @@ import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
 import { useTimer } from '@/lib/timer/useTimer';
 import { Play, Pause, Square, Check, Clock, ChevronDown, ChevronUp, Moon } from 'lucide-react';
-import type { Task, Section, TimeLog, Day } from '@/types';
+import type { Task, Section, TimeLog, Day, PriorityLevel } from '@/types';
 
 interface TodayScreenProps {
   sections: Section[];
@@ -37,11 +37,23 @@ export function TodayScreen({ sections, onOpenManualTime, onPreviewImage, isPhon
       if (d?.review) setReview(d.review);
     }
     load();
-    const iv = setInterval(load, 2000);
+    const iv = setInterval(load, 2500);
     return () => { mounted = false; clearInterval(iv); };
   }, [today]);
 
   const getActualMins = (taskId: string) => timeLogs.filter(tl => tl.taskId === taskId).reduce((s, tl) => s + tl.minutes, 0);
+
+  const handleUpdateTaskTime = async (taskId: string, minutes: number) => {
+    await db.tasks.update(taskId, { estimatedMinutes: minutes, updatedAt: Date.now(), synced: 0 });
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, estimatedMinutes: minutes } : t));
+    syncEngine.notifyLocalMutation();
+  };
+
+  const handleUpdateTaskPriority = async (taskId: string, priority: PriorityLevel) => {
+    await db.tasks.update(taskId, { priority, updatedAt: Date.now(), synced: 0 });
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, priority } : t));
+    syncEngine.notifyLocalMutation();
+  };
 
   const handleToggleDone = async (task: Task) => {
     const done = !task.isCompleted;
@@ -178,6 +190,82 @@ export function TodayScreen({ sections, onOpenManualTime, onPreviewImage, isPhon
                       <div style={{ height: '100%', borderRadius: 999, background: pct >= 100 ? 'rgba(239,68,68,0.6)' : `linear-gradient(90deg, ${sec.color}60, ${sec.color})`, width: `${pct}%`, boxShadow: `0 0 6px ${sec.color}50`, transition: 'width 0.5s ease' }} />
                     </div>
                   )}
+
+                  {/* Bottom Controls: Time & Hard / Medium / Low Priority */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginTop: 10,
+                      paddingTop: 8,
+                      borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                      flexWrap: 'wrap',
+                      gap: 6,
+                    }}
+                  >
+                    {/* Time selector pills */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', marginRight: 2 }}>Est:</span>
+                      {[15, 30, 45, 60, 120].map(mins => {
+                        const isSelected = task.estimatedMinutes === mins;
+                        return (
+                          <button
+                            key={mins}
+                            type="button"
+                            onClick={() => handleUpdateTaskTime(task.id, mins)}
+                            style={{
+                              fontSize: 9,
+                              fontWeight: 700,
+                              padding: '2px 5px',
+                              borderRadius: 4,
+                              border: isSelected ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
+                              background: isSelected ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                              color: isSelected ? '#38bdf8' : 'rgba(255, 255, 255, 0.45)',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s',
+                            }}
+                            title={`Set to ${mins}m`}
+                          >
+                            {mins >= 60 ? `${mins / 60}h` : `${mins}m`}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Hard / Medium / Low difficulty pills */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                      {(['High', 'Medium', 'Low'] as PriorityLevel[]).map(lvl => {
+                        const label = lvl === 'High' ? 'Hard' : lvl;
+                        const isSelected = task.priority === lvl;
+                        const color = lvl === 'High' ? '#f87171' : lvl === 'Medium' ? '#fbbf24' : '#34d399';
+                        const bgColor = lvl === 'High' ? 'rgba(239,68,68,0.22)' : lvl === 'Medium' ? 'rgba(245,158,11,0.22)' : 'rgba(16,185,129,0.22)';
+                        const borderColor = lvl === 'High' ? 'rgba(239,68,68,0.55)' : lvl === 'Medium' ? 'rgba(245,158,11,0.55)' : 'rgba(16,185,129,0.55)';
+
+                        return (
+                          <button
+                            key={lvl}
+                            type="button"
+                            onClick={() => handleUpdateTaskPriority(task.id, lvl)}
+                            style={{
+                              fontSize: 9,
+                              fontWeight: 700,
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              border: isSelected ? `1px solid ${borderColor}` : '1px solid rgba(255, 255, 255, 0.1)',
+                              background: isSelected ? bgColor : 'rgba(255, 255, 255, 0.04)',
+                              color: isSelected ? color : 'rgba(255, 255, 255, 0.45)',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s',
+                            }}
+                            title={`Set priority to ${label}`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
                   {/* Expanded Strategy + Done Means */}
                   {isExpanded && (

@@ -18,7 +18,7 @@ export function getPreviousDate(dateStr: string): string {
 export function getTomorrowDate(): string {
   const now = new Date();
   now.setDate(now.getDate() + 1);
-  return now.toISOString().split('T')[0];
+  return now.toLocaleDateString('en-CA');
 }
 
 /**
@@ -31,12 +31,12 @@ export function getDefaultPlanningDate(): string {
 
   if (currentHour >= 0 && currentHour < 4) {
     // 12:00 AM - 3:59 AM: User is likely still planning for "today"
-    return now.toISOString().split('T')[0];
+    return now.toLocaleDateString('en-CA');
   } else {
     // 4:00 AM onwards: Planning for tomorrow
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
+    return tomorrow.toLocaleDateString('en-CA');
   }
 }
 

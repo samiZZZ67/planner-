@@ -63,11 +63,23 @@ export interface DayReview {
   change: string;
 }
 
+export interface DaySheetData {
+  notes?: string;
+  schedule?: Record<string, string>;
+  breakfast?: string;
+  lunch?: string;
+  dinner?: string;
+  snacks?: string;
+  waterGlasses?: number;
+  exercise?: string;
+}
+
 export interface Day {
   id: string; // YYYY-MM-DD
   date: string;
   freeHours: number;
   review: DayReview;
+  sheetData?: DaySheetData;
   updatedAt: number;
   deleted: boolean;
   isSample: boolean;

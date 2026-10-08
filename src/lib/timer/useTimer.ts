@@ -54,7 +54,7 @@ export function useTimer() {
 
     const minutes = Math.max(1, Math.round(currentTotalMs / (60 * 1000)));
 
-    const todayDate = new Date().toISOString().split('T')[0];
+    const todayDate = new Date().toLocaleDateString('en-CA');
     const newLog: TimeLog = {
       id: crypto.randomUUID(),
       taskId: activeTimer.taskId,
