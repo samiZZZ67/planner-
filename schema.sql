@@ -1,0 +1,98 @@
+-- ====================================================================
+-- Night Planner - Neon Postgres Database Schema
+-- Run this script in the Neon SQL Editor or via psql
+-- ====================================================================
+
+-- 1. Shared Monotonic Sequence for Delta Sync
+CREATE SEQUENCE IF NOT EXISTS server_seq START WITH 1 INCREMENT BY 1;
+
+-- 2. Sections Table
+CREATE TABLE IF NOT EXISTS sections (
+    id VARCHAR(64) PRIMARY KEY,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL,
+    icon TEXT NOT NULL,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    daily_target_minutes INTEGER,
+    target_type VARCHAR(20) DEFAULT 'at least',
+    updated_at BIGINT NOT NULL,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    is_sample BOOLEAN NOT NULL DEFAULT FALSE,
+    server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+);
+
+CREATE INDEX IF NOT EXISTS idx_sections_server_seq ON sections (server_seq);
+CREATE INDEX IF NOT EXISTS idx_sections_updated_at ON sections (updated_at);
+
+-- 3. Tasks Table
+CREATE TABLE IF NOT EXISTS tasks (
+    id VARCHAR(64) PRIMARY KEY,
+    date VARCHAR(10) NOT NULL, -- YYYY-MM-DD
+    section_id VARCHAR(64) NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    strategy TEXT DEFAULT '',
+    done_means TEXT DEFAULT '',
+    estimated_minutes INTEGER NOT NULL DEFAULT 0,
+    priority VARCHAR(20) NOT NULL DEFAULT 'Medium',
+    must_do BOOLEAN NOT NULL DEFAULT FALSE,
+    tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+    icon TEXT DEFAULT '',
+    text_color TEXT DEFAULT '',
+    image TEXT,
+    is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+    completed_at BIGINT,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    is_sample BOOLEAN NOT NULL DEFAULT FALSE,
+    server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_server_seq ON tasks (server_seq);
+CREATE INDEX IF NOT EXISTS idx_tasks_date ON tasks (date);
+CREATE INDEX IF NOT EXISTS idx_tasks_section_id ON tasks (section_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks (updated_at);
+
+-- 4. Time Logs Table
+CREATE TABLE IF NOT EXISTS time_logs (
+    id VARCHAR(64) PRIMARY KEY,
+    task_id VARCHAR(64) NOT NULL,
+    date VARCHAR(10) NOT NULL, -- YYYY-MM-DD
+    minutes INTEGER NOT NULL DEFAULT 0,
+    source VARCHAR(20) NOT NULL DEFAULT 'timer', -- 'timer' | 'manual'
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    is_sample BOOLEAN NOT NULL DEFAULT FALSE,
+    server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+);
+
+CREATE INDEX IF NOT EXISTS idx_time_logs_server_seq ON time_logs (server_seq);
+CREATE INDEX IF NOT EXISTS idx_time_logs_task_id ON time_logs (task_id);
+CREATE INDEX IF NOT EXISTS idx_time_logs_date ON time_logs (date);
+CREATE INDEX IF NOT EXISTS idx_time_logs_updated_at ON time_logs (updated_at);
+
+-- 5. Days Table (Daily settings & 1-minute end of day review)
+CREATE TABLE IF NOT EXISTS days (
+    id VARCHAR(10) PRIMARY KEY, -- YYYY-MM-DD
+    date VARCHAR(10) NOT NULL,
+    free_hours NUMERIC(4,2) DEFAULT 8.0,
+    review JSONB DEFAULT '{"worked":"","blocked":"","change":""}'::jsonb,
+    updated_at BIGINT NOT NULL,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    is_sample BOOLEAN NOT NULL DEFAULT FALSE,
+    server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+);
+
+CREATE INDEX IF NOT EXISTS idx_days_server_seq ON days (server_seq);
+CREATE INDEX IF NOT EXISTS idx_days_updated_at ON days (updated_at);
+
+-- 6. Rate Limiting Table (5 attempts / 15 minutes)
+CREATE TABLE IF NOT EXISTS auth_rate_limit (
+    ip_address VARCHAR(128) PRIMARY KEY,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    last_attempt_at BIGINT NOT NULL,
+    blocked_until BIGINT NOT NULL DEFAULT 0
+);
