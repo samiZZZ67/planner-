@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
-/* 1. Bloody Hell Font-face Kit with System Fallbacks */
+/* ================================================================
+   NIGHT PLANNER — VISION PRO SPATIAL FROSTED GLASS DESIGN SYSTEM
+   Strictly styled after Apple VisionOS Frosted Glass & Spatial UI
+   ================================================================ */
+
 @font-face {
   font-family: 'Bloody Hell';
   src: url('/fonts/BloodyHell.woff2') format('woff2'),
@@ -12,83 +16,389 @@
 }
 
 :root {
-  --font-heading: 'Bloody Hell', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-heading: 'Bloody Hell', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
 
-  /* Default Dark Mode (I plan at night) */
-  --bg-primary: #0a0b12;
-  --bg-secondary: #13141f;
-  --bg-tertiary: #1b1c2b;
-  --bg-card: #151624;
-  --border-color: #26283d;
-  
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  
-  --accent-primary: #8b5cf6;
-  --accent-hover: #7c3aed;
+  /* Spatial Glass Tokens */
+  --v-glass-bg: rgba(28, 28, 34, 0.58);
+  --v-glass-bg-subtle: rgba(255, 255, 255, 0.06);
+  --v-glass-bg-card: rgba(16, 16, 20, 0.78);
+  --v-glass-bg-hover: rgba(255, 255, 255, 0.12);
+  --v-glass-border: rgba(255, 255, 255, 0.22);
+  --v-glass-border-subtle: rgba(255, 255, 255, 0.12);
+  --v-glass-border-bright: rgba(255, 255, 255, 0.35);
+
+  --v-shadow-spatial: 0 30px 80px -10px rgba(0, 0, 0, 0.75), 0 0 1px 1px rgba(255, 255, 255, 0.15);
+  --v-shadow-dock: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  --v-shadow-button: 0 12px 30px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.72);
+  --text-muted: rgba(255, 255, 255, 0.44);
+  --text-dim: rgba(255, 255, 255, 0.28);
+
+  --accent-color: #3b82f6;
 }
 
-/* Light Mode Overrides */
+/* Light spatial mode adaptation */
 [data-theme="light"] {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #f1f5f9;
-  --bg-card: #ffffff;
-  --border-color: #e2e8f0;
-  
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
-  
-  --accent-primary: #7c3aed;
-  --accent-hover: #6d28d9;
+  --v-glass-bg: rgba(235, 235, 240, 0.65);
+  --v-glass-bg-subtle: rgba(0, 0, 0, 0.04);
+  --v-glass-bg-card: rgba(255, 255, 255, 0.82);
+  --v-glass-bg-hover: rgba(0, 0, 0, 0.08);
+  --v-glass-border: rgba(0, 0, 0, 0.18);
+  --v-glass-border-subtle: rgba(0, 0, 0, 0.08);
+  --v-glass-border-bright: rgba(0, 0, 0, 0.28);
+  --text-primary: #0a0a0c;
+  --text-secondary: rgba(10, 10, 12, 0.72);
+  --text-muted: rgba(10, 10, 12, 0.45);
+  --text-dim: rgba(10, 10, 12, 0.25);
+  --v-shadow-spatial: 0 30px 80px -10px rgba(0, 0, 0, 0.25), 0 0 1px 1px rgba(0, 0, 0, 0.1);
 }
 
-body {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 1.5;
-  min-height: 100vh;
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
   margin: 0;
   padding: 0;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  height: 100%;
+  overflow-x: hidden;
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  background-color: #121214;
 }
 
+/* Photorealistic Vision Pro Room Backdrop */
+.vision-room-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: #18181c;
+  background-image: 
+    /* Sunlight ray projection coming through right window diagonally across room */
+    linear-gradient(125deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.08) 28%, transparent 48%),
+    /* Floor room shadow gradient */
+    linear-gradient(to bottom, #232328 0%, #17171a 45%, #0f0f12 100%),
+    /* Hardwood plank lines simulation */
+    repeating-linear-gradient(98deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 48px);
+  background-size: cover;
+  background-position: center;
+}
+
+.vision-room-bg::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(to left, rgba(255, 255, 255, 0.05), transparent 75%);
+  pointer-events: none;
+}
+
+.vision-room-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 45%, transparent 30%, rgba(0, 0, 0, 0.5) 100%);
+  pointer-events: none;
+}
+
+/* ================================================================
+   VISION PRO GLASSMORPHISM CLASSES
+   ================================================================ */
+
+/* Central Spatial Window */
+.v-window {
+  background: var(--v-glass-bg);
+  backdrop-filter: blur(45px) saturate(190%);
+  -webkit-backdrop-filter: blur(45px) saturate(190%);
+  border: 1.5px solid var(--v-glass-border);
+  border-radius: 36px;
+  box-shadow: var(--v-shadow-spatial);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.v-window::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 10%, rgba(255,255,255,0.45) 50%, transparent 90%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Left Vertical Floating Capsule Dock */
+.v-dock {
+  background: rgba(30, 30, 36, 0.65);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1.5px solid var(--v-glass-border);
+  border-radius: 9999px;
+  box-shadow: var(--v-shadow-dock);
+  position: relative;
+  overflow: hidden;
+}
+
+.v-dock::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 100%);
+  border-radius: 9999px 9999px 0 0;
+  pointer-events: none;
+}
+
+/* Inner Dark Frosted Card Tiles */
+.v-card {
+  background: var(--v-glass-bg-card);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border: 1px solid var(--v-glass-border-subtle);
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.v-card:hover {
+  border-color: var(--v-glass-border);
+}
+
+.v-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+  pointer-events: none;
+}
+
+/* Vision Pro Floating Pill Button */
+.v-pill-btn {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--v-glass-border);
+  border-radius: 9999px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 18px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  outline: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.v-pill-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: var(--v-glass-border-bright);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.v-pill-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Primary Glass Button */
+.v-pill-btn-primary {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.v-pill-btn-primary:hover {
+  background: rgba(255, 255, 255, 0.32);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Circular Floating Glass Icon Button */
+.v-circle-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--v-glass-border);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.v-circle-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  border-color: var(--v-glass-border-bright);
+  transform: scale(1.05);
+}
+
+.v-circle-btn.active {
+  background: rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+
+/* Floating Squircle Action Button (like the + button in bottom right of image) */
+.v-floating-squircle {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border: 1.5px solid var(--v-glass-border);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--v-shadow-button);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+
+.v-floating-squircle:hover {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.45);
+  transform: scale(1.08) translateY(-2px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+
+/* Floating Bottom Pill Widget (like @uix.vikram / Product Designer) */
+.v-floating-widget {
+  background: rgba(28, 28, 34, 0.75);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border: 1.5px solid var(--v-glass-border);
+  border-radius: 20px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.3);
+  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Segmented VisionOS Tabs */
+.v-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--v-glass-border-subtle);
+  padding: 0 20px;
+  gap: 28px;
+}
+
+.v-tab-btn {
+  background: none;
+  border: none;
+  padding: 14px 4px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease;
+  outline: none;
+}
+
+.v-tab-btn:hover {
+  color: var(--text-secondary);
+}
+
+.v-tab-btn.active {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.v-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #ffffff;
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+}
+
+/* VisionOS Input Field */
+.v-input {
+  background: rgba(14, 14, 18, 0.7);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--v-glass-border-subtle);
+  border-radius: 14px;
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 10px 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.v-input::placeholder {
+  color: var(--text-muted);
+}
+
+.v-input:focus {
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+}
+
+/* Header pill badge */
+.v-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--v-glass-border-subtle);
+  backdrop-filter: blur(12px);
+}
+
+/* Bloody Hell Gothic Heading */
 .font-bloody {
   font-family: var(--font-heading);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
 }
 
-.font-body {
-  font-family: var(--font-sans);
-}
+/* Custom subtle scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
 
-/* Accessible visible focus ring */
-*:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
-}
-
-/* Safe area padding for mobile notches and bottom nav bars */
-.pb-safe {
-  padding-bottom: max(1rem, env(safe-area-inset-bottom, 1rem));
-}
-
-.pt-safe {
-  padding-top: max(1rem, env(safe-area-inset-top, 1rem));
-}
-
-/* Respect user preference for reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  *, ::before, ::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+/* Animation pulse for timer */
+@keyframes timerPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.9); }
 }

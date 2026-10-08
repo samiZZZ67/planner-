@@ -77,3 +77,5 @@ export const PRESET_SECTION_COLORS = [
   { name: 'Cyan', dark: '#06b6d4', light: '#0e7490' },
   { name: 'Slate', dark: '#94a3b8', light: '#475569' },
 ];
+
+export const SECTION_COLORS = PRESET_SECTION_COLORS.map(c => c.dark);

@@ -20,29 +20,34 @@ export function UpdateBanner() {
   return (
     <div
       role="alert"
-      className="sticky top-0 z-50 bg-gradient-to-r from-purple-700 to-indigo-800 text-white px-4 py-2.5 shadow-md flex items-center justify-between gap-4"
+      style={{
+        background: 'linear-gradient(135deg, rgba(139,92,246,0.25), rgba(99,102,241,0.2))',
+        borderBottom: '1px solid rgba(139,92,246,0.3)',
+        backdropFilter: 'blur(12px)',
+        padding: '10px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 16,
+        position: 'sticky',
+        top: 0,
+        zIndex: 50,
+      }}
     >
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
-        <span>New version available! Reload to update Night Planner.</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>
+        <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
+        <span>New version of Night Planner is ready — reload to update.</span>
       </div>
-
-      <div className="flex items-center gap-2 shrink-0">
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
         <button
-          onClick={() => {
-            if (reloadFn) reloadFn();
-            else window.location.reload();
-          }}
-          className="px-3 py-1 bg-white text-purple-900 rounded-lg text-xs font-semibold hover:bg-slate-100 transition-colors"
+          onClick={() => { if (reloadFn) reloadFn(); else window.location.reload(); }}
+          className="g-btn g-btn-primary"
+          style={{ padding: '5px 14px', fontSize: 12 }}
         >
           Reload
         </button>
-        <button
-          onClick={() => setShowUpdate(false)}
-          className="p-1 text-white/80 hover:text-white"
-          aria-label="Dismiss update banner"
-        >
-          <X className="w-4 h-4" />
+        <button onClick={() => setShowUpdate(false)} className="g-icon-btn" style={{ width: 28, height: 28 }} aria-label="Dismiss">
+          <X size={13} />
         </button>
       </div>
     </div>

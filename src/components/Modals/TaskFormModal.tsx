@@ -101,12 +101,12 @@ export function TaskFormModal({
           setIcon(draft.icon || '📌');
           setTextColor(draft.textColor || '');
           setImage(draft.image || null);
-          setDraftRestored(true);
           if (strategyEditorRef.current) {
             strategyEditorRef.current.innerHTML = draft.strategy || '';
           }
+          setDraftRestored(true);
         } else {
-          // Reset fresh
+          // Defaults for new task
           setTitle('');
           setSectionId(defaultSectionId);
           setDescription('');
@@ -119,42 +119,55 @@ export function TaskFormModal({
           setIcon('📌');
           setTextColor('');
           setImage(null);
-          setDraftRestored(false);
           if (strategyEditorRef.current) {
             strategyEditorRef.current.innerHTML = '';
           }
+          setDraftRestored(false);
         }
       });
     }
   }, [isOpen, existingTask, defaultSectionId]);
 
-  // Auto-save draft as user types (if creating new task)
+  // Auto-save draft on every keystroke when creating a new task
   useEffect(() => {
     if (!isOpen || existingTask) return;
 
     const timeout = setTimeout(() => {
-      if (title.trim() || description.trim() || strategy.trim()) {
-        const draft: DraftTask = {
-          title,
-          sectionId,
-          description,
-          strategy,
-          doneMeans,
-          estimatedMinutes,
-          priority,
-          mustDo,
-          tags,
-          icon,
-          textColor,
-          image,
-          updatedAt: Date.now(),
-        };
-        saveTaskDraft(draft);
-      }
-    }, 500);
+      const draft: DraftTask = {
+        title,
+        sectionId,
+        description,
+        strategy,
+        doneMeans,
+        estimatedMinutes,
+        priority,
+        mustDo,
+        tags,
+        icon,
+        textColor,
+        image,
+        updatedAt: Date.now(),
+      };
+      saveTaskDraft(draft);
+    }, 400);
 
     return () => clearTimeout(timeout);
-  }, [title, sectionId, description, strategy, doneMeans, estimatedMinutes, priority, mustDo, tags, icon, textColor, image, isOpen, existingTask]);
+  }, [
+    isOpen,
+    existingTask,
+    title,
+    sectionId,
+    description,
+    strategy,
+    doneMeans,
+    estimatedMinutes,
+    priority,
+    mustDo,
+    tags,
+    icon,
+    textColor,
+    image,
+  ]);
 
   // Keyboard shortcut: Esc to close
   useEffect(() => {
@@ -169,64 +182,39 @@ export function TaskFormModal({
 
   if (!isOpen) return null;
 
-  // Handle Strategy Editor Rich Formats
-  const executeCommand = (cmd: string, val: string | undefined = undefined) => {
-    document.execCommand(cmd, false, val);
-    if (strategyEditorRef.current) {
-      setStrategy(strategyEditorRef.current.innerHTML);
-    }
-  };
-
+  // Handle Strategy Editor inputs
   const handleStrategyInput = () => {
     if (strategyEditorRef.current) {
       setStrategy(strategyEditorRef.current.innerHTML);
     }
   };
 
-  // Must-do top 3 validation
+  const executeCommand = (command: string, value: string | undefined = undefined) => {
+    document.execCommand(command, false, value);
+    if (strategyEditorRef.current) {
+      setStrategy(strategyEditorRef.current.innerHTML);
+    }
+  };
+
+  // Must-Do Star enforcement (max 3 per day)
   const handleToggleMustDo = async () => {
     if (!mustDo) {
-      // Check existing must-do count for currentDate
-      const currentMustDos = await db.tasks
-        .filter(t => t.date === currentDate && !t.deleted && t.mustDo && t.id !== existingTask?.id)
-        .count();
+      const dayTasks = await db.tasks
+        .filter(t => t.date === currentDate && !t.deleted && t.mustDo)
+        .toArray();
 
-      if (currentMustDos >= 3) {
-        setMustDoWarning('Max 3 Must-Do tasks allowed per day to keep your focus clear and sharp!');
-        setTimeout(() => setMustDoWarning(null), 3500);
+      if (dayTasks.length >= 3 && (!existingTask || !existingTask.mustDo)) {
+        setMustDoWarning('Max 3 Must-Do tasks allowed per day. Focus on your top 3 non-negotiables.');
+        setTimeout(() => setMustDoWarning(null), 4000);
         return;
       }
     }
     setMustDo(!mustDo);
   };
 
-  // Handle Image Upload & Paste
-  const handleImageFile = async (file: File) => {
-    try {
-      const compressed = await compressImage(file);
-      setImage(compressed);
-    } catch (err: any) {
-      console.error('Image compression error:', err);
-    }
-  };
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith('image/')) {
-        const file = items[i].getAsFile();
-        if (file) {
-          handleImageFile(file);
-          break;
-        }
-      }
-    }
-  };
-
-  // Tag Handling
+  // Tags management
   const addTag = () => {
-    const trimmed = tagInput.trim().toLowerCase();
+    const trimmed = tagInput.trim().replace(/^#/, '');
     if (trimmed && !tags.includes(trimmed)) {
       setTags([...tags, trimmed]);
       setTagInput('');
@@ -237,50 +225,99 @@ export function TaskFormModal({
     setTags(tags.filter(t => t !== tagToRemove));
   };
 
+  // Image Upload & Paste
+  const handleImageFile = async (file: File) => {
+    try {
+      const compressedDataUrl = await compressImage(file);
+      setImage(compressedDataUrl);
+    } catch {
+      alert('Failed to process image. Please try another.');
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          handleImageFile(file);
+          break;
+        }
+      }
+    }
+  };
+
   // Save Task
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
     const now = Date.now();
-    const taskToSave: Task = {
-      id: existingTask ? existingTask.id : crypto.randomUUID(),
-      date: existingTask ? existingTask.date : currentDate,
-      sectionId,
-      title: title.trim(),
-      description: description.trim(),
-      strategy: strategy.trim(),
-      doneMeans: doneMeans.trim(),
-      estimatedMinutes: Number(estimatedMinutes) || 0,
-      priority,
-      mustDo,
-      tags,
-      icon,
-      textColor,
-      image,
-      isCompleted: existingTask ? existingTask.isCompleted : false,
-      completedAt: existingTask ? existingTask.completedAt : null,
-      order: existingTask ? existingTask.order : 0,
-      createdAt: existingTask ? existingTask.createdAt : now,
-      updatedAt: now,
-      deleted: false,
-      isSample: false,
-      synced: 0,
-    };
 
-    await db.tasks.put(taskToSave);
-    await clearTaskDraft();
+    if (existingTask) {
+      await db.tasks.update(existingTask.id, {
+        title: title.trim(),
+        sectionId,
+        description: description.trim(),
+        strategy,
+        doneMeans: doneMeans.trim(),
+        estimatedMinutes: Number(estimatedMinutes) || 30,
+        priority,
+        mustDo,
+        tags,
+        icon,
+        textColor,
+        image,
+        updatedAt: now,
+        synced: 0,
+      });
+    } else {
+      const existingInDay = await db.tasks
+        .filter(t => t.date === currentDate && !t.deleted)
+        .count();
+
+      const newTask: Task = {
+        id: crypto.randomUUID(),
+        date: currentDate,
+        sectionId,
+        title: title.trim(),
+        description: description.trim(),
+        strategy,
+        doneMeans: doneMeans.trim(),
+        estimatedMinutes: Number(estimatedMinutes) || 30,
+        priority,
+        mustDo,
+        tags,
+        icon,
+        textColor,
+        image,
+        isCompleted: false,
+        completedAt: null,
+        order: existingInDay,
+        createdAt: now,
+        updatedAt: now,
+        deleted: false,
+        isSample: false,
+        synced: 0,
+      };
+
+      await db.tasks.put(newTask);
+      await clearTaskDraft();
+    }
+
     syncEngine.notifyLocalMutation();
     onClose();
   };
 
-  // Delete Task (Soft Delete)
   const handleDelete = async () => {
     if (!existingTask) return;
-    const now = Date.now();
+    if (!confirm('Delete this task?')) return;
+
     await db.tasks.update(existingTask.id, {
       deleted: true,
-      updatedAt: now,
+      updatedAt: Date.now(),
       synced: 0,
     });
     syncEngine.notifyLocalMutation();
@@ -289,40 +326,65 @@ export function TaskFormModal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex ${
-        isPhone ? 'items-end' : 'justify-end'
-      } bg-black/75 backdrop-blur-sm animate-in fade-in duration-200`}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 60,
+        display: 'flex',
+        justifyContent: isPhone ? 'center' : 'flex-end',
+        alignItems: isPhone ? 'flex-end' : 'stretch',
+        background: 'rgba(0,0,0,0.75)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="task-form-title"
       onPaste={handlePaste}
     >
       <div
-        className={`bg-bg-card border-border-color shadow-2xl flex flex-col ${
-          isPhone
-            ? 'w-full h-full rounded-none overflow-y-auto'
-            : 'w-[540px] h-full border-l rounded-none overflow-y-auto'
-        }`}
+        className="g-card"
+        style={{
+          width: isPhone ? '100%' : '540px',
+          height: isPhone ? '92vh' : '100%',
+          maxHeight: '100vh',
+          borderRadius: isPhone ? '20px 20px 0 0' : '20px 0 0 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'rgba(12, 12, 15, 0.97)',
+          boxShadow: 'var(--shadow-glass)',
+          overflow: 'hidden',
+        }}
       >
         {/* Top Header */}
-        <div className="sticky top-0 z-10 bg-bg-secondary/95 backdrop-blur-md border-b border-border-color px-5 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 id="task-form-title" className="font-bloody text-xl font-bold text-text-primary">
+        <div
+          style={{
+            padding: '16px 20px',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'rgba(15, 15, 18, 0.95)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h2 id="task-form-title" className="font-bloody" style={{ fontSize: 20, margin: 0, color: 'rgba(255,255,255,0.9)' }}>
               {existingTask ? 'Edit Task' : 'New Clear Plan'}
             </h2>
             {draftRestored && !existingTask && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-950/70 text-amber-300 border border-amber-800">
+              <span className="g-badge" style={{ borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.08)', color: 'rgba(234,179,8,0.85)', fontSize: 10 }}>
                 Draft Restored
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {existingTask && (
               <button
                 type="button"
                 onClick={handleDelete}
-                className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-950/50 rounded-lg transition-colors"
+                className="g-btn"
+                style={{ padding: '6px 12px', fontSize: 12, color: 'rgba(239,68,68,0.8)', borderColor: 'rgba(239,68,68,0.2)' }}
                 aria-label="Delete task"
               >
                 Delete
@@ -330,49 +392,39 @@ export function TaskFormModal({
             )}
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+              className="g-icon-btn"
+              style={{ width: 32, height: 32 }}
               aria-label="Close task form (Esc)"
             >
-              <X className="w-5 h-5" />
+              <X size={15} />
             </button>
           </div>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSave} className="p-5 space-y-5 flex-1 overflow-y-auto">
+        <form onSubmit={handleSave} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 18, flex: 1, overflowY: 'auto' }}>
           {mustDoWarning && (
-            <div className="p-3 rounded-xl bg-amber-950/80 border border-amber-800 text-amber-300 text-xs flex items-center gap-2 animate-shake">
-              <AlertCircle className="w-4 h-4 shrink-0" />
+            <div style={{ padding: '10px 14px', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.25)', borderRadius: 12, fontSize: 12, color: 'rgba(234,179,8,0.9)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertCircle size={15} style={{ flexShrink: 0 }} />
               <span>{mustDoWarning}</span>
             </div>
           )}
 
           {/* Title & Emoji Icon */}
           <div>
-            <label htmlFor="task-title" className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
+            <label htmlFor="task-title" className="g-label">
               What Will You Do? (Title) *
             </label>
-            <div className="flex gap-2">
-              <div className="relative group">
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ position: 'relative' }}>
                 <button
                   type="button"
-                  className="w-12 h-11 rounded-xl bg-bg-secondary border border-border-color text-xl flex items-center justify-center hover:bg-bg-tertiary transition-colors"
+                  className="g-btn"
+                  style={{ width: 46, height: 44, padding: 0, fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}
                   title="Choose Icon"
                 >
                   {icon}
                 </button>
-                <div className="absolute top-12 left-0 z-20 hidden group-hover:grid grid-cols-4 gap-1 p-2 bg-bg-card border border-border-color rounded-xl shadow-xl">
-                  {EMOJI_PRESETS.map(em => (
-                    <button
-                      key={em}
-                      type="button"
-                      onClick={() => setIcon(em)}
-                      className="p-1.5 text-lg hover:bg-bg-tertiary rounded-lg text-center"
-                    >
-                      {em}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <input
@@ -382,7 +434,7 @@ export function TaskFormModal({
                 onChange={e => setTitle(e.target.value)}
                 placeholder="e.g. Code database delta sync engine"
                 style={{ color: textColor || undefined }}
-                className="flex-1 px-3.5 py-2.5 rounded-xl bg-bg-secondary border border-border-color text-text-primary font-medium text-base focus:border-accent-primary focus:outline-none placeholder:text-text-muted/60"
+                className="g-input"
                 required
                 autoFocus={!isPhone}
               />
@@ -390,19 +442,19 @@ export function TaskFormModal({
           </div>
 
           {/* Section & Must-Do Star */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
-              <label htmlFor="task-section" className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
+              <label htmlFor="task-section" className="g-label">
                 Section
               </label>
               <select
                 id="task-section"
                 value={sectionId}
                 onChange={e => setSectionId(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-bg-secondary border border-border-color text-text-primary text-sm focus:border-accent-primary focus:outline-none cursor-pointer"
+                className="g-input"
               >
                 {sections.map(s => (
-                  <option key={s.id} value={s.id}>
+                  <option key={s.id} value={s.id} style={{ background: '#121215', color: '#fff' }}>
                     {s.icon} {s.name}
                   </option>
                 ))}
@@ -410,53 +462,61 @@ export function TaskFormModal({
             </div>
 
             <div>
-              <span className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
-                Top 3 Must-Do?
-              </span>
+              <span className="g-label">Top 3 Must-Do?</span>
               <button
                 type="button"
                 onClick={handleToggleMustDo}
-                className={`w-full py-2.5 px-3.5 rounded-xl border flex items-center justify-between text-sm font-medium transition-all ${
-                  mustDo
-                    ? 'bg-amber-950/40 border-amber-600/80 text-amber-300'
-                    : 'bg-bg-secondary border-border-color text-text-muted hover:text-text-secondary'
-                }`}
+                className="g-btn"
+                style={{
+                  width: '100%',
+                  height: 44,
+                  padding: '0 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  borderRadius: 12,
+                  borderColor: mustDo ? 'rgba(234,179,8,0.5)' : 'rgba(255,255,255,0.08)',
+                  background: mustDo ? 'rgba(234,179,8,0.1)' : 'var(--glass-bg-light)',
+                  color: mustDo ? 'rgba(234,179,8,0.95)' : 'var(--text-muted)',
+                }}
                 aria-pressed={mustDo}
               >
-                <div className="flex items-center gap-2">
-                  <Star className={`w-4 h-4 ${mustDo ? 'fill-amber-400 text-amber-400' : 'text-text-muted'}`} />
-                  <span>{mustDo ? 'Must-Do Priority (Starred)' : 'Normal Priority'}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                  <Star size={14} style={{ color: mustDo ? '#eab308' : 'currentColor', fill: mustDo ? '#eab308' : 'none' }} />
+                  <span>{mustDo ? 'Must-Do' : 'Normal'}</span>
                 </div>
-                <span className="text-[10px] uppercase font-bold tracking-wider opacity-75">
-                  Max 3
-                </span>
+                <span style={{ fontSize: 10, opacity: 0.6 }}>Max 3</span>
               </button>
             </div>
           </div>
 
           {/* Estimated Time with Quick Buttons */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor="task-est-minutes" className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5" />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label htmlFor="task-est-minutes" className="g-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Clock size={12} />
                 <span>How Long Will It Take? *</span>
               </label>
-              <span className="text-xs font-bold text-accent-primary font-mono">
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(139,92,246,0.9)', fontFamily: 'monospace' }}>
                 {estimatedMinutes} min ({Math.round((estimatedMinutes / 60) * 10) / 10}h)
               </span>
             </div>
 
-            <div className="grid grid-cols-4 gap-2 mb-2">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 8 }}>
               {[15, 30, 60, 120].map(mins => (
                 <button
                   key={mins}
                   type="button"
                   onClick={() => setEstimatedMinutes(mins)}
-                  className={`py-2 rounded-xl text-xs font-semibold border transition-all ${
-                    estimatedMinutes === mins
-                      ? 'bg-accent-primary text-white border-accent-primary shadow-sm'
-                      : 'bg-bg-secondary border-border-color text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
-                  }`}
+                  className="g-btn"
+                  style={{
+                    padding: '8px 0',
+                    fontSize: 12,
+                    textAlign: 'center',
+                    background: estimatedMinutes === mins ? 'rgba(139,92,246,0.2)' : 'var(--glass-bg-light)',
+                    borderColor: estimatedMinutes === mins ? 'rgba(139,92,246,0.45)' : 'rgba(255,255,255,0.08)',
+                    color: estimatedMinutes === mins ? 'rgba(255,255,255,0.95)' : 'var(--text-muted)',
+                  }}
                 >
                   {mins >= 60 ? `${mins / 60}h` : `${mins}m`}
                 </button>
@@ -471,49 +531,64 @@ export function TaskFormModal({
               step="5"
               value={estimatedMinutes}
               onChange={e => setEstimatedMinutes(Math.max(5, parseInt(e.target.value) || 0))}
-              className="w-full px-3.5 py-2 rounded-xl bg-bg-secondary border border-border-color text-text-primary text-sm focus:border-accent-primary focus:outline-none"
+              className="g-input"
             />
           </div>
 
           {/* Strategy: How Exactly Will I Do It? (With Rich Toolbar) */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
-                Strategy: How Exactly Will I Do It?
-              </label>
-
-              {/* Formatting Toolbar */}
-              <div className="flex items-center gap-1 bg-bg-secondary p-1 rounded-lg border border-border-color">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label className="g-label" style={{ margin: 0 }}>Strategy: How Exactly Will I Do It?</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: 3, background: 'rgba(20,20,24,0.8)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8 }}>
                 <button
                   type="button"
                   onClick={() => executeCommand('bold')}
-                  className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+                  className="g-icon-btn"
+                  style={{ width: 24, height: 24, border: 'none', background: 'transparent' }}
                   title="Bold (Ctrl+B)"
                   aria-label="Bold text"
                 >
-                  <Bold className="w-3.5 h-3.5" />
+                  <Bold size={12} />
                 </button>
                 <button
                   type="button"
                   onClick={() => executeCommand('hiliteColor', '#fde047')}
-                  className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+                  className="g-icon-btn"
+                  style={{ width: 24, height: 24, border: 'none', background: 'transparent' }}
                   title="Highlight"
                   aria-label="Highlight text"
                 >
-                  <Highlighter className="w-3.5 h-3.5" />
+                  <Highlighter size={12} />
                 </button>
-                <div className="relative">
+                <div style={{ position: 'relative' }}>
                   <button
                     type="button"
                     onClick={() => setShowColorPicker(!showColorPicker)}
-                    className="p-1 rounded text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+                    className="g-icon-btn"
+                    style={{ width: 24, height: 24, border: 'none', background: 'transparent' }}
                     title="8 High-Contrast Colors"
                     aria-label="Text color palette"
                   >
-                    <Palette className="w-3.5 h-3.5" />
+                    <Palette size={12} />
                   </button>
                   {showColorPicker && (
-                    <div className="absolute right-0 top-8 z-30 p-2 bg-bg-card border border-border-color rounded-xl shadow-2xl grid grid-cols-4 gap-1.5 w-36">
+                    <div
+                      style={{
+                        position: 'absolute',
+                        right: 0,
+                        top: 30,
+                        zIndex: 30,
+                        padding: 8,
+                        background: 'rgba(20,20,24,0.98)',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        borderRadius: 12,
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gap: 6,
+                        width: 140,
+                      }}
+                    >
                       {STRATEGY_COLORS.map(c => (
                         <button
                           key={c.id}
@@ -522,8 +597,14 @@ export function TaskFormModal({
                             executeCommand('foreColor', c.darkHex);
                             setShowColorPicker(false);
                           }}
-                          className="w-6 h-6 rounded-full border border-white/20 hover:scale-110 transition-transform"
-                          style={{ backgroundColor: c.darkHex }}
+                          style={{
+                            width: 24,
+                            height: 24,
+                            borderRadius: '50%',
+                            border: '1px solid rgba(255,255,255,0.2)',
+                            backgroundColor: c.darkHex,
+                            cursor: 'pointer',
+                          }}
                           title={c.label}
                         />
                       ))}
@@ -540,14 +621,22 @@ export function TaskFormModal({
               role="textbox"
               aria-multiline="true"
               aria-label="Strategy description"
-              data-placeholder="Define the exact steps: 2 Pomodoros, phone away, open docs first..."
-              className="w-full min-h-[85px] p-3 rounded-xl bg-bg-secondary border border-border-color text-text-primary text-sm focus:border-accent-primary focus:outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-text-muted/60"
+              style={{
+                minHeight: 85,
+                padding: '12px 14px',
+                borderRadius: 12,
+                background: 'rgba(10, 10, 12, 0.8)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'rgba(255,255,255,0.88)',
+                fontSize: 13,
+                outline: 'none',
+              }}
             />
           </div>
 
           {/* Done Means: How Will I Know It Is Finished? */}
           <div>
-            <label htmlFor="task-done-means" className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
+            <label htmlFor="task-done-means" className="g-label">
               Done Means: How Will I Know It Is Finished? *
             </label>
             <textarea
@@ -555,17 +644,16 @@ export function TaskFormModal({
               rows={2}
               value={doneMeans}
               onChange={e => setDoneMeans(e.target.value)}
-              placeholder="e.g. Commit pushed to GitHub, PR reviewed, and all 15 tests green."
-              className="w-full px-3.5 py-2.5 rounded-xl bg-bg-secondary border border-border-color text-text-primary text-sm focus:border-accent-primary focus:outline-none placeholder:text-text-muted/60"
+              placeholder="e.g. Commit pushed to GitHub, PR reviewed, and all tests green."
+              className="g-input"
+              style={{ minHeight: 60 }}
             />
           </div>
 
           {/* Priority (Text & Icon) */}
           <div>
-            <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
-              Priority
-            </label>
-            <div className="grid grid-cols-3 gap-2">
+            <label className="g-label">Priority</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
               {(['Low', 'Medium', 'High'] as PriorityLevel[]).map(lvl => {
                 const isSelected = priority === lvl;
                 return (
@@ -573,19 +661,40 @@ export function TaskFormModal({
                     key={lvl}
                     type="button"
                     onClick={() => setPriority(lvl)}
-                    className={`py-2 px-3 rounded-xl text-xs font-semibold border flex items-center justify-center gap-1.5 transition-all ${
-                      isSelected
+                    className="g-btn"
+                    style={{
+                      padding: '8px 0',
+                      fontSize: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      background: isSelected
                         ? lvl === 'High'
-                          ? 'bg-red-950/70 border-red-700 text-red-300'
+                          ? 'rgba(239,68,68,0.15)'
                           : lvl === 'Medium'
-                          ? 'bg-amber-950/70 border-amber-700 text-amber-300'
-                          : 'bg-emerald-950/70 border-emerald-700 text-emerald-300'
-                        : 'bg-bg-secondary border-border-color text-text-muted hover:text-text-primary'
-                    }`}
+                          ? 'rgba(234,179,8,0.15)'
+                          : 'rgba(34,197,94,0.15)'
+                        : 'var(--glass-bg-light)',
+                      borderColor: isSelected
+                        ? lvl === 'High'
+                          ? 'rgba(239,68,68,0.5)'
+                          : lvl === 'Medium'
+                          ? 'rgba(234,179,8,0.5)'
+                          : 'rgba(34,197,94,0.5)'
+                        : 'rgba(255,255,255,0.08)',
+                      color: isSelected
+                        ? lvl === 'High'
+                          ? 'rgba(239,68,68,0.95)'
+                          : lvl === 'Medium'
+                          ? 'rgba(234,179,8,0.95)'
+                          : 'rgba(34,197,94,0.95)'
+                        : 'var(--text-muted)',
+                    }}
                   >
-                    {lvl === 'High' && <Flame className="w-3.5 h-3.5" />}
-                    {lvl === 'Medium' && <Sparkles className="w-3.5 h-3.5" />}
-                    {lvl === 'Low' && <Shield className="w-3.5 h-3.5" />}
+                    {lvl === 'High' && <Flame size={13} />}
+                    {lvl === 'Medium' && <Sparkles size={13} />}
+                    {lvl === 'Low' && <Shield size={13} />}
                     <span>{lvl}</span>
                   </button>
                 );
@@ -593,12 +702,10 @@ export function TaskFormModal({
             </div>
           </div>
 
-          {/* Tags & Chips */}
+          {/* Tags */}
           <div>
-            <label htmlFor="task-tag-input" className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
-              Tags
-            </label>
-            <div className="flex gap-2 mb-2">
+            <label htmlFor="task-tag-input" className="g-label">Tags</label>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <input
                 id="task-tag-input"
                 type="text"
@@ -611,30 +718,32 @@ export function TaskFormModal({
                   }
                 }}
                 placeholder="Add tag and press Enter..."
-                className="flex-1 px-3 py-1.5 rounded-xl bg-bg-secondary border border-border-color text-text-primary text-xs focus:border-accent-primary focus:outline-none"
+                className="g-input"
               />
               <button
                 type="button"
                 onClick={addTag}
-                className="px-3 py-1.5 rounded-xl bg-bg-tertiary text-text-secondary text-xs hover:text-text-primary"
+                className="g-btn"
+                style={{ padding: '0 16px', fontSize: 12 }}
               >
                 Add
               </button>
             </div>
 
             {tags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {tags.map(t => (
                   <span
                     key={t}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-bg-tertiary text-text-secondary border border-border-color"
+                    className="g-pill"
+                    style={{ padding: '3px 10px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 5, color: 'rgba(255,255,255,0.7)' }}
                   >
-                    <Tag className="w-3 h-3 opacity-60" />
+                    <Tag size={10} style={{ opacity: 0.5 }} />
                     <span>{t}</span>
                     <button
                       type="button"
                       onClick={() => removeTag(t)}
-                      className="ml-1 text-text-muted hover:text-red-400"
+                      style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: 0, fontSize: 14 }}
                     >
                       &times;
                     </button>
@@ -646,16 +755,16 @@ export function TaskFormModal({
 
           {/* Image Attachment (Upload or Paste) */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider flex items-center gap-1.5">
-                <ImageIcon className="w-3.5 h-3.5" />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label className="g-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <ImageIcon size={12} />
                 <span>Reference Image (Max 800px / ~150KB)</span>
               </label>
               {image && (
                 <button
                   type="button"
                   onClick={() => setImage(null)}
-                  className="text-xs text-red-400 hover:text-red-300"
+                  style={{ background: 'none', border: 'none', color: 'rgba(239,68,68,0.8)', fontSize: 11, cursor: 'pointer' }}
                 >
                   Remove
                 </button>
@@ -663,32 +772,43 @@ export function TaskFormModal({
             </div>
 
             {image ? (
-              <div className="relative group rounded-xl overflow-hidden border border-border-color bg-bg-secondary max-h-48 flex items-center justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+              <div
+                style={{
+                  position: 'relative',
+                  borderRadius: 14,
+                  overflow: 'hidden',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(10,10,12,0.8)',
+                  maxHeight: 180,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
                 <img
                   src={image}
                   alt={title || 'Task Attachment'}
-                  className="max-h-48 object-contain cursor-pointer"
+                  style={{ maxHeight: 180, objectFit: 'contain', cursor: 'pointer' }}
                   onClick={() => onPreviewImage(image, title || 'Task Reference')}
                 />
-                <button
-                  type="button"
-                  onClick={() => onPreviewImage(image, title || 'Task Reference')}
-                  className="absolute inset-0 bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs font-medium"
-                >
-                  Click to enlarge
-                </button>
               </div>
             ) : (
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="p-4 border-2 border-dashed border-border-color rounded-xl text-center cursor-pointer hover:border-accent-primary hover:bg-bg-secondary transition-all"
+                style={{
+                  padding: 20,
+                  border: '1px dashed rgba(255,255,255,0.12)',
+                  borderRadius: 14,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  background: 'rgba(10,10,12,0.4)',
+                }}
               >
-                <ImageIcon className="w-6 h-6 text-text-muted mx-auto mb-1" />
-                <p className="text-xs text-text-secondary">
+                <ImageIcon size={22} style={{ color: 'rgba(255,255,255,0.3)', margin: '0 auto 6px' }} />
+                <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
                   Tap to upload or paste (Ctrl+V) reference screenshot
                 </p>
-                <p className="text-[10px] text-text-muted mt-0.5">
+                <p style={{ margin: '4px 0 0', fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>
                   Automatically resized & compressed to ~150KB
                 </p>
                 <input
@@ -698,7 +818,7 @@ export function TaskFormModal({
                   onChange={e => {
                     if (e.target.files?.[0]) handleImageFile(e.target.files[0]);
                   }}
-                  className="hidden"
+                  style={{ display: 'none' }}
                 />
               </div>
             )}
@@ -706,11 +826,21 @@ export function TaskFormModal({
         </form>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 z-10 bg-bg-secondary/95 backdrop-blur-md border-t border-border-color p-4 flex items-center justify-between">
+        <div
+          style={{
+            padding: '16px 20px',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'rgba(15, 15, 18, 0.95)',
+          }}
+        >
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl text-sm text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+            className="g-btn"
+            style={{ padding: '9px 18px' }}
           >
             Cancel
           </button>
@@ -718,9 +848,10 @@ export function TaskFormModal({
           <button
             onClick={handleSave}
             disabled={!title.trim()}
-            className="px-6 py-2.5 rounded-xl bg-accent-primary hover:bg-accent-hover text-white text-sm font-semibold disabled:opacity-50 transition-all flex items-center gap-2 shadow-lg shadow-purple-900/30"
+            className="g-btn g-btn-primary"
+            style={{ padding: '9px 24px', display: 'flex', alignItems: 'center', gap: 7, opacity: !title.trim() ? 0.4 : 1 }}
           >
-            <CheckCircle className="w-4 h-4" />
+            <CheckCircle size={15} />
             <span>{existingTask ? 'Save Changes' : 'Confirm & Schedule'}</span>
           </button>
         </div>

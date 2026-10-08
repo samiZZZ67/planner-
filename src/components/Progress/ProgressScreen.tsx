@@ -3,479 +3,274 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/db';
 import {
-  Clock,
-  CheckCircle,
-  TrendingUp,
-  Flame,
-  ArrowUpRight,
-  ArrowDownRight,
-  PieChart as PieIcon,
-  BarChart2,
-  Calendar,
-} from 'lucide-react';
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
+  ResponsiveContainer, LineChart, Line, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend, Area, AreaChart,
 } from 'recharts';
-import type { Task, Section, TimeLog } from '@/types';
+import { TrendingUp, TrendingDown, Clock, CheckCircle2, Target, Flame, BarChart3, PieChart as PieIcon, Activity } from 'lucide-react';
+import type { Section } from '@/types';
 
-type DateRange = 7 | 28 | 90;
-type MetricKey = 'hours' | 'tasks' | 'completion' | 'streak';
+type Range = 7 | 28 | 90;
+type MainChart = 'hours' | 'tasks' | 'completion' | 'streak';
 
-interface ProgressScreenProps {
-  sections: Section[];
-  isPhone: boolean;
+interface ProgressScreenProps { sections: Section[]; isPhone: boolean; }
+
+function getDaysInRange(n: number): string[] {
+  const result: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    result.push(d.toLocaleDateString('en-CA'));
+  }
+  return result;
 }
 
+const GlassTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{ background: 'rgba(15,15,18,0.96)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 12, padding: '10px 14px', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 6, letterSpacing: '0.05em' }}>{label}</div>
+      {payload.map((p: any, i: number) => (
+        <div key={i} style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
+          <span style={{ color: 'rgba(255,255,255,0.5)' }}>{p.name}:</span>
+          <strong>{p.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export function ProgressScreen({ sections, isPhone }: ProgressScreenProps) {
-  const [range, setRange] = useState<DateRange>(28);
-  const [activeMetric, setActiveMetric] = useState<MetricKey>('hours');
-  const [isCumulative, setIsCumulative] = useState(false);
+  const [range, setRange] = useState<Range>(7);
+  const [mainChart, setMainChart] = useState<MainChart>('hours');
+  const [cumulative, setCumulative] = useState(false);
+  const [data, setData] = useState<any[]>([]);
+  const [summary, setSummary] = useState({ hours: 0, tasks: 0, completion: 0, streak: 0 });
+  const [prevSummary, setPrevSummary] = useState({ hours: 0, tasks: 0, completion: 0, streak: 0 });
+  const [sectionData, setSectionData] = useState<any[]>([]);
+  const [dailyComparison, setDailyComparison] = useState<any[]>([]);
 
-  const [allTasks, setAllTasks] = useState<Task[]>([]);
-  const [allLogs, setAllLogs] = useState<TimeLog[]>([]);
-
-  // Load data from Dexie
   useEffect(() => {
-    async function loadData() {
-      const [tasks, logs] = await Promise.all([
-        db.tasks.filter(t => !t.deleted).toArray(),
-        db.timeLogs.filter(tl => !tl.deleted).toArray(),
-      ]);
-      setAllTasks(tasks);
-      setAllLogs(logs);
-    }
-    loadData();
-    const interval = setInterval(loadData, 3000);
-    return () => clearInterval(interval);
-  }, []);
+    let mounted = true;
+    async function load() {
+      const days = getDaysInRange(range);
+      const prevDays = getDaysInRange(range * 2).slice(0, range);
+      const allLogs = await db.timeLogs.toArray();
+      const allTasks = await db.tasks.filter(t => !t.deleted).toArray();
 
-  // Compute date array for current and prior period
-  const { currentDays, priorDays } = useMemo(() => {
-    const today = new Date();
-    const current: string[] = [];
-    const prior: string[] = [];
-
-    for (let i = range - 1; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      current.push(d.toISOString().split('T')[0]);
-    }
-
-    for (let i = range * 2 - 1; i >= range; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      prior.push(d.toISOString().split('T')[0]);
-    }
-
-    return { currentDays: current, priorDays: prior };
-  }, [range]);
-
-  // Aggregate current and prior metrics
-  const { currentMetrics, priorMetrics, dailyData, sectionBreakdown } = useMemo(() => {
-    const currentDaySet = new Set(currentDays);
-    const priorDaySet = new Set(priorDays);
-
-    const currentTasks = allTasks.filter(t => currentDaySet.has(t.date));
-    const priorTasks = allTasks.filter(t => priorDaySet.has(t.date));
-
-    const currentLogs = allLogs.filter(l => currentDaySet.has(l.date));
-    const priorLogs = allLogs.filter(l => priorDaySet.has(l.date));
-
-    // 1. Hours spent
-    const curHours = Math.round((currentLogs.reduce((s, l) => s + l.minutes, 0) / 60) * 10) / 10;
-    const priHours = Math.round((priorLogs.reduce((s, l) => s + l.minutes, 0) / 60) * 10) / 10;
-
-    // 2. Tasks completed
-    const curCompleted = currentTasks.filter(t => t.isCompleted).length;
-    const priCompleted = priorTasks.filter(t => t.isCompleted).length;
-
-    // 3. Completion rate
-    const curRate = currentTasks.length > 0 ? Math.round((curCompleted / currentTasks.length) * 100) : 0;
-    const priRate = priorTasks.length > 0 ? Math.round((priCompleted / priorTasks.length) * 100) : 0;
-
-    // 4. Day streak
-    let streak = 0;
-    const todayStr = new Date().toISOString().split('T')[0];
-    let checkDate = new Date();
-
-    while (true) {
-      const dStr = checkDate.toISOString().split('T')[0];
-      const hasCompleted = allTasks.some(t => t.date === dStr && t.isCompleted);
-      if (hasCompleted) {
-        streak += 1;
-        checkDate.setDate(checkDate.getDate() - 1);
-      } else {
-        // Allow today to not be completed yet if earlier in the day
-        if (dStr === todayStr) {
-          checkDate.setDate(checkDate.getDate() - 1);
-          continue;
+      const calcSummary = (dayList: string[]) => {
+        const hours = dayList.reduce((s, d) => s + allLogs.filter(l => l.date === d).reduce((a, l) => a + l.minutes, 0), 0) / 60;
+        const planned = allTasks.filter(t => dayList.includes(t.date));
+        const tasks = planned.filter(t => t.isCompleted).length;
+        const completion = planned.length ? Math.round((tasks / planned.length) * 100) : 0;
+        let streak = 0;
+        const sorted = [...days].reverse();
+        for (const d of sorted) {
+          if (allTasks.some(t => t.date === d && t.isCompleted)) streak++;
+          else break;
         }
-        break;
+        return { hours: Math.round(hours * 10) / 10, tasks, completion, streak };
+      };
+
+      const chartData = days.map(d => {
+        const logs = allLogs.filter(l => l.date === d);
+        const planned = allTasks.filter(t => t.date === d);
+        const done = planned.filter(t => t.isCompleted);
+        return {
+          date: d.slice(5),
+          hours: Math.round((logs.reduce((s, l) => s + l.minutes, 0) / 60) * 10) / 10,
+          tasks: done.length,
+          planned: planned.length,
+          completion: planned.length ? Math.round((done.length / planned.length) * 100) : 0,
+          estimatedHrs: Math.round((planned.reduce((s, t) => s + (t.estimatedMinutes || 0), 0) / 60) * 10) / 10,
+        };
+      });
+
+      if (cumulative) {
+        let acc = { hours: 0, tasks: 0 };
+        chartData.forEach(d => { acc.hours += d.hours; acc.tasks += d.tasks; d.hours = Math.round(acc.hours * 10) / 10; d.tasks = acc.tasks; });
       }
-      if (streak > 365) break;
+
+      const secData = sections.map(sec => {
+        const mins = days.reduce((s, d) => s + allLogs.filter(l => l.date === d).reduce((a, l) => {
+          const task = allTasks.find(t => t.id === l.taskId);
+          return task?.sectionId === sec.id ? a + l.minutes : a;
+        }, 0), 0);
+        return { name: sec.name, value: Math.round(mins / 60 * 10) / 10, color: sec.color, icon: sec.icon, target: sec.dailyTargetMinutes };
+      }).filter(d => d.value > 0);
+
+      const daily = days.map(d => ({
+        date: d.slice(5),
+        estimated: Math.round(allTasks.filter(t => t.date === d).reduce((s, t) => s + (t.estimatedMinutes || 0), 0) / 60 * 10) / 10,
+        actual: Math.round(allLogs.filter(l => l.date === d).reduce((s, l) => s + l.minutes, 0) / 60 * 10) / 10,
+      }));
+
+      if (!mounted) return;
+      setSummary(calcSummary(days));
+      setPrevSummary(calcSummary(prevDays));
+      setData(chartData);
+      setSectionData(secData);
+      setDailyComparison(daily);
     }
+    load();
+  }, [range, cumulative, sections]);
 
-    // Daily breakdown for charts
-    let runningHours = 0;
-    let runningTasks = 0;
-
-    const daily = currentDays.map(dateStr => {
-      const dayTasks = currentTasks.filter(t => t.date === dateStr);
-      const dayLogs = currentLogs.filter(l => l.date === dateStr);
-
-      const actHours = Math.round((dayLogs.reduce((s, l) => s + l.minutes, 0) / 60) * 10) / 10;
-      const estHours = Math.round((dayTasks.reduce((s, t) => s + (t.estimatedMinutes || 0), 0) / 60) * 10) / 10;
-      const doneCount = dayTasks.filter(t => t.isCompleted).length;
-
-      runningHours = Math.round((runningHours + actHours) * 10) / 10;
-      runningTasks += doneCount;
-
-      const [y, m, d] = dateStr.split('-');
-      const label = `${m}/${d}`;
-
-      return {
-        date: dateStr,
-        label,
-        actualHours: actHours,
-        estimatedHours: estHours,
-        tasksDone: doneCount,
-        cumulativeHours: runningHours,
-        cumulativeTasks: runningTasks,
-      };
-    });
-
-    // Time by section donut breakdown
-    const secMap = new Map<string, number>();
-    for (const log of currentLogs) {
-      const task = allTasks.find(t => t.id === log.taskId);
-      const secId = task?.sectionId || 'unknown';
-      secMap.set(secId, (secMap.get(secId) || 0) + log.minutes);
-    }
-
-    const secBreakdown = sections.map(s => {
-      const mins = secMap.get(s.id) || 0;
-      const hrs = Math.round((mins / 60) * 10) / 10;
-      return {
-        name: s.name,
-        color: s.color,
-        hours: hrs,
-        minutes: mins,
-      };
-    }).filter(s => s.minutes > 0);
-
-    return {
-      currentMetrics: {
-        hours: curHours,
-        tasks: curCompleted,
-        completion: curRate,
-        streak,
-      },
-      priorMetrics: {
-        hours: priHours,
-        tasks: priCompleted,
-        completion: priRate,
-      },
-      dailyData: daily,
-      sectionBreakdown: secBreakdown,
-    };
-  }, [allTasks, allLogs, currentDays, priorDays, sections]);
-
-  // Compute % change comparison helper
-  const renderTrend = (current: number, prior: number, isPercent = false) => {
-    if (prior === 0) {
-      return (
-        <span className="text-[11px] text-text-muted">
-          No prior period data
-        </span>
-      );
-    }
-
-    const diff = current - prior;
-    const pct = Math.round(((diff) / prior) * 100);
-    const isUp = diff >= 0;
-
-    return (
-      <div className={`flex items-center gap-0.5 text-xs font-semibold ${isUp ? 'text-emerald-400' : 'text-red-400'}`}>
-        {isUp ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-        <span>{isUp ? '+' : ''}{isPercent ? `${diff}%` : `${pct}%`} vs last {range}d</span>
-      </div>
-    );
+  const delta = (cur: number, prev: number) => {
+    if (!prev) return null;
+    const pct = Math.round(((cur - prev) / prev) * 100);
+    return { pct, up: cur >= prev };
   };
 
-  const cards: {
-    key: MetricKey;
-    title: string;
-    value: string;
-    icon: React.ReactNode;
-    trend: React.ReactNode;
-  }[] = [
-    {
-      key: 'hours',
-      title: 'Hours Spent',
-      value: `${currentMetrics.hours}h`,
-      icon: <Clock className="w-5 h-5 text-accent-primary" />,
-      trend: renderTrend(currentMetrics.hours, priorMetrics.hours),
-    },
-    {
-      key: 'tasks',
-      title: 'Tasks Completed',
-      value: `${currentMetrics.tasks}`,
-      icon: <CheckCircle className="w-5 h-5 text-emerald-400" />,
-      trend: renderTrend(currentMetrics.tasks, priorMetrics.tasks),
-    },
-    {
-      key: 'completion',
-      title: 'Completion Rate',
-      value: `${currentMetrics.completion}%`,
-      icon: <TrendingUp className="w-5 h-5 text-purple-400" />,
-      trend: renderTrend(currentMetrics.completion, priorMetrics.completion, true),
-    },
-    {
-      key: 'streak',
-      title: 'Current Streak',
-      value: `${currentMetrics.streak} days`,
-      icon: <Flame className="w-5 h-5 text-amber-400" />,
-      trend: (
-        <span className="text-xs text-amber-400/90 font-medium">
-          {currentMetrics.streak > 0 ? 'Consistent momentum' : 'Start today!'}
-        </span>
-      ),
-    },
+  const summaryCards = [
+    { key: 'hours', label: 'Hours Spent', value: `${summary.hours}h`, prev: prevSummary.hours, icon: <Clock size={16} />, color: 'rgba(139,92,246,0.8)' },
+    { key: 'tasks', label: 'Tasks Done', value: summary.tasks, prev: prevSummary.tasks, icon: <CheckCircle2 size={16} />, color: 'rgba(99,102,241,0.8)' },
+    { key: 'completion', label: 'Completion', value: `${summary.completion}%`, prev: prevSummary.completion, icon: <Target size={16} />, color: 'rgba(34,197,94,0.8)' },
+    { key: 'streak', label: 'Day Streak', value: `${summary.streak} 🔥`, prev: prevSummary.streak, icon: <Flame size={16} />, color: 'rgba(234,179,8,0.8)' },
   ];
 
-  return (
-    <div className="space-y-6 pb-24">
-      {/* Top Header & Range Controls */}
-      <div className="bg-bg-card border border-border-color rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="font-bloody text-2xl font-bold text-text-primary">
-            Execution Analytics
-          </h2>
-          <p className="text-xs text-text-muted mt-0.5">
-            YouTube Studio style metrics tracking your real daily habits.
-          </p>
-        </div>
+  const getMainData = () => {
+    const key = mainChart === 'hours' ? 'hours' : mainChart === 'tasks' ? 'tasks' : mainChart === 'completion' ? 'completion' : 'hours';
+    return { key, label: mainChart === 'hours' ? 'Hours' : mainChart === 'tasks' ? 'Tasks' : mainChart === 'completion' ? 'Completion %' : 'Hours' };
+  };
 
-        {/* Date Range Selector */}
-        <div className="flex items-center gap-1.5 bg-bg-secondary p-1 rounded-xl border border-border-color">
-          {([7, 28, 90] as DateRange[]).map(r => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                range === r
-                  ? 'bg-accent-primary text-white shadow-sm'
-                  : 'text-text-muted hover:text-text-primary'
-              }`}
-            >
-              {r} Days
+  const { key: mainKey, label: mainLabel } = getMainData();
+
+  const axisStyle = { fill: 'rgba(255,255,255,0.3)', fontSize: 10, fontFamily: 'monospace' };
+  const gridColor = 'rgba(255,255,255,0.04)';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingBottom: isPhone ? 120 : 40 }}>
+
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <h2 className="font-bloody" style={{ fontSize: 24, margin: 0, color: 'rgba(255,255,255,0.85)' }}>Analytics</h2>
+          <p style={{ margin: '2px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>Your planning performance over time</p>
+        </div>
+        <div style={{ display: 'flex', gap: 5 }}>
+          {([7, 28, 90] as Range[]).map(r => (
+            <button key={r} onClick={() => setRange(r)}
+              className="g-btn"
+              style={{ padding: '7px 14px', fontSize: 12, background: range === r ? 'rgba(139,92,246,0.2)' : 'var(--glass-bg)', borderColor: range === r ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.07)', color: range === r ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.4)' }}>
+              {r}d
             </button>
           ))}
         </div>
       </div>
 
-      {/* Summary KPI Cards: 2x2 grid on Phone, 1 row on PC */}
-      <div className={`grid gap-4 ${isPhone ? 'grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}>
-        {cards.map(c => {
-          const isSelected = activeMetric === c.key;
+      {/* ── Summary Cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: isPhone ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 10 }}>
+        {summaryCards.map(card => {
+          const d = delta(typeof card.prev === 'number' ? +card.value.toString().replace(/[^\d.]/g, '') : 0, card.prev);
           return (
-            <div
-              key={c.key}
-              onClick={() => setActiveMetric(c.key)}
-              className={`p-4 sm:p-5 rounded-2xl border cursor-pointer transition-all ${
-                isSelected
-                  ? 'bg-purple-950/30 border-accent-primary shadow-lg shadow-purple-950/30 scale-[1.01]'
-                  : 'bg-bg-card border-border-color hover:border-accent-primary/50'
-              }`}
-              role="button"
-              tabIndex={0}
-              aria-label={`${c.title}: ${c.value}`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-medium text-text-muted">{c.title}</span>
-                {c.icon}
+            <button key={card.key} onClick={() => setMainChart(card.key as MainChart)}
+              className="g-card"
+              style={{ padding: '16px', textAlign: 'left', cursor: 'pointer', border: `1px solid ${mainChart === card.key ? 'rgba(139,92,246,0.35)' : 'rgba(255,255,255,0.07)'}`, background: mainChart === card.key ? 'rgba(139,92,246,0.06)' : 'var(--glass-bg)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{ color: card.color }}>{card.icon}</div>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 600, letterSpacing: '0.06em' }}>{card.label.toUpperCase()}</span>
               </div>
-              <div className="font-mono text-2xl font-bold text-text-primary mb-1">
-                {c.value}
-              </div>
-              <div>{c.trend}</div>
-            </div>
+              <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'monospace', color: 'rgba(255,255,255,0.9)' }}>{card.value}</div>
+              {d && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: 10, color: d.up ? 'rgba(34,197,94,0.8)' : 'rgba(239,68,68,0.8)' }}>
+                  {d.up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                  <span>{d.up ? '+' : ''}{d.pct}% vs prev period</span>
+                </div>
+              )}
+            </button>
           );
         })}
       </div>
 
-      {/* Main Chart (Line/Area with Daily vs Cumulative Toggle) */}
-      <div className="bg-bg-card border border-border-color rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="font-bold text-base text-text-primary">
-              {activeMetric === 'hours'
-                ? 'Time Invested'
-                : activeMetric === 'tasks'
-                ? 'Tasks Completed'
-                : 'Execution Pace'}
-            </h3>
-            <p className="text-xs text-text-muted">
-              {isCumulative
-                ? 'Cumulative growth curve (YouTube Studio subscriber style)'
-                : 'Day-by-day activity trend'}
-            </p>
+      {/* ── Main Chart ── */}
+      <div className="g-card" style={{ padding: '20px 16px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Activity size={14} style={{ color: 'rgba(139,92,246,0.8)' }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{mainLabel} — {range}-day view</span>
           </div>
-
-          <div className="flex items-center gap-1.5 bg-bg-secondary p-1 rounded-xl border border-border-color">
-            <button
-              onClick={() => setIsCumulative(false)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                !isCumulative ? 'bg-accent-primary text-white' : 'text-text-muted hover:text-text-primary'
-              }`}
-            >
-              Daily
-            </button>
-            <button
-              onClick={() => setIsCumulative(true)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                isCumulative ? 'bg-accent-primary text-white' : 'text-text-muted hover:text-text-primary'
-              }`}
-            >
-              Cumulative
-            </button>
-          </div>
+          <button onClick={() => setCumulative(!cumulative)} className="g-btn" style={{ padding: '5px 12px', fontSize: 11, borderColor: cumulative ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.07)', color: cumulative ? 'rgba(139,92,246,0.9)' : 'rgba(255,255,255,0.4)' }}>
+            {cumulative ? '📈 Cumulative' : '📊 Daily'}
+          </button>
         </div>
-
-        <div className="h-72 w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={dailyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="metricGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.5} />
-                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="label" stroke="#64748b" fontSize={11} tickLine={false} />
-              <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#13141f',
-                  border: '1px solid #26283d',
-                  borderRadius: '12px',
-                  fontSize: '12px',
-                  color: '#f8fafc',
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey={
-                  isCumulative
-                    ? activeMetric === 'tasks'
-                      ? 'cumulativeTasks'
-                      : 'cumulativeHours'
-                    : activeMetric === 'tasks'
-                    ? 'tasksDone'
-                    : 'actualHours'
-                }
-                name={
-                  activeMetric === 'tasks'
-                    ? isCumulative ? 'Cumulative Tasks' : 'Tasks Done'
-                    : isCumulative ? 'Cumulative Hours' : 'Actual Hours'
-                }
-                stroke="#8b5cf6"
-                strokeWidth={3}
-                fillOpacity={1}
-                fill="url(#metricGradient)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <ResponsiveContainer width="100%" height={isPhone ? 180 : 240}>
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="rgba(139,92,246,0.4)" />
+                <stop offset="95%" stopColor="rgba(139,92,246,0)" />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="2 4" stroke={gridColor} />
+            <XAxis dataKey="date" tick={axisStyle} axisLine={{ stroke: gridColor }} tickLine={false} />
+            <YAxis tick={axisStyle} axisLine={false} tickLine={false} />
+            <Tooltip content={<GlassTooltip />} />
+            <Area type="monotone" dataKey={mainKey} name={mainLabel} stroke="rgba(139,92,246,0.9)" strokeWidth={2} fill="url(#grad1)" dot={false} activeDot={{ r: 4, fill: '#8b5cf6' }} />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
 
-      {/* Secondary Charts: Estimated vs Actual Hours + Section Donut */}
-      <div className={`grid gap-6 ${isPhone ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
-        {/* Estimated vs Actual Hours Bar Chart */}
-        <div className="bg-bg-card border border-border-color rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center gap-2">
-            <BarChart2 className="w-5 h-5 text-accent-primary" />
-            <h4 className="font-bold text-sm text-text-primary">
-              Estimated vs Actual Hours
-            </h4>
+      {/* ── Secondary Charts ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : '1fr 1fr', gap: 14 }}>
+        {/* Estimated vs Actual */}
+        <div className="g-card" style={{ padding: '18px 14px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <BarChart3 size={13} style={{ color: 'rgba(99,102,241,0.7)' }} />
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.5)' }}>ESTIMATED VS ACTUAL HOURS</span>
           </div>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyData.slice(-14)} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <XAxis dataKey="label" stroke="#64748b" fontSize={11} tickLine={false} />
-                <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#13141f',
-                    border: '1px solid #26283d',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    color: '#f8fafc',
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-                <Bar dataKey="estimatedHours" name="Estimated (h)" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="actualHours" name="Actual (h)" fill="#10b981" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <ResponsiveContainer width="100%" height={isPhone ? 160 : 200}>
+            <BarChart data={dailyComparison} barGap={2}>
+              <CartesianGrid strokeDasharray="2 4" stroke={gridColor} />
+              <XAxis dataKey="date" tick={axisStyle} axisLine={{ stroke: gridColor }} tickLine={false} />
+              <YAxis tick={axisStyle} axisLine={false} tickLine={false} />
+              <Tooltip content={<GlassTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }} />
+              <Bar dataKey="estimated" name="Estimated" fill="rgba(99,102,241,0.35)" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="actual" name="Actual" fill="rgba(139,92,246,0.6)" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
 
-        {/* Section Time Distribution Donut Chart */}
-        <div className="bg-bg-card border border-border-color rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center gap-2">
-            <PieIcon className="w-5 h-5 text-accent-primary" />
-            <h4 className="font-bold text-sm text-text-primary">
-              Time Spent by Section
-            </h4>
+        {/* Section Donut */}
+        <div className="g-card" style={{ padding: '18px 14px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <PieIcon size={13} style={{ color: 'rgba(34,197,94,0.7)' }} />
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.5)' }}>TIME BY SECTION</span>
           </div>
-
-          {sectionBreakdown.length === 0 ? (
-            <div className="h-64 flex items-center justify-center text-xs text-text-muted">
-              No logged time in this period
-            </div>
+          {sectionData.length === 0 ? (
+            <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>No data yet</div>
           ) : (
-            <div className="h-64 w-full flex flex-col sm:flex-row items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={sectionBreakdown}
-                    dataKey="hours"
-                    nameKey="name"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={3}
-                  >
-                    {sectionBreakdown.map((sec, idx) => (
-                      <Cell key={`cell-${idx}`} fill={sec.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(val) => [`${val} hrs`, 'Time']}
-                    contentStyle={{
-                      backgroundColor: '#13141f',
-                      border: '1px solid #26283d',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      color: '#f8fafc',
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '11px' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            <ResponsiveContainer width="100%" height={isPhone ? 160 : 200}>
+              <PieChart>
+                <Pie data={sectionData} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="80%" paddingAngle={3}>
+                  {sectionData.map((entry, i) => <Cell key={i} fill={entry.color} opacity={0.8} />)}
+                </Pie>
+                <Tooltip content={<GlassTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }} />
+              </PieChart>
+            </ResponsiveContainer>
           )}
+          {/* Section Progress Bars */}
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {sections.map(sec => {
+              const d = sectionData.find(s => s.name === sec.name);
+              const hrs = d?.value || 0;
+              const targetHrs = sec.dailyTargetMinutes ? Math.round(sec.dailyTargetMinutes / 60 * range * 10) / 10 : null;
+              const pct = targetHrs && targetHrs > 0 ? Math.min(100, (hrs / targetHrs) * 100) : 0;
+              return (
+                <div key={sec.id}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', display: 'flex', gap: 4, alignItems: 'center' }}><span>{sec.icon}</span><span>{sec.name}</span></span>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>{hrs}h{targetHrs ? ` / ${targetHrs}h` : ''}</span>
+                  </div>
+                  {targetHrs && (
+                    <div style={{ height: 3, borderRadius: 999, background: 'rgba(255,255,255,0.04)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', borderRadius: 999, background: sec.color, width: `${pct}%`, boxShadow: `0 0 6px ${sec.color}50`, transition: 'width 0.5s ease' }} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

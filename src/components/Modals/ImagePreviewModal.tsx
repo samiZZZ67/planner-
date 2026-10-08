@@ -14,33 +14,52 @@ export function ImagePreviewModal({ imageUrl, title, onClose }: ImagePreviewModa
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 70,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        background: 'rgba(0,0,0,0.85)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+      }}
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={`Preview of ${title}`}
     >
       <div
-        className="relative max-w-4xl max-h-[90vh] bg-bg-card rounded-2xl overflow-hidden border border-border-color shadow-2xl"
+        className="g-card"
+        style={{
+          maxWidth: '90vw',
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          position: 'relative',
+        }}
         onClick={e => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 z-10 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+          className="g-icon-btn"
+          style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, width: 32, height: 32, background: 'rgba(0,0,0,0.6)' }}
           aria-label="Close image preview"
         >
-          <X className="w-5 h-5" />
+          <X size={15} />
         </button>
 
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={imageUrl}
           alt={title}
-          className="max-h-[80vh] w-auto object-contain mx-auto"
+          style={{ maxHeight: '78vh', width: 'auto', objectFit: 'contain', margin: '0 auto' }}
         />
 
-        <div className="p-3 bg-bg-secondary border-t border-border-color text-center">
-          <p className="text-sm font-medium text-text-primary">{title}</p>
+        <div style={{ padding: '10px 16px', background: 'rgba(15,15,18,0.9)', borderTop: '1px solid rgba(255,255,255,0.08)', textAlign: 'center' }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.8)' }}>{title}</p>
         </div>
       </div>
     </div>

@@ -45,53 +45,6 @@ export function useTimer() {
     }
   }, [activeTimer]);
 
-  const startTimer = useCallback(async (taskId: string, taskTitle: string, sectionColor: string) => {
-    // If a different timer is running, stop it first
-    if (activeTimer && activeTimer.taskId !== taskId) {
-      await stopTimer();
-    }
-
-    const now = Date.now();
-    const newTimer: ActiveTimer = {
-      taskId,
-      taskTitle,
-      sectionColor,
-      startedAt: now,
-      accumulatedMs: 0,
-      isRunning: true,
-    };
-
-    setActiveTimerState(newTimer);
-    await saveActiveTimer(newTimer);
-  }, [activeTimer]);
-
-  const pauseTimer = useCallback(async () => {
-    if (!activeTimer || !activeTimer.isRunning) return;
-
-    const currentAccumulated = activeTimer.accumulatedMs + (Date.now() - activeTimer.startedAt);
-    const updated: ActiveTimer = {
-      ...activeTimer,
-      accumulatedMs: currentAccumulated,
-      isRunning: false,
-    };
-
-    setActiveTimerState(updated);
-    await saveActiveTimer(updated);
-  }, [activeTimer]);
-
-  const resumeTimer = useCallback(async () => {
-    if (!activeTimer || activeTimer.isRunning) return;
-
-    const updated: ActiveTimer = {
-      ...activeTimer,
-      startedAt: Date.now(),
-      isRunning: true,
-    };
-
-    setActiveTimerState(updated);
-    await saveActiveTimer(updated);
-  }, [activeTimer]);
-
   const stopTimer = useCallback(async () => {
     if (!activeTimer) return;
 
@@ -121,6 +74,53 @@ export function useTimer() {
     setElapsedMs(0);
 
     syncEngine.notifyLocalMutation();
+  }, [activeTimer]);
+
+  const startTimer = useCallback(async (taskId: string, taskTitle: string, sectionColor?: string) => {
+    // If a different timer is running, stop it first
+    if (activeTimer && activeTimer.taskId !== taskId) {
+      await stopTimer();
+    }
+
+    const now = Date.now();
+    const newTimer: ActiveTimer = {
+      taskId,
+      taskTitle,
+      sectionColor: sectionColor || '#8b5cf6',
+      startedAt: now,
+      accumulatedMs: 0,
+      isRunning: true,
+    };
+
+    setActiveTimerState(newTimer);
+    await saveActiveTimer(newTimer);
+  }, [activeTimer, stopTimer]);
+
+  const pauseTimer = useCallback(async () => {
+    if (!activeTimer || !activeTimer.isRunning) return;
+
+    const currentAccumulated = activeTimer.accumulatedMs + (Date.now() - activeTimer.startedAt);
+    const updated: ActiveTimer = {
+      ...activeTimer,
+      accumulatedMs: currentAccumulated,
+      isRunning: false,
+    };
+
+    setActiveTimerState(updated);
+    await saveActiveTimer(updated);
+  }, [activeTimer]);
+
+  const resumeTimer = useCallback(async () => {
+    if (!activeTimer || activeTimer.isRunning) return;
+
+    const updated: ActiveTimer = {
+      ...activeTimer,
+      startedAt: Date.now(),
+      isRunning: true,
+    };
+
+    setActiveTimerState(updated);
+    await saveActiveTimer(updated);
   }, [activeTimer]);
 
   // Format time as HH:MM:SS or MM:SS

@@ -1,545 +1,539 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
-import { useSync } from '@/lib/sync/useSync';
+import { addFourteenDaysSampleData, removeSampleData, exportAllDataToJson, importDataFromJson } from '@/lib/data/sampleData';
 import {
-  addFourteenDaysSampleData,
-  removeSampleData,
-  exportAllDataToJson,
-  importDataFromJson,
-} from '@/lib/data/sampleData';
-import { PRESET_SECTION_COLORS } from '@/lib/utils/colors';
-import {
-  Moon,
-  Sun,
-  Download,
-  Upload,
-  Database,
-  Trash2,
-  Plus,
-  RefreshCw,
-  LogOut,
-  AlertTriangle,
-  Check,
-  Edit2,
-  FolderKanban,
+  Sun, Moon, Plus, Trash2, Edit2, LogOut, Download, Upload,
+  Database, Shield, Sliders, Palette
 } from 'lucide-react';
-import type { Section, TargetType } from '@/types';
+import type { Section } from '@/types';
+import { SECTION_COLORS } from '@/lib/utils/colors';
 
 interface SettingsScreenProps {
+  sections: Section[];
+  setSections?: (s: Section[]) => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
-  sections: Section[];
-  onOpenLogin: () => void;
-  isPhone: boolean;
+  onOpenLogin?: () => void;
+  onLogout?: () => void;
+  hasUnsyncedChanges?: boolean;
+  isPhone?: boolean;
 }
 
+const DEFAULT_EMOJIS = ['💼', '📚', '🏃', '🎮', '💤', '🎨', '🔬', '💡', '🌿', '🎵', '✍️', '🛠️'];
+
 export function SettingsScreen({
+  sections,
+  setSections,
   theme,
   onToggleTheme,
-  sections,
   onOpenLogin,
-  isPhone,
+  onLogout,
+  hasUnsyncedChanges = false,
 }: SettingsScreenProps) {
-  const sync = useSync();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Section editor state
   const [editingSection, setEditingSection] = useState<Section | null>(null);
-  const [isAddingSection, setIsAddingSection] = useState(false);
-  const [secName, setSecName] = useState('');
-  const [secColor, setSecColor] = useState('#8b5cf6');
-  const [secIcon, setSecIcon] = useState('📌');
-  const [secTargetMinutes, setSecTargetMinutes] = useState<number | ''>(60);
-  const [secTargetType, setSecTargetType] = useState<TargetType>('at least');
+  const [newSec, setNewSec] = useState<Partial<Section>>({
+    name: '',
+    color: SECTION_COLORS[0],
+    icon: '📌',
+    targetType: 'at least',
+    dailyTargetMinutes: undefined,
+  });
+  const [addingNew, setAddingNew] = useState(false);
+  const [sampleLoading, setSampleLoading] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [message, setMessage] = useState('');
 
-  // Status feedback messages
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [logoutWarning, setLogoutWarning] = useState(false);
-
-  const showFeedback = (msg: string) => {
-    setFeedback(msg);
-    setTimeout(() => setFeedback(null), 3000);
+  const showMsg = (msg: string) => {
+    setMessage(msg);
+    setTimeout(() => setMessage(''), 3000);
   };
 
-  // Add / Edit Section
-  const handleSaveSection = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!secName.trim()) return;
+  const loadSections = async () => {
+    const all = await db.sections.filter(s => !s.deleted).toArray();
+    all.sort((a, b) => a.order - b.order);
+    if (setSections) setSections(all);
+  };
 
+  const saveSection = async (sec: Partial<Section>) => {
+    if (!sec.name?.trim()) return;
     const now = Date.now();
-    if (editingSection) {
-      await db.sections.update(editingSection.id, {
-        name: secName.trim(),
-        color: secColor,
-        icon: secIcon.trim() || '📌',
-        dailyTargetMinutes: secTargetMinutes === '' ? null : Number(secTargetMinutes),
-        targetType: secTargetType,
-        updatedAt: now,
-        synced: 0,
-      });
-      showFeedback(`Section "${secName}" updated.`);
+    if (sec.id) {
+      await db.sections.update(sec.id, { ...sec, updatedAt: now, synced: 0 });
     } else {
-      const newSec: Section = {
-        id: crypto.randomUUID(),
-        name: secName.trim(),
-        color: secColor,
-        icon: secIcon.trim() || '📌',
+      const id = crypto.randomUUID();
+      await db.sections.add({
+        id,
+        name: sec.name!,
+        color: sec.color || '#8b5cf6',
+        icon: sec.icon || '📌',
         order: sections.length,
-        dailyTargetMinutes: secTargetMinutes === '' ? null : Number(secTargetMinutes),
-        targetType: secTargetType,
+        dailyTargetMinutes: sec.dailyTargetMinutes,
+        targetType: sec.targetType || 'at least',
         updatedAt: now,
         deleted: false,
         isSample: false,
         synced: 0,
-      };
-      await db.sections.put(newSec);
-      showFeedback(`Section "${secName}" added.`);
+      } as Section);
     }
-
     syncEngine.notifyLocalMutation();
-    resetSectionForm();
-  };
-
-  const startEditSection = (sec: Section) => {
-    setEditingSection(sec);
-    setSecName(sec.name);
-    setSecColor(sec.color);
-    setSecIcon(sec.icon);
-    setSecTargetMinutes(sec.dailyTargetMinutes ?? '');
-    setSecTargetType(sec.targetType || 'at least');
-    setIsAddingSection(true);
-  };
-
-  const resetSectionForm = () => {
+    loadSections();
     setEditingSection(null);
-    setIsAddingSection(false);
-    setSecName('');
-    setSecColor('#8b5cf6');
-    setSecIcon('📌');
-    setSecTargetMinutes(60);
-    setSecTargetType('at least');
+    setAddingNew(false);
+    setNewSec({ name: '', color: SECTION_COLORS[0], icon: '📌', targetType: 'at least' });
   };
 
-  // Delete Section (moves its tasks to 'Other')
-  const handleDeleteSection = async (sec: Section) => {
-    if (sec.name.toLowerCase() === 'other') {
-      alert('The "Other" section is the fallback section and cannot be deleted.');
+  const deleteSection = async (secId: string) => {
+    if (!confirm('Move tasks in this section to Other and delete it?')) return;
+    const other = sections.find(s => s.name === 'Other');
+    if (!other) {
+      showMsg('Error: Other section not found');
       return;
     }
-
-    if (!confirm(`Delete section "${sec.name}"? All its tasks will be safely moved to "Other".`)) {
-      return;
-    }
-
     const now = Date.now();
-    const otherSec = sections.find(s => s.name.toLowerCase() === 'other') || sections[0];
-
-    await db.transaction('rw', [db.sections, db.tasks], async () => {
-      // 1. Move tasks to other
-      const tasksInSec = await db.tasks.filter(t => t.sectionId === sec.id).toArray();
-      for (const t of tasksInSec) {
-        await db.tasks.update(t.id, {
-          sectionId: otherSec.id,
-          updatedAt: now,
-          synced: 0,
-        });
-      }
-
-      // 2. Soft-delete section
-      await db.sections.update(sec.id, {
-        deleted: true,
-        updatedAt: now,
-        synced: 0,
-      });
+    await db.transaction('rw', db.tasks, db.sections, async () => {
+      const tasksInSec = await db.tasks.filter(t => t.sectionId === secId && !t.deleted).toArray();
+      for (const t of tasksInSec) await db.tasks.update(t.id, { sectionId: other.id, updatedAt: now, synced: 0 });
+      await db.sections.update(secId, { deleted: true, updatedAt: now, synced: 0 });
     });
-
     syncEngine.notifyLocalMutation();
-    showFeedback(`Section "${sec.name}" deleted. Tasks moved to "${otherSec.name}".`);
+    loadSections();
   };
 
-  // Sample Data Handlers
-  const handleAddSample = async () => {
-    await addFourteenDaysSampleData();
-    showFeedback('14 days of realistic sample data added.');
+  const handleExport = async () => {
+    try {
+      await exportAllDataToJson();
+      showMsg('Export completed');
+    } catch {
+      showMsg('Export failed');
+    }
   };
 
-  const handleRemoveSample = async () => {
-    await removeSampleData();
-    showFeedback('All sample data removed.');
-  };
-
-  // JSON Import
-  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     try {
       const text = await file.text();
-      const res = await importDataFromJson(text);
-      showFeedback(`Successfully restored ${res.count} records.`);
+      const result = await importDataFromJson(text);
+      syncEngine.notifyLocalMutation();
+      showMsg(`Imported ${result.count} items`);
+      loadSections();
     } catch (err: any) {
-      alert(`Import error: ${err.message}`);
+      setImportError(err.message || 'Import failed');
     }
   };
 
-  // Logout handler with unsynced changes check
-  const handleLogout = async () => {
-    if (sync.unsyncedCount > 0 && !logoutWarning) {
-      setLogoutWarning(true);
-      return;
+  const handleLogoutClick = async () => {
+    if (onLogout) {
+      onLogout();
+    } else {
+      try {
+        await fetch('/api/logout', { method: 'POST' });
+        showMsg('Signed out');
+      } catch {
+        showMsg('Sign out failed');
+      }
     }
+  };
 
-    await fetch('/api/logout', { method: 'POST' });
-    syncEngine.triggerSync();
-    setLogoutWarning(false);
-    showFeedback('Logged out. Your local on-device data remains completely intact.');
+  const SectionForm = ({
+    sec,
+    onSave,
+    onCancel,
+  }: {
+    sec: Partial<Section>;
+    onSave: (s: Partial<Section>) => void;
+    onCancel: () => void;
+  }) => {
+    const [local, setLocal] = useState({ ...sec });
+    return (
+      <div className="g-card" style={{ padding: 18, marginBottom: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, marginBottom: 12 }}>
+          <div>
+            <label className="g-label">Section Name</label>
+            <input
+              className="g-input"
+              value={local.name || ''}
+              onChange={e => setLocal(p => ({ ...p, name: e.target.value }))}
+              placeholder="e.g. Deep Work"
+            />
+          </div>
+          <div>
+            <label className="g-label">Icon</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 4 }}>
+              {DEFAULT_EMOJIS.map(emoji => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => setLocal(p => ({ ...p, icon: emoji }))}
+                  style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 8,
+                    border: `1px solid ${local.icon === emoji ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.07)'}`,
+                    background: local.icon === emoji ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.03)',
+                    cursor: 'pointer',
+                    fontSize: 15,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label className="g-label">Color</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+            {SECTION_COLORS.map((color: string) => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => setLocal(p => ({ ...p, color }))}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: '50%',
+                  background: color,
+                  border: `2px solid ${local.color === color ? 'white' : 'transparent'}`,
+                  cursor: 'pointer',
+                  boxShadow: local.color === color ? `0 0 10px ${color}80` : 'none',
+                  transition: 'all 0.15s',
+                }}
+                aria-label={`Color ${color}`}
+              />
+            ))}
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <div>
+            <label className="g-label">Daily Target (min)</label>
+            <input
+              type="number"
+              className="g-input"
+              min={0}
+              max={1440}
+              value={local.dailyTargetMinutes ?? ''}
+              onChange={e =>
+                setLocal(p => ({ ...p, dailyTargetMinutes: e.target.value ? parseInt(e.target.value) : undefined }))
+              }
+              placeholder="Optional"
+            />
+          </div>
+          <div>
+            <label className="g-label">Target Type</label>
+            <select
+              className="g-input"
+              value={local.targetType || 'at least'}
+              onChange={e => setLocal(p => ({ ...p, targetType: e.target.value as any }))}
+            >
+              <option value="at least">At least</option>
+              <option value="at most">At most</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" className="g-btn" onClick={onCancel} style={{ padding: '8px 16px' }}>
+            Cancel
+          </button>
+          <button type="button" className="g-btn g-btn-primary" onClick={() => onSave(local)} style={{ padding: '8px 16px' }}>
+            Save
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="space-y-6 max-w-4xl pb-24">
-      {/* Settings Header */}
-      <div className="bg-bg-card border border-border-color rounded-2xl p-5 shadow-sm">
-        <h2 className="font-bloody text-2xl font-bold text-text-primary">
-          Settings & Preferences
-        </h2>
-        <p className="text-xs text-text-muted mt-1">
-          Customize themes, manage planning sections, export backups, and cloud sync.
-        </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 640, paddingBottom: 80 }}>
+      {message && (
+        <div
+          style={{
+            padding: '12px 18px',
+            background: 'rgba(34,197,94,0.1)',
+            border: '1px solid rgba(34,197,94,0.25)',
+            borderRadius: 12,
+            fontSize: 13,
+            color: 'rgba(34,197,94,0.9)',
+          }}
+        >
+          {message}
+        </div>
+      )}
 
-        {feedback && (
-          <div className="mt-3 p-3 rounded-xl bg-emerald-950/70 border border-emerald-800 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
-            <Check className="w-4 h-4 shrink-0" />
-            <span>{feedback}</span>
-          </div>
-        )}
-      </div>
-
-      {/* 1. Theme Setting */}
-      <div className="bg-bg-card border border-border-color rounded-2xl p-5 shadow-sm space-y-4">
-        <h3 className="font-bold text-base text-text-primary flex items-center gap-2">
-          {theme === 'dark' ? <Moon className="w-4 h-4 text-purple-400" /> : <Sun className="w-4 h-4 text-amber-400" />}
-          <span>Appearance & Theme</span>
-        </h3>
-
-        <div className="flex items-center justify-between">
+      {/* ── Appearance ── */}
+      <div className="g-card" style={{ padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <Palette size={16} style={{ color: 'rgba(139,92,246,0.7)' }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.08em' }}>
+            APPEARANCE
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0' }}>
           <div>
-            <p className="text-sm font-semibold text-text-primary">
-              {theme === 'dark' ? 'Dark Mode (Night)' : 'Light Mode (Day)'}
-            </p>
-            <p className="text-xs text-text-muted">
-              Designed for late-night planning with optimal WCAG contrast.
-            </p>
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.8)', marginBottom: 2 }}>Theme</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+              {theme === 'dark' ? 'Dark mode active' : 'Light mode active'}
+            </div>
           </div>
-
           <button
             onClick={onToggleTheme}
-            className="px-4 py-2 rounded-xl bg-bg-secondary border border-border-color text-xs font-semibold text-text-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2"
+            className="g-pill"
+            style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}
           >
-            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            <span>Switch to {theme === 'dark' ? 'Light' : 'Dark'}</span>
+            {theme === 'dark' ? (
+              <>
+                <Moon size={14} />
+                <span>Dark</span>
+              </>
+            ) : (
+              <>
+                <Sun size={14} />
+                <span>Light</span>
+              </>
+            )}
           </button>
         </div>
       </div>
 
-      {/* 2. Manage Sections */}
-      <div className="bg-bg-card border border-border-color rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FolderKanban className="w-5 h-5 text-accent-primary" />
-            <h3 className="font-bold text-base text-text-primary">
-              Manage Sections
-            </h3>
+      {/* ── Sections ── */}
+      <div className="g-card" style={{ padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Sliders size={16} style={{ color: 'rgba(99,102,241,0.7)' }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.08em' }}>
+              SECTIONS
+            </span>
           </div>
-
-          {!isAddingSection && (
-            <button
-              onClick={() => setIsAddingSection(true)}
-              className="px-3 py-1.5 rounded-xl bg-accent-primary hover:bg-accent-hover text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Section</span>
-            </button>
-          )}
+          <button
+            onClick={() => setAddingNew(true)}
+            className="g-btn g-btn-primary"
+            style={{ padding: '7px 14px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}
+          >
+            <Plus size={13} />
+            <span>Add</span>
+          </button>
         </div>
 
-        {/* Section Editor Form */}
-        {isAddingSection && (
-          <form onSubmit={handleSaveSection} className="p-4 rounded-xl bg-bg-secondary border border-border-color space-y-3 animate-in fade-in">
-            <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider">
-              {editingSection ? `Edit "${editingSection.name}"` : 'New Section'}
-            </h4>
+        {addingNew && <SectionForm sec={newSec} onSave={saveSection} onCancel={() => setAddingNew(false)} />}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[11px] font-medium text-text-muted mb-1">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  value={secName}
-                  onChange={e => setSecName(e.target.value)}
-                  placeholder="e.g. Creative Flow"
-                  className="w-full px-3 py-1.5 rounded-lg bg-bg-card border border-border-color text-xs text-text-primary focus:outline-none focus:border-accent-primary"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-text-muted mb-1">
-                  Emoji Icon
-                </label>
-                <input
-                  type="text"
-                  value={secIcon}
-                  onChange={e => setSecIcon(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-bg-card border border-border-color text-xs text-text-primary text-center focus:outline-none focus:border-accent-primary"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-text-muted mb-1">
-                  Daily Target (Minutes)
-                </label>
-                <input
-                  type="number"
-                  value={secTargetMinutes}
-                  onChange={e => setSecTargetMinutes(e.target.value === '' ? '' : parseInt(e.target.value))}
-                  placeholder="Optional"
-                  className="w-full px-3 py-1.5 rounded-lg bg-bg-card border border-border-color text-xs text-text-primary focus:outline-none focus:border-accent-primary"
-                />
-              </div>
-            </div>
-
-            {/* Target Type & Color Picker */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-              <div>
-                <label className="block text-[11px] font-medium text-text-muted mb-1">
-                  Target Rule
-                </label>
-                <div className="flex gap-2">
-                  {(['at least', 'at most'] as TargetType[]).map(t => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setSecTargetType(t)}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize border ${
-                        secTargetType === t
-                          ? 'bg-accent-primary text-white border-accent-primary'
-                          : 'bg-bg-card border-border-color text-text-muted'
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-text-muted mb-1">
-                  Section Color
-                </label>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {PRESET_SECTION_COLORS.map(c => (
-                    <button
-                      key={c.name}
-                      type="button"
-                      onClick={() => setSecColor(c.dark)}
-                      className={`w-6 h-6 rounded-full border-2 transition-transform ${
-                        secColor === c.dark ? 'scale-125 border-white' : 'border-transparent'
-                      }`}
-                      style={{ backgroundColor: c.dark }}
-                      title={c.name}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={resetSectionForm}
-                className="px-3 py-1.5 text-xs text-text-muted hover:text-text-primary"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-1.5 rounded-lg bg-accent-primary text-white text-xs font-semibold"
-              >
-                Save Section
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Existing Sections List */}
-        <div className="space-y-2">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {sections.map(sec => (
-            <div
-              key={sec.id}
-              className="p-3 rounded-xl bg-bg-secondary border border-border-color flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{sec.icon}</span>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm text-text-primary">{sec.name}</span>
-                    <span
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: sec.color }}
-                    />
+            <div key={sec.id}>
+              {editingSection?.id === sec.id ? (
+                <SectionForm sec={editingSection} onSave={saveSection} onCancel={() => setEditingSection(null)} />
+              ) : (
+                <div
+                  className="g-task-row"
+                  style={{ padding: '12px 14px 12px 18px', display: 'flex', alignItems: 'center', gap: 10 }}
+                >
+                  <div className="g-section-accent" style={{ background: sec.color, boxShadow: `0 0 6px ${sec.color}50` }} />
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 10,
+                      background: sec.color + '15',
+                      border: `1px solid ${sec.color}30`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 16,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {sec.icon}
                   </div>
-                  <span className="text-[11px] text-text-muted">
-                    {sec.dailyTargetMinutes
-                      ? `Target: ${sec.targetType} ${sec.dailyTargetMinutes}m daily`
-                      : 'No daily time target'}
-                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: 'rgba(255,255,255,0.8)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      {sec.name}
+                      {sec.dailyTargetMinutes && (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            color: sec.color,
+                            background: sec.color + '15',
+                            padding: '1px 6px',
+                            borderRadius: 999,
+                            border: `1px solid ${sec.color}30`,
+                          }}
+                        >
+                          {sec.targetType === 'at most' ? '≤' : '≥'} {sec.dailyTargetMinutes}m/day
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                    <button
+                      onClick={() => setEditingSection(sec)}
+                      className="g-icon-btn"
+                      style={{ width: 30, height: 30 }}
+                      aria-label="Edit section"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button
+                      onClick={() => deleteSection(sec.id)}
+                      className="g-icon-btn"
+                      style={{ width: 30, height: 30, color: 'rgba(239,68,68,0.5)', borderColor: 'rgba(239,68,68,0.12)' }}
+                      aria-label="Delete section"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => startEditSection(sec)}
-                  className="p-1.5 text-text-muted hover:text-text-primary"
-                  title="Edit section"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDeleteSection(sec)}
-                  className="p-1.5 text-text-muted hover:text-red-400"
-                  title="Delete section"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+              )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* 3. Sample Data Controls */}
-      <div className="bg-bg-card border border-border-color rounded-2xl p-5 shadow-sm space-y-3">
-        <div className="flex items-center gap-2">
-          <Database className="w-5 h-5 text-accent-primary" />
-          <h3 className="font-bold text-base text-text-primary">
-            Sample Data
-          </h3>
+      {/* ── Sample Data ── */}
+      <div className="g-card" style={{ padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <Database size={16} style={{ color: 'rgba(234,179,8,0.7)' }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.08em' }}>
+            SAMPLE DATA
+          </span>
         </div>
-        <p className="text-xs text-text-muted">
-          Add 14 realistic sample days with Entertainment, Deep Work, and Learning plans to explore graphs and analytics immediately.
-        </p>
-
-        <div className="flex items-center gap-3 flex-wrap">
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button
-            onClick={handleAddSample}
-            className="px-4 py-2 rounded-xl bg-bg-secondary border border-border-color text-xs font-semibold text-text-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2"
+            onClick={async () => {
+              setSampleLoading(true);
+              await addFourteenDaysSampleData();
+              setSampleLoading(false);
+              showMsg('Added 14 days of sample data');
+            }}
+            disabled={sampleLoading}
+            className="g-btn"
+            style={{ padding: '9px 16px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            <Plus className="w-4 h-4 text-accent-primary" />
-            <span>Add 14 Days Sample Data</span>
+            <Plus size={13} />
+            {sampleLoading ? 'Adding...' : 'Add 14-Day Sample'}
           </button>
-
           <button
-            onClick={handleRemoveSample}
-            className="px-4 py-2 rounded-xl bg-red-950/40 border border-red-800 text-xs font-semibold text-red-300 hover:bg-red-900/60 transition-colors flex items-center gap-2"
+            onClick={async () => {
+              await removeSampleData();
+              syncEngine.notifyLocalMutation();
+              showMsg('Sample data removed');
+            }}
+            className="g-btn"
+            style={{
+              padding: '9px 16px',
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              color: 'rgba(239,68,68,0.6)',
+              borderColor: 'rgba(239,68,68,0.15)',
+            }}
           >
-            <Trash2 className="w-4 h-4" />
-            <span>Remove Sample Data</span>
+            <Trash2 size={13} />
+            Remove Sample
           </button>
-        </div>
-      </div>
-
-      {/* 4. Export & Import JSON Backup */}
-      <div className="bg-bg-card border border-border-color rounded-2xl p-5 shadow-sm space-y-3">
-        <h3 className="font-bold text-base text-text-primary flex items-center gap-2">
-          <Download className="w-5 h-5 text-accent-primary" />
-          <span>Local Backup & Restore</span>
-        </h3>
-        <p className="text-xs text-text-muted">
-          Export your complete database into a portable JSON backup file, or restore it on any device.
-        </p>
-
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={exportAllDataToJson}
-            className="px-4 py-2 rounded-xl bg-bg-secondary border border-border-color text-xs font-semibold text-text-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" />
-            <span>Export JSON File</span>
-          </button>
-
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 rounded-xl bg-bg-secondary border border-border-color text-xs font-semibold text-text-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2"
-          >
-            <Upload className="w-4 h-4" />
-            <span>Import JSON File</span>
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json"
-            onChange={handleFileImport}
-            className="hidden"
-          />
         </div>
       </div>
 
-      {/* 5. Cloud Sync & Account */}
-      <div className="bg-bg-card border border-border-color rounded-2xl p-5 shadow-sm space-y-4">
-        <h3 className="font-bold text-base text-text-primary flex items-center gap-2">
-          <RefreshCw className="w-5 h-5 text-accent-primary" />
-          <span>Cloud Synchronization</span>
-        </h3>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-text-primary">
-              Status: <span className="capitalize">{sync.status.replace('_', ' ')}</span>
-            </p>
-            <p className="text-xs text-text-muted">
-              {sync.unsyncedCount} unsynced changes waiting.
-            </p>
-          </div>
-
-          <button
-            onClick={() => sync.triggerSync()}
-            className="px-3.5 py-1.5 rounded-xl bg-bg-secondary border border-border-color text-xs font-semibold hover:bg-bg-tertiary"
-          >
-            Force Sync Now
-          </button>
+      {/* ── Backup ── */}
+      <div className="g-card" style={{ padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <Shield size={16} style={{ color: 'rgba(34,197,94,0.7)' }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.08em' }}>
+            BACKUP & RESTORE
+          </span>
         </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: importError ? 10 : 0 }}>
+          <button
+            onClick={handleExport}
+            className="g-btn"
+            style={{ padding: '9px 16px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <Download size={13} />
+            Export JSON
+          </button>
+          <label
+            className="g-btn"
+            style={{
+              padding: '9px 16px',
+              fontSize: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              color: 'var(--text-secondary)',
+              margin: 0,
+            }}
+          >
+            <Upload size={13} />
+            Import JSON
+            <input type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
+          </label>
+        </div>
+        {importError && <p style={{ margin: '8px 0 0', fontSize: 12, color: 'rgba(239,68,68,0.8)' }}>{importError}</p>}
+      </div>
 
-        {logoutWarning && (
-          <div className="p-3.5 rounded-xl bg-amber-950/70 border border-amber-800 text-amber-300 text-xs space-y-2">
-            <div className="flex items-center gap-2 font-bold">
-              <AlertTriangle className="w-4 h-4" />
-              <span>Unsynced changes waiting!</span>
-            </div>
-            <p>
-              You have {sync.unsyncedCount} changes saved on this device that have not synced to the cloud yet. Local data is never deleted, but other devices won&apos;t have these changes until you log in and sync.
-            </p>
+      {/* ── Account ── */}
+      <div className="g-card" style={{ padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <LogOut size={16} style={{ color: 'rgba(239,68,68,0.6)' }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.08em' }}>
+            ACCOUNT & CLOUD SYNC
+          </span>
+        </div>
+        {hasUnsyncedChanges && (
+          <div
+            style={{
+              padding: '10px 14px',
+              background: 'rgba(234,179,8,0.08)',
+              border: '1px solid rgba(234,179,8,0.2)',
+              borderRadius: 10,
+              marginBottom: 12,
+              fontSize: 12,
+              color: 'rgba(234,179,8,0.8)',
+            }}
+          >
+            ⚠ You have unsynced changes. Signing out won&apos;t delete local data.
           </div>
         )}
-
-        <div className="pt-2 border-t border-border-color flex items-center justify-between">
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {onOpenLogin && (
+            <button
+              onClick={onOpenLogin}
+              className="g-btn g-btn-primary"
+              style={{ padding: '9px 18px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 7 }}
+            >
+              Sign In to Cloud Sync
+            </button>
+          )}
           <button
-            onClick={onOpenLogin}
-            className="px-4 py-2 rounded-xl bg-purple-950/60 border border-purple-800 text-purple-300 text-xs font-semibold hover:bg-purple-900/80"
+            onClick={handleLogoutClick}
+            className="g-btn"
+            style={{
+              padding: '9px 18px',
+              fontSize: 13,
+              color: 'rgba(239,68,68,0.7)',
+              borderColor: 'rgba(239,68,68,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+            }}
           >
-            Login / Re-authenticate
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs font-semibold hover:bg-red-900/80 flex items-center gap-2"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>{logoutWarning ? 'Confirm Logout' : 'Log Out'}</span>
+            <LogOut size={14} />
+            Sign Out
           </button>
         </div>
       </div>

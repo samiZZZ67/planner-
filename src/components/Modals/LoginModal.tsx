@@ -1,131 +1,85 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useSync } from '@/lib/sync/useSync';
-import { Lock, X, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Lock, Shield, Eye, EyeOff } from 'lucide-react';
 
 interface LoginModalProps {
-  isOpen: boolean;
+  isOpen?: boolean;
   onClose: () => void;
 }
 
-export function LoginModal({ isOpen, onClose }: LoginModalProps) {
+export function LoginModal({ isOpen = true, onClose }: LoginModalProps) {
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { triggerSync } = useSync();
+  const [error, setError] = useState('');
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password) return;
-
-    setLoading(true);
-    setError(null);
-
+    setLoading(true); setError('');
     try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-
+      const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Login failed');
-      }
-
-      // Success: trigger immediate sync & close
-      await triggerSync();
-      onClose();
-    } catch (err: any) {
-      setError(err.message || 'Login error');
-    } finally {
-      setLoading(false);
-    }
+      if (res.ok) { onClose(); }
+      else { setError(data.error || `Failed (${res.status})`); }
+    } catch { setError('Network error'); }
+    finally { setLoading(false); }
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="login-title"
-    >
-      <div className="w-full max-w-md bg-bg-card border border-border-color rounded-2xl shadow-2xl p-6 relative">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-text-muted hover:text-text-primary rounded-lg transition-colors"
-          aria-label="Close login dialog"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-purple-950/80 border border-purple-700 flex items-center justify-center text-purple-300">
-            <Lock className="w-5 h-5" />
+    <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
+      <div className="g-card" style={{ width: '100%', maxWidth: 360, padding: 32 }}>
+        {/* Icon */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Shield size={20} style={{ color: 'rgba(139,92,246,0.8)' }} />
           </div>
           <div>
-            <h2 id="login-title" className="font-bloody text-xl font-bold text-text-primary">
-              Cloud Sync Login
-            </h2>
-            <p className="text-xs text-text-muted">
-              Connect to your Neon Postgres database
-            </p>
+            <div className="font-bloody" style={{ fontSize: 20, color: 'rgba(255,255,255,0.85)', lineHeight: 1 }}>Cloud Sync</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Login to enable sync across devices</div>
           </div>
         </div>
 
-        <p className="text-sm text-text-secondary mb-4 leading-relaxed">
-          Night Planner always saves on your device first. Login is only required to synchronize your data to the cloud.
-        </p>
-
-        {error && (
-          <div className="mb-4 p-3 rounded-xl bg-red-950/70 border border-red-800 text-red-300 text-xs flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="app-password" className="block text-xs font-medium text-text-secondary mb-1.5">
-              App Password
-            </label>
-            <input
-              id="app-password"
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Enter your APP_PASSWORD"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-bg-secondary border border-border-color text-text-primary placeholder:text-text-muted/60 text-base focus:border-accent-primary focus:outline-none"
-              autoFocus
-              required
-            />
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: 20 }}>
+            <label className="g-label">Password</label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPwd ? 'text' : 'password'}
+                className="g-input"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                autoFocus
+                placeholder="Enter your password"
+                style={{ paddingRight: 40 }}
+              />
+              <button type="button" onClick={() => setShowPwd(!showPwd)}
+                style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0 }}>
+                {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-text-muted">
-            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Protected by signed 90-day cookie session and rate-limit guard.</span>
-          </div>
+          {error && (
+            <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, marginBottom: 16, fontSize: 12, color: 'rgba(239,68,68,0.85)' }}>
+              {error}
+            </div>
+          )}
 
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm rounded-xl text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
-            >
-              Work Offline
-            </button>
-            <button
-              type="submit"
-              disabled={loading || !password}
-              className="px-5 py-2 text-sm rounded-xl bg-accent-primary hover:bg-accent-hover text-white font-medium disabled:opacity-50 transition-colors shadow-lg shadow-purple-900/30"
-            >
-              {loading ? 'Verifying...' : 'Log In & Sync'}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" onClick={onClose} className="g-btn" style={{ flex: 1, padding: '11px', fontSize: 13 }}>Cancel</button>
+            <button type="submit" disabled={loading || !password} className="g-btn g-btn-primary"
+              style={{ flex: 2, padding: '11px', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: !password ? 0.5 : 1 }}>
+              <Lock size={14} />{loading ? 'Signing in...' : 'Sign In'}
             </button>
           </div>
         </form>
+
+        <p style={{ marginTop: 18, fontSize: 11, color: 'rgba(255,255,255,0.2)', textAlign: 'center', lineHeight: 1.6 }}>
+          The app works offline without logging in. Login is only needed for cloud sync between devices.
+        </p>
       </div>
     </div>
   );

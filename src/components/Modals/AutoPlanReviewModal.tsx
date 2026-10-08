@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { copyTasksToDate } from '@/lib/plan/autoPlan';
-import { Calendar, CheckSquare, Sparkles, X, ArrowRight, Star } from 'lucide-react';
+import { Sparkles, X, ArrowRight, Star, CheckSquare } from 'lucide-react';
 import type { Task, Section } from '@/types';
 
 interface AutoPlanReviewModalProps {
@@ -24,7 +24,6 @@ export function AutoPlanReviewModal({
   sections,
   onTasksImported,
 }: AutoPlanReviewModalProps) {
-  // Pre-select unfinished tasks
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(() => {
     return new Set(candidateTasks.map(t => t.id));
   });
@@ -53,44 +52,78 @@ export function AutoPlanReviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 60,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        background: 'rgba(0,0,0,0.75)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="autoplan-title"
     >
-      <div className="w-full max-w-lg bg-bg-card border border-border-color rounded-2xl shadow-2xl p-6 relative max-h-[90vh] flex flex-col">
+      <div
+        className="g-card"
+        style={{
+          width: '100%',
+          maxWidth: 520,
+          maxHeight: '90vh',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: 24,
+          position: 'relative',
+        }}
+      >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-text-muted hover:text-text-primary rounded-lg transition-colors"
+          className="g-icon-btn"
+          style={{ position: 'absolute', top: 16, right: 16, width: 30, height: 30 }}
           aria-label="Close dialog"
         >
-          <X className="w-5 h-5" />
+          <X size={14} />
         </button>
 
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-950/70 border border-amber-700/60 flex items-center justify-center text-amber-400">
-            <Sparkles className="w-5 h-5" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+          <div
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 12,
+              background: 'rgba(234,179,8,0.12)',
+              border: '1px solid rgba(234,179,8,0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Sparkles size={18} style={{ color: 'rgba(234,179,8,0.9)' }} />
           </div>
           <div>
-            <h2 id="autoplan-title" className="font-bloody text-xl font-bold text-text-primary">
+            <h2 id="autoplan-title" className="font-bloody" style={{ fontSize: 20, margin: 0, color: 'rgba(255,255,255,0.9)' }}>
               Auto-Plan from Yesterday
             </h2>
-            <div className="flex items-center gap-2 text-xs text-text-muted">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
               <span>{previousDate}</span>
-              <ArrowRight className="w-3 h-3 text-accent-primary" />
-              <span className="text-accent-primary font-medium">{targetDate}</span>
+              <ArrowRight size={11} style={{ color: 'rgba(139,92,246,0.8)' }} />
+              <span style={{ color: 'rgba(139,92,246,0.9)', fontWeight: 600 }}>{targetDate}</span>
             </div>
           </div>
         </div>
 
-        <p className="text-xs text-text-secondary mb-4 leading-relaxed">
-          Select tasks from yesterday to roll over into your plan for <b>{targetDate}</b>. You will be able to review, adjust times, edit strategies, and refine each task.
+        <p style={{ margin: '0 0 14px', fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>
+          Select tasks from yesterday to roll over into your plan for <b>{targetDate}</b>. You can adjust times, edit strategies, and refine each task.
         </p>
 
         {/* Task List */}
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1 my-2">
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, margin: '8px 0', paddingRight: 4 }}>
           {candidateTasks.length === 0 ? (
-            <p className="text-xs text-text-muted text-center py-6">
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: '24px 0' }}>
               No tasks found from yesterday ({previousDate}).
             </p>
           ) : (
@@ -101,38 +134,37 @@ export function AutoPlanReviewModal({
                 <div
                   key={task.id}
                   onClick={() => toggleTask(task.id)}
-                  className={`p-3 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
-                    isChecked
-                      ? 'bg-purple-950/30 border-purple-800/80 text-text-primary'
-                      : 'bg-bg-secondary border-border-color text-text-muted opacity-75'
-                  }`}
+                  className="g-task-row"
+                  style={{
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 10,
+                    cursor: 'pointer',
+                    background: isChecked ? 'rgba(139,92,246,0.08)' : 'var(--glass-bg)',
+                    borderColor: isChecked ? 'rgba(139,92,246,0.35)' : 'rgba(255,255,255,0.06)',
+                  }}
                 >
                   <input
                     type="checkbox"
                     checked={isChecked}
-                    onChange={() => {}} // handled by div
-                    className="mt-0.5 rounded border-border-color text-accent-primary focus:ring-accent-primary w-4 h-4 cursor-pointer"
+                    onChange={() => {}}
+                    style={{ marginTop: 2, cursor: 'pointer' }}
                   />
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{task.icon || sec?.icon || '📌'}</span>
-                      <span className="font-medium text-sm truncate">{task.title}</span>
-                      {task.mustDo && (
-                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 shrink-0" />
-                      )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.88)' }}>
+                      <span>{task.icon || sec?.icon || '📌'}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
+                      {task.mustDo && <Star size={11} style={{ fill: '#eab308', color: '#eab308', flexShrink: 0 }} />}
                     </div>
-
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-text-muted">
-                      <span style={{ color: sec?.color || '#a855f7' }}>
-                        {sec?.name || 'Section'}
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+                      <span style={{ color: sec?.color || '#a855f7' }}>{sec?.name || 'Section'}</span>
                       <span>{task.estimatedMinutes}m est</span>
-                      <span className="capitalize">{task.priority} Priority</span>
+                      <span>{task.priority} Priority</span>
                       {task.isCompleted ? (
-                        <span className="text-emerald-400">(Completed yesterday)</span>
+                        <span style={{ color: 'rgba(34,197,94,0.8)' }}>(Completed)</span>
                       ) : (
-                        <span className="text-amber-400 font-medium">(Unfinished)</span>
+                        <span style={{ color: 'rgba(234,179,8,0.8)' }}>(Unfinished)</span>
                       )}
                     </div>
                   </div>
@@ -143,7 +175,7 @@ export function AutoPlanReviewModal({
         </div>
 
         {/* Footer actions */}
-        <div className="flex items-center justify-between pt-4 border-t border-border-color mt-2">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 8 }}>
           <button
             type="button"
             onClick={() => {
@@ -153,25 +185,23 @@ export function AutoPlanReviewModal({
                 setSelectedTaskIds(new Set(candidateTasks.map(t => t.id)));
               }
             }}
-            className="text-xs text-text-muted hover:text-text-primary"
+            style={{ background: 'none', border: 'none', fontSize: 12, color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: 0 }}
           >
             {selectedTaskIds.size === candidateTasks.length ? 'Deselect All' : 'Select All'}
           </button>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-3.5 py-2 text-xs rounded-xl text-text-muted hover:text-text-primary hover:bg-bg-tertiary transition-colors"
-            >
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} className="g-btn" style={{ padding: '7px 14px', fontSize: 12 }}>
               Cancel
             </button>
             <button
               onClick={handleConfirm}
               disabled={selectedTaskIds.size === 0}
-              className="px-4 py-2 text-xs rounded-xl bg-accent-primary hover:bg-accent-hover text-white font-medium disabled:opacity-40 transition-colors flex items-center gap-1.5 shadow-md shadow-purple-900/30"
+              className="g-btn g-btn-primary"
+              style={{ padding: '7px 16px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, opacity: selectedTaskIds.size === 0 ? 0.4 : 1 }}
             >
-              <CheckSquare className="w-3.5 h-3.5" />
-              <span>Import {selectedTaskIds.size} Tasks to Review</span>
+              <CheckSquare size={13} />
+              <span>Import {selectedTaskIds.size} Tasks</span>
             </button>
           </div>
         </div>

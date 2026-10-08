@@ -42,38 +42,73 @@ export function ManualTimeModal({ taskId, taskTitle, isOpen, onClose }: ManualTi
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 60,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        background: 'rgba(0,0,0,0.75)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="manual-time-title"
     >
-      <div className="w-full max-w-sm bg-bg-card border border-border-color rounded-2xl p-6 shadow-2xl relative">
+      <div
+        className="g-card"
+        style={{
+          width: '100%',
+          maxWidth: 380,
+          padding: 24,
+          position: 'relative',
+        }}
+      >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 text-text-muted hover:text-text-primary rounded-lg"
+          className="g-icon-btn"
+          style={{ position: 'absolute', top: 16, right: 16, width: 30, height: 30 }}
           aria-label="Close manual time dialog"
         >
-          <X className="w-5 h-5" />
+          <X size={14} />
         </button>
 
-        <div className="flex items-center gap-2.5 mb-3 text-text-primary">
-          <Clock className="w-5 h-5 text-accent-primary" />
-          <h2 id="manual-time-title" className="text-lg font-bold">
-            Log Time Manually
-          </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              background: 'rgba(139,92,246,0.15)',
+              border: '1px solid rgba(139,92,246,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Clock size={16} style={{ color: 'rgba(139,92,246,0.9)' }} />
+          </div>
+          <div>
+            <h2 id="manual-time-title" className="font-bloody" style={{ fontSize: 18, margin: 0, color: 'rgba(255,255,255,0.9)' }}>
+              Log Time Manually
+            </h2>
+            <p style={{ margin: '2px 0 0', fontSize: 11, color: 'rgba(255,255,255,0.4)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {taskTitle}
+            </p>
+          </div>
         </div>
 
-        <p className="text-xs text-text-muted mb-4 truncate">
-          Task: <span className="font-semibold text-text-secondary">{taskTitle}</span>
-        </p>
-
         {/* Quick Add Buttons */}
-        <div className="grid grid-cols-3 gap-2 mb-4">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, margin: '16px 0' }}>
           {[15, 30, 45, 60, 90, 120].map(m => (
             <button
               key={m}
               onClick={() => handleAdd(m)}
-              className="py-2 rounded-xl bg-bg-secondary border border-border-color text-text-secondary hover:text-white hover:bg-accent-primary hover:border-accent-primary transition-all text-xs font-semibold"
+              className="g-btn"
+              style={{ padding: '8px 0', textAlign: 'center', fontSize: 12, fontWeight: 600 }}
             >
               +{m >= 60 ? `${m / 60}h` : `${m}m`}
             </button>
@@ -81,11 +116,11 @@ export function ManualTimeModal({ taskId, taskTitle, isOpen, onClose }: ManualTi
         </div>
 
         {/* Custom Input */}
-        <div className="space-y-3 pt-2 border-t border-border-color">
-          <label htmlFor="custom-minutes" className="block text-xs font-medium text-text-muted">
-            Or enter exact minutes:
+        <div style={{ paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <label htmlFor="custom-minutes" className="g-label">
+            Or exact minutes:
           </label>
-          <div className="flex gap-2">
+          <div style={{ display: 'flex', gap: 8 }}>
             <input
               id="custom-minutes"
               type="number"
@@ -93,13 +128,15 @@ export function ManualTimeModal({ taskId, taskTitle, isOpen, onClose }: ManualTi
               max="1440"
               value={minutes}
               onChange={e => setMinutes(Math.max(1, parseInt(e.target.value) || 0))}
-              className="flex-1 px-3.5 py-2 rounded-xl bg-bg-secondary border border-border-color text-text-primary text-sm focus:outline-none focus:border-accent-primary"
+              className="g-input"
+              style={{ flex: 1 }}
             />
             <button
               onClick={() => handleAdd(minutes)}
-              className="px-4 py-2 bg-accent-primary hover:bg-accent-hover text-white rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-md shadow-purple-900/30"
+              className="g-btn g-btn-primary"
+              style={{ padding: '0 16px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}
             >
-              <Plus className="w-4 h-4" />
+              <Plus size={14} />
               <span>Add</span>
             </button>
           </div>
