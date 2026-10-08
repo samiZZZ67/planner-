@@ -136,12 +136,13 @@ export default function NightPlannerApp() {
           position: 'relative',
           zIndex: 10,
           width: '100%',
-          maxWidth: 960,
+          maxWidth: currentTab === 'analytics' ? 1040 : 960,
           margin: '0 auto',
           padding: isPhone ? '12px 16px 110px' : '20px 24px 80px',
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'center',
+          transition: 'max-width 0.25s ease',
         }}
       >
         {/* Left Vertical Dock on PC */}
@@ -157,8 +158,9 @@ export default function NightPlannerApp() {
           className="v-window"
           style={{
             flex: 1,
-            maxWidth: 780,
+            maxWidth: currentTab === 'analytics' ? 880 : 780,
             width: '100%',
+            transition: 'max-width 0.25s ease',
           }}
         >
           {/* Segmented Glass Tabs: Todo, Analytics, Settings */}

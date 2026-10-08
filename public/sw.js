@@ -6,9 +6,8 @@ const PRECACHE_ASSETS = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/icon-maskable-512.png',
+  '/fonts/Demon Slave.ttf',
   '/fonts/BloodyHell.woff2',
-  '/fonts/BloodyHell.woff',
-  '/fonts/BloodyHell.ttf',
 ];
 
 // Install event: Pre-cache app shell and fonts

@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
 import { useTimer } from '@/lib/timer/useTimer';
 import {
-  Calendar, Check, Square, Play, Pause, Square as StopIcon,
-  Trash2, Edit2, Plus, Sparkles, Clock, CheckCircle2, ChevronLeft, ChevronRight, X
+  Calendar, Check, Play, Pause, Square as StopIcon,
+  Trash2, Edit2, Plus, Sparkles, Clock, ChevronLeft, ChevronRight,
+  Bold as BoldIcon, Underline as UnderlineIcon, Strikethrough as StrikethroughIcon,
+  Palette, Bell, BellOff, AlertTriangle, BookOpen, ChevronDown, ChevronUp, Save
 } from 'lucide-react';
-import type { Task, TimeLog } from '@/types';
+import type { Task, TimeLog, Day, DayReview } from '@/types';
 
 interface TodoScreenProps {
   currentDate: string;
@@ -16,18 +18,54 @@ interface TodoScreenProps {
   isPhone: boolean;
 }
 
+const COLOR_OPTIONS = [
+  { label: 'Red', value: '#ef4444', ring: 'rgba(239, 68, 68, 0.4)' },
+  { label: 'Blue', value: '#38bdf8', ring: 'rgba(56, 189, 248, 0.4)' },
+  { label: 'Green', value: '#22c55e', ring: 'rgba(34, 197, 94, 0.4)' },
+  { label: 'Amber', value: '#f59e0b', ring: 'rgba(245, 158, 11, 0.4)' },
+  { label: 'Default', value: '', ring: 'rgba(255, 255, 255, 0.3)' },
+];
+
 export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
-  
-  // Add Task Inputs
+
+  // Add Task Inputs & Formatting State
   const [title, setTitle] = useState('');
   const [strategy, setStrategy] = useState('');
+  const [targetMinutes, setTargetMinutes] = useState(25);
+  const [isBold, setIsBold] = useState(false);
+  const [isUnderline, setIsUnderline] = useState(false);
+  const [isStrikethrough, setIsStrikethrough] = useState(false);
+  const [textColor, setTextColor] = useState('');
 
   // Inline editing state
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editStrategy, setEditStrategy] = useState('');
+  const [editBold, setEditBold] = useState(false);
+  const [editUnderline, setEditUnderline] = useState(false);
+  const [editStrikethrough, setEditStrikethrough] = useState(false);
+  const [editColor, setEditColor] = useState('');
+
+  // Time & Pomodoro Duration Setup Modal State
+  const [timeModalTask, setTimeModalTask] = useState<Task | null>(null);
+  const [modalDuration, setModalDuration] = useState<number>(25);
+  const [customMinutesInput, setCustomMinutesInput] = useState<string>('25');
+
+  // Psychological Reflection / Daily Review State
+  const [review, setReview] = useState<DayReview>({
+    worked: '',
+    blocked: '',
+    change: '',
+    obstacles: '',
+    happened: '',
+    solved: '',
+    betterTomorrow: '',
+  });
+  const [reflectionSaved, setReflectionSaved] = useState(false);
+  const [isReflectionOpen, setIsReflectionOpen] = useState(true);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Pomodoro Timer hook
   const {
@@ -36,6 +74,11 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     isFocus,
     isBreak,
     isTimerRunning,
+    currentSessionNumber,
+    totalSessions,
+    expectedCompletionFormatted,
+    notificationStatus,
+    enableNotifications,
     startTimer,
     pauseTimer,
     resumeTimer,
@@ -43,12 +86,35 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     skipBreak,
   } = useTimer();
 
-  // Load daily tasks & time logs
+  // Load daily tasks, time logs, and daily review
   const loadData = async () => {
     const dayTasks = await db.tasks.filter(t => t.date === currentDate && !t.deleted).toArray();
     dayTasks.sort((a, b) => a.order - b.order);
 
     const dayLogs = await db.timeLogs.filter(tl => tl.date === currentDate && !tl.deleted).toArray();
+
+    const dayRecord = await db.days.get(currentDate);
+    if (dayRecord && dayRecord.review) {
+      setReview({
+        worked: dayRecord.review.worked || '',
+        blocked: dayRecord.review.blocked || '',
+        change: dayRecord.review.change || '',
+        obstacles: dayRecord.review.obstacles || '',
+        happened: dayRecord.review.happened || '',
+        solved: dayRecord.review.solved || '',
+        betterTomorrow: dayRecord.review.betterTomorrow || '',
+      });
+    } else {
+      setReview({
+        worked: '',
+        blocked: '',
+        change: '',
+        obstacles: '',
+        happened: '',
+        solved: '',
+        betterTomorrow: '',
+      });
+    }
 
     setTasks(dayTasks);
     setTimeLogs(dayLogs);
@@ -56,8 +122,16 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 2500);
-    return () => clearInterval(interval);
+    // Fast periodic poll for cross-device updates
+    const interval = setInterval(loadData, 2000);
+    // Subscribe to syncEngine so when server changes are written to Dexie, we update instantly
+    const unsubscribe = syncEngine.subscribe(() => {
+      loadData();
+    });
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, [currentDate]);
 
   // Day of week name (e.g. MONDAY)
@@ -103,11 +177,16 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
       description: '',
       strategy: strategy.trim(),
       doneMeans: '',
-      estimatedMinutes: 25,
+      estimatedMinutes: targetMinutes,
       priority: 'Medium',
       mustDo: false,
       tags: [],
       icon: '🎯',
+      textColor: textColor || undefined,
+      isBold,
+      isUnderline,
+      isStrikethrough,
+      targetMinutes,
       isCompleted: false,
       completedAt: null,
       order: tasks.length,
@@ -122,6 +201,10 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     setTasks(prev => [...prev, newTask]);
     setTitle('');
     setStrategy('');
+    setIsBold(false);
+    setIsUnderline(false);
+    setIsStrikethrough(false);
+    setTextColor('');
     syncEngine.notifyLocalMutation();
   };
 
@@ -149,24 +232,155 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     syncEngine.notifyLocalMutation();
   };
 
-  // Edit task
+  // Start inline editing
   const handleStartEdit = (t: Task) => {
     setEditingTaskId(t.id);
     setEditTitle(t.title);
     setEditStrategy(t.strategy || '');
+    setEditBold(!!t.isBold);
+    setEditUnderline(!!t.isUnderline);
+    setEditStrikethrough(!!t.isStrikethrough);
+    setEditColor(t.textColor || '');
   };
 
+  // Save inline edit
   const handleSaveEdit = async (taskId: string) => {
     if (!editTitle.trim()) return;
     await db.tasks.update(taskId, {
       title: editTitle.trim(),
       strategy: editStrategy.trim(),
+      isBold: editBold,
+      isUnderline: editUnderline,
+      isStrikethrough: editStrikethrough,
+      textColor: editColor || undefined,
       updatedAt: Date.now(),
       synced: 0,
     });
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, title: editTitle.trim(), strategy: editStrategy.trim() } : t));
+    setTasks(prev =>
+      prev.map(t =>
+        t.id === taskId
+          ? {
+              ...t,
+              title: editTitle.trim(),
+              strategy: editStrategy.trim(),
+              isBold: editBold,
+              isUnderline: editUnderline,
+              isStrikethrough: editStrikethrough,
+              textColor: editColor || undefined,
+            }
+          : t
+      )
+    );
     setEditingTaskId(null);
     syncEngine.notifyLocalMutation();
+  };
+
+  // Quick formatting directly on a task card (e.g. toggle Bold, Underline, Strikethrough, Red)
+  const handleToggleTaskFormat = async (
+    task: Task,
+    type: 'bold' | 'underline' | 'strikethrough' | 'color' | 'preset_exercise'
+  ) => {
+    let updates: Partial<Task> = { updatedAt: Date.now(), synced: 0 };
+
+    if (type === 'bold') {
+      updates.isBold = !task.isBold;
+    } else if (type === 'underline') {
+      updates.isUnderline = !task.isUnderline;
+    } else if (type === 'strikethrough') {
+      updates.isStrikethrough = !task.isStrikethrough;
+    } else if (type === 'color') {
+      // Cycle colors: Red -> Blue -> Green -> None
+      const nextColor = task.textColor === '#ef4444' ? '#38bdf8' : task.textColor === '#38bdf8' ? '#22c55e' : task.textColor === '#22c55e' ? '' : '#ef4444';
+      updates.textColor = nextColor || undefined;
+    } else if (type === 'preset_exercise') {
+      // Exactly fulfill requirement: Make title bold, strikethrough, and red!
+      updates.isBold = true;
+      updates.isStrikethrough = true;
+      updates.textColor = '#ef4444';
+    }
+
+    await db.tasks.update(task.id, updates);
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updates } : t));
+    syncEngine.notifyLocalMutation();
+  };
+
+  // Open Time / Duration Setup Modal
+  const handleOpenTimeModal = (task: Task) => {
+    setTimeModalTask(task);
+    const currentTarget = task.targetMinutes || task.estimatedMinutes || 25;
+    setModalDuration(currentTarget);
+    setCustomMinutesInput(String(currentTarget));
+  };
+
+  // Calculate Pomodoro Breakdown for duration
+  const pomodoroCalculations = useMemo(() => {
+    const mins = Math.max(5, modalDuration);
+    const sessions = Math.max(1, Math.ceil(mins / 25));
+    const breaks = sessions - 1;
+    const totalSpanMinutes = sessions * 25 + breaks * 5;
+    const now = Date.now();
+    const expectedEpoch = now + totalSpanMinutes * 60 * 1000;
+    const expectedTimeStr = new Date(expectedEpoch).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    return {
+      sessions,
+      breaks,
+      totalSpanMinutes,
+      expectedTimeStr,
+    };
+  }, [modalDuration]);
+
+  // Start Pomodoro Timer from Modal
+  const handleConfirmStartTimer = async () => {
+    if (!timeModalTask) return;
+    const duration = Math.max(5, modalDuration);
+
+    // Update targetMinutes on task
+    await db.tasks.update(timeModalTask.id, {
+      targetMinutes: duration,
+      estimatedMinutes: duration,
+      expectedCompletionTime: pomodoroCalculations.expectedTimeStr,
+      updatedAt: Date.now(),
+      synced: 0,
+    });
+    setTasks(prev =>
+      prev.map(t =>
+        t.id === timeModalTask.id
+          ? { ...t, targetMinutes: duration, expectedCompletionTime: pomodoroCalculations.expectedTimeStr }
+          : t
+      )
+    );
+    syncEngine.notifyLocalMutation();
+
+    // Start timer with calculated duration
+    await startTimer(timeModalTask.id, timeModalTask.title, duration, '#38bdf8');
+    setTimeModalTask(null);
+  };
+
+  // Auto-save psychological reflection
+  const handleReviewChange = (field: keyof DayReview, value: string) => {
+    const updated = { ...review, [field]: value };
+    setReview(updated);
+    setReflectionSaved(false);
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
+      const now = Date.now();
+      const existing = await db.days.get(currentDate);
+      const dayData: Day = {
+        id: currentDate,
+        date: currentDate,
+        freeHours: existing?.freeHours ?? 8,
+        review: updated,
+        updatedAt: now,
+        deleted: false,
+        isSample: false,
+        synced: 0,
+      };
+      await db.days.put(dayData);
+      setReflectionSaved(true);
+      syncEngine.notifyLocalMutation();
+    }, 400);
   };
 
   // Day total hours
@@ -178,6 +392,150 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
+
+      {/* ── 0. RUNNING POMODORO BANNER (PROMINENT STATUS) ── */}
+      {activeTimer && (
+        <div
+          className="v-card"
+          style={{
+            padding: isPhone ? '14px 16px' : '16px 24px',
+            background: isFocus ? 'rgba(56, 189, 248, 0.18)' : 'rgba(34, 197, 94, 0.18)',
+            borderColor: isFocus ? '#38bdf8' : '#22c55e',
+            boxShadow: `0 0 30px ${isFocus ? 'rgba(56, 189, 248, 0.35)' : 'rgba(34, 197, 94, 0.35)'}`,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 14,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 200 }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                background: isFocus ? 'rgba(56, 189, 248, 0.3)' : 'rgba(34, 197, 94, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 20,
+              }}
+            >
+              {isFocus ? '🎯' : '☕'}
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    color: isFocus ? '#38bdf8' : '#22c55e',
+                  }}
+                >
+                  {isFocus ? `Focus Session ${currentSessionNumber} of ${totalSessions}` : '5-Minute Rest Break'}
+                </span>
+                {notificationStatus === 'denied' && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      background: 'rgba(239, 68, 68, 0.2)',
+                      color: '#ef4444',
+                      padding: '2px 6px',
+                      borderRadius: 4,
+                    }}
+                  >
+                    Audio chime active
+                  </span>
+                )}
+              </div>
+              <div
+                className="font-bloody"
+                style={{
+                  fontSize: 17,
+                  color: 'var(--text-primary)',
+                  maxWidth: isPhone ? 220 : 380,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {activeTimer.taskTitle}
+              </div>
+              {expectedCompletionFormatted && (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Expected completion: <strong>{expectedCompletionFormatted}</strong>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Running Timer Countdown & Action Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div
+              style={{
+                fontSize: 28,
+                fontWeight: 900,
+                fontFamily: 'monospace',
+                color: isFocus ? '#38bdf8' : '#22c55e',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {formattedCountdown}
+            </div>
+
+            {isTimerRunning ? (
+              <button
+                type="button"
+                onClick={pauseTimer}
+                className="v-circle-btn"
+                style={{ width: 38, height: 38 }}
+                title="Pause Pomodoro"
+                aria-label="Pause"
+              >
+                <Pause size={16} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={resumeTimer}
+                className="v-circle-btn v-pill-btn-primary"
+                style={{ width: 38, height: 38 }}
+                title="Resume Pomodoro"
+                aria-label="Resume"
+              >
+                <Play size={16} fill="currentColor" />
+              </button>
+            )}
+
+            {isBreak && (
+              <button
+                type="button"
+                onClick={skipBreak}
+                className="v-pill-btn"
+                style={{ padding: '6px 12px', fontSize: 12 }}
+                title="Skip break and start next focus session"
+              >
+                Skip Break
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={stopTimer}
+              className="v-circle-btn"
+              style={{ width: 38, height: 38, color: '#f87171' }}
+              title="Stop & Log Focus Time"
+              aria-label="Stop"
+            >
+              <StopIcon size={16} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── 1. DAY HEADER & DATE NAVIGATOR ── */}
       <div
@@ -266,7 +624,6 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                 fontWeight: 600,
                 outline: 'none',
                 cursor: 'pointer',
-                fontFamily: 'inherit',
               }}
             />
           </div>
@@ -284,7 +641,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
         </div>
       </div>
 
-      {/* ── 2. ADD TASK BOX (Clean & Spacious) ── */}
+      {/* ── 2. ADD TASK BOX WITH FORMATTING TOOLBAR ── */}
       <form
         onSubmit={handleAddTask}
         className="v-card"
@@ -295,8 +652,32 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
           gap: 14,
         }}
       >
-        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
-          + ADD TASK FOR {dayName}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
+            + ADD TASK FOR {dayName}
+          </div>
+
+          {/* Quick preset button for Exercise requirement */}
+          <button
+            type="button"
+            onClick={() => {
+              if (!title) setTitle('Exercise');
+              setIsBold(true);
+              setIsStrikethrough(true);
+              setTextColor('#ef4444');
+            }}
+            className="v-pill-btn"
+            style={{
+              padding: '4px 10px',
+              fontSize: 11,
+              color: '#ef4444',
+              borderColor: 'rgba(239, 68, 68, 0.4)',
+              background: 'rgba(239, 68, 68, 0.1)',
+            }}
+            title="Apply Bold, Strikethrough & Red style"
+          >
+            🔴 Preset: Bold, Strikethrough & Red
+          </button>
         </div>
 
         {/* Title Input */}
@@ -304,9 +685,17 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
           type="text"
           value={title}
           onChange={e => setTitle(e.target.value)}
-          placeholder="Title (What will you do? e.g. Finish client dashboard redesign)"
+          placeholder="Title (What will you do? e.g. Exercise or Complete quarterly report)"
           className="v-input"
-          style={{ fontSize: 14 }}
+          style={{
+            fontSize: 15,
+            fontWeight: isBold ? 800 : 500,
+            textDecoration: [
+              isStrikethrough ? 'line-through' : '',
+              isUnderline ? 'underline' : '',
+            ].filter(Boolean).join(' ') || 'none',
+            color: textColor || 'var(--text-primary)',
+          }}
         />
 
         {/* Strategy Input */}
@@ -319,13 +708,106 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
           style={{ fontSize: 13 }}
         />
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 2 }}>
+        {/* ── SMALL FORMATTING TOOLBAR (Color, Bold, Underline, Strikethrough) ── */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 10,
+            padding: '10px 14px',
+            borderRadius: 12,
+            background: 'var(--v-glass-bg-subtle)',
+            border: '1px solid var(--v-glass-border-subtle)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginRight: 4 }}>
+              Format:
+            </span>
+
+            {/* Bold Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsBold(prev => !prev)}
+              className="v-circle-btn"
+              style={{
+                width: 32,
+                height: 32,
+                background: isBold ? 'rgba(56, 189, 248, 0.25)' : undefined,
+                borderColor: isBold ? 'var(--accent-color)' : undefined,
+                color: isBold ? 'var(--accent-color)' : 'var(--text-secondary)',
+              }}
+              title="Toggle Bold"
+            >
+              <BoldIcon size={14} />
+            </button>
+
+            {/* Underline Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsUnderline(prev => !prev)}
+              className="v-circle-btn"
+              style={{
+                width: 32,
+                height: 32,
+                background: isUnderline ? 'rgba(56, 189, 248, 0.25)' : undefined,
+                borderColor: isUnderline ? 'var(--accent-color)' : undefined,
+                color: isUnderline ? 'var(--accent-color)' : 'var(--text-secondary)',
+              }}
+              title="Toggle Underline"
+            >
+              <UnderlineIcon size={14} />
+            </button>
+
+            {/* Strikethrough Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsStrikethrough(prev => !prev)}
+              className="v-circle-btn"
+              style={{
+                width: 32,
+                height: 32,
+                background: isStrikethrough ? 'rgba(56, 189, 248, 0.25)' : undefined,
+                borderColor: isStrikethrough ? 'var(--accent-color)' : undefined,
+                color: isStrikethrough ? 'var(--accent-color)' : 'var(--text-secondary)',
+              }}
+              title="Toggle Strikethrough"
+            >
+              <StrikethroughIcon size={14} />
+            </button>
+
+            {/* Text Color Picker Buttons */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+              {COLOR_OPTIONS.map(c => (
+                <button
+                  key={c.label}
+                  type="button"
+                  onClick={() => setTextColor(c.value)}
+                  style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    background: c.value || 'var(--text-primary)',
+                    border: textColor === c.value ? '2px solid #ffffff' : '1px solid var(--v-glass-border)',
+                    boxShadow: textColor === c.value ? `0 0 8px ${c.ring}` : 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  title={`Color: ${c.label}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Add Task Submit Button */}
           <button
             type="submit"
             disabled={!title.trim()}
             className="v-pill-btn v-pill-btn-primary"
             style={{
-              padding: '10px 24px',
+              padding: '8px 22px',
               fontSize: 13,
               opacity: !title.trim() ? 0.4 : 1,
               width: isPhone ? '100%' : 'auto',
@@ -337,14 +819,13 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
         </div>
       </form>
 
-      {/* ── 3. TASK BOX (Master Daily Task List) ── */}
+      {/* ── 3. TASK LIST BOX ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', paddingLeft: 4 }}>
           TASKS FOR {dayName} ({tasks.length})
         </div>
 
         {tasks.length === 0 ? (
-          /* Empty state */
           <div
             className="v-card"
             style={{
@@ -366,7 +847,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
           </div>
         ) : (
           tasks.map(task => {
-            const { hours, totalMinutes } = getTaskHoursTaken(task.id);
+            const { hours, totalMinutes: loggedMins } = getTaskHoursTaken(task.id);
             const isThisTimerActive = activeTimer?.taskId === task.id;
             const isEditing = editingTaskId === task.id;
 
@@ -386,14 +867,22 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               >
                 {/* Task Main Row */}
                 {isEditing ? (
-                  /* Inline Editing Mode */
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  /* Inline Editing Mode with Formatting Controls */
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <input
                       type="text"
                       value={editTitle}
                       onChange={e => setEditTitle(e.target.value)}
                       className="v-input"
                       placeholder="Title"
+                      style={{
+                        fontWeight: editBold ? 800 : 500,
+                        textDecoration: [
+                          editStrikethrough ? 'line-through' : '',
+                          editUnderline ? 'underline' : '',
+                        ].filter(Boolean).join(' ') || 'none',
+                        color: editColor || 'var(--text-primary)',
+                      }}
                     />
                     <input
                       type="text"
@@ -402,23 +891,85 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                       className="v-input"
                       placeholder="Strategy"
                     />
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+
+                    {/* Inline edit format toolbar */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <button
                         type="button"
-                        onClick={() => setEditingTaskId(null)}
-                        className="v-pill-btn"
-                        style={{ padding: '6px 14px', fontSize: 12 }}
+                        onClick={() => setEditBold(prev => !prev)}
+                        className="v-circle-btn"
+                        style={{
+                          width: 30,
+                          height: 30,
+                          background: editBold ? 'rgba(56, 189, 248, 0.25)' : undefined,
+                          color: editBold ? 'var(--accent-color)' : undefined,
+                        }}
                       >
-                        Cancel
+                        <BoldIcon size={13} />
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleSaveEdit(task.id)}
-                        className="v-pill-btn v-pill-btn-primary"
-                        style={{ padding: '6px 16px', fontSize: 12 }}
+                        onClick={() => setEditUnderline(prev => !prev)}
+                        className="v-circle-btn"
+                        style={{
+                          width: 30,
+                          height: 30,
+                          background: editUnderline ? 'rgba(56, 189, 248, 0.25)' : undefined,
+                          color: editUnderline ? 'var(--accent-color)' : undefined,
+                        }}
                       >
-                        Save
+                        <UnderlineIcon size={13} />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditStrikethrough(prev => !prev)}
+                        className="v-circle-btn"
+                        style={{
+                          width: 30,
+                          height: 30,
+                          background: editStrikethrough ? 'rgba(56, 189, 248, 0.25)' : undefined,
+                          color: editStrikethrough ? 'var(--accent-color)' : undefined,
+                        }}
+                      >
+                        <StrikethroughIcon size={13} />
+                      </button>
+
+                      <div style={{ display: 'flex', gap: 6, marginLeft: 6 }}>
+                        {COLOR_OPTIONS.map(c => (
+                          <button
+                            key={c.label}
+                            type="button"
+                            onClick={() => setEditColor(c.value)}
+                            style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: '50%',
+                              background: c.value || 'var(--text-primary)',
+                              border: editColor === c.value ? '2px solid #fff' : '1px solid var(--v-glass-border)',
+                              cursor: 'pointer',
+                            }}
+                          />
+                        ))}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                        <button
+                          type="button"
+                          onClick={() => setEditingTaskId(null)}
+                          className="v-pill-btn"
+                          style={{ padding: '6px 14px', fontSize: 12 }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEdit(task.id)}
+                          className="v-pill-btn v-pill-btn-primary"
+                          style={{ padding: '6px 16px', fontSize: 12 }}
+                        >
+                          Save
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -449,15 +1000,18 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                         {task.isCompleted && <Check size={14} strokeWidth={3} />}
                       </button>
 
-                      {/* Title & Info */}
+                      {/* Title & Info with Formatting applied strictly */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div
                           className="font-bloody"
                           style={{
-                            fontSize: 18,
-                            fontWeight: 700,
-                            color: 'var(--text-primary)',
-                            textDecoration: task.isCompleted ? 'line-through' : 'none',
+                            fontSize: 19,
+                            fontWeight: task.isBold ? 800 : 600,
+                            color: task.textColor || 'var(--text-primary)',
+                            textDecoration: [
+                              (task.isStrikethrough || task.isCompleted) ? 'line-through' : '',
+                              task.isUnderline ? 'underline' : '',
+                            ].filter(Boolean).join(' ') || 'none',
                             lineHeight: 1.3,
                             wordBreak: 'break-word',
                           }}
@@ -465,7 +1019,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                           {task.title}
                         </div>
 
-                        {/* Strategy Box (Clearly shown as requested) */}
+                        {/* Strategy Box */}
                         {task.strategy ? (
                           <div
                             style={{
@@ -500,32 +1054,82 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                         )}
                       </div>
 
-                      {/* Top Action Buttons (Edit / Delete) */}
+                      {/* Top Action Toolbar (Quick Format + Edit + Delete) */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        {/* Quick Bold Toggle */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTaskFormat(task, 'bold')}
+                          className="v-circle-btn"
+                          style={{
+                            width: 30,
+                            height: 30,
+                            background: task.isBold ? 'rgba(56, 189, 248, 0.25)' : undefined,
+                            color: task.isBold ? 'var(--accent-color)' : undefined,
+                          }}
+                          title="Toggle Bold"
+                        >
+                          <BoldIcon size={12} />
+                        </button>
+
+                        {/* Quick Strikethrough Toggle */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTaskFormat(task, 'strikethrough')}
+                          className="v-circle-btn"
+                          style={{
+                            width: 30,
+                            height: 30,
+                            background: task.isStrikethrough ? 'rgba(56, 189, 248, 0.25)' : undefined,
+                            color: task.isStrikethrough ? 'var(--accent-color)' : undefined,
+                          }}
+                          title="Toggle Strikethrough"
+                        >
+                          <StrikethroughIcon size={12} />
+                        </button>
+
+                        {/* Quick Color Cycle */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTaskFormat(task, 'color')}
+                          className="v-circle-btn"
+                          style={{
+                            width: 30,
+                            height: 30,
+                            color: task.textColor || undefined,
+                          }}
+                          title="Cycle Color (Red, Blue, Green)"
+                        >
+                          <Palette size={12} />
+                        </button>
+
+                        {/* Edit Button */}
                         <button
                           type="button"
                           onClick={() => handleStartEdit(task)}
                           className="v-circle-btn"
-                          style={{ width: 32, height: 32 }}
+                          style={{ width: 30, height: 30 }}
                           title="Edit Task"
                           aria-label="Edit task"
                         >
-                          <Edit2 size={13} />
+                          <Edit2 size={12} />
                         </button>
+
+                        {/* Delete Button */}
                         <button
                           type="button"
                           onClick={() => handleDeleteTask(task.id)}
                           className="v-circle-btn"
-                          style={{ width: 32, height: 32, color: '#f87171' }}
+                          style={{ width: 30, height: 30, color: '#f87171' }}
                           title="Delete Task"
                           aria-label="Delete task"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={12} />
                         </button>
                       </div>
                     </div>
 
-                    {/* Bottom Row: Hours Taken & Time (Pomodoro) Button */}
+                    {/* Bottom Row: Hours Taken & TIME BUTTON */}
                     <div
                       style={{
                         display: 'flex',
@@ -542,14 +1146,14 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                         <Clock size={15} style={{ opacity: 0.7 }} />
                         <span>Hours Taken:</span>
                         <strong style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: 14 }}>
-                          {hours}h {totalMinutes > 0 ? `(${totalMinutes}m)` : ''}
+                          {hours}h {loggedMins > 0 ? `(${loggedMins}m)` : ''}
                         </strong>
                       </div>
 
-                      {/* ── TIME BUTTON (Real 25m Focus + 5m Break Pomodoro Timer) ── */}
+                      {/* ── TIME (POMODORO) BUTTON ── */}
                       <div>
                         {isThisTimerActive ? (
-                          /* Active Pomodoro Timer Controls */
+                          /* Active Pomodoro Controller on Card */
                           <div
                             style={{
                               display: 'flex',
@@ -578,8 +1182,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                                 onClick={pauseTimer}
                                 className="v-circle-btn"
                                 style={{ width: 28, height: 28 }}
-                                title="Pause Pomodoro"
-                                aria-label="Pause Pomodoro"
+                                title="Pause"
                               >
                                 <Pause size={12} />
                               </button>
@@ -589,22 +1192,9 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                                 onClick={resumeTimer}
                                 className="v-circle-btn"
                                 style={{ width: 28, height: 28 }}
-                                title="Resume Pomodoro"
-                                aria-label="Resume Pomodoro"
+                                title="Resume"
                               >
                                 <Play size={12} />
-                              </button>
-                            )}
-
-                            {isBreak && (
-                              <button
-                                type="button"
-                                onClick={skipBreak}
-                                className="v-pill-btn"
-                                style={{ padding: '2px 8px', fontSize: 11, minHeight: 28 }}
-                                title="Skip break and start next focus"
-                              >
-                                Skip
                               </button>
                             )}
 
@@ -614,16 +1204,15 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                               className="v-circle-btn"
                               style={{ width: 28, height: 28, color: '#f87171' }}
                               title="Stop & Log Time"
-                              aria-label="Stop & Log Time"
                             >
                               <StopIcon size={12} />
                             </button>
                           </div>
                         ) : (
-                          /* Inactive: Responsive "Time" Button */
+                          /* Inactive: Clicking Time opens Duration Setup Modal */
                           <button
                             type="button"
-                            onClick={() => startTimer(task.id, task.title, '#38bdf8')}
+                            onClick={() => handleOpenTimeModal(task)}
                             className="v-pill-btn"
                             style={{
                               padding: '8px 18px',
@@ -633,7 +1222,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                             }}
                           >
                             <Play size={13} fill="currentColor" />
-                            <span>Time (25m Focus)</span>
+                            <span>Time ({task.targetMinutes || 25}m)</span>
                           </button>
                         )}
                       </div>
@@ -645,6 +1234,337 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
           })
         )}
       </div>
+
+      {/* ── 4. DAILY SUMMARY / PSYCHOLOGICAL REFLECTION SECTION ── */}
+      <div
+        className="v-card"
+        style={{
+          padding: isPhone ? '18px 16px' : '24px 28px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+        }}
+      >
+        <div
+          onClick={() => setIsReflectionOpen(prev => !prev)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            userSelect: 'none',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <BookOpen size={20} style={{ color: 'var(--accent-color)' }} />
+            <div>
+              <h2
+                className="font-bloody"
+                style={{
+                  fontSize: isPhone ? 20 : 24,
+                  margin: 0,
+                  color: 'var(--text-primary)',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                DAILY SUMMARY & PSYCHOLOGICAL REFLECTION
+              </h2>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                Nightly mental debrief to clarify tomorrow&apos;s planning
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {reflectionSaved && (
+              <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>
+                ✓ Saved locally
+              </span>
+            )}
+            <button
+              type="button"
+              className="v-circle-btn"
+              style={{ width: 32, height: 32 }}
+              aria-label={isReflectionOpen ? 'Collapse reflection' : 'Expand reflection'}
+            >
+              {isReflectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+          </div>
+        </div>
+
+        {isReflectionOpen && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 6 }}>
+            {/* Question 1: What obstacles did I face today? */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                1. What obstacles did I face today?
+              </label>
+              <textarea
+                value={review.obstacles || ''}
+                onChange={e => handleReviewChange('obstacles', e.target.value)}
+                placeholder="Distractions, low energy around 2 PM, unexpected urgent calls..."
+                rows={2}
+                className="v-input"
+                style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
+              />
+            </div>
+
+            {/* Question 2: What happened? */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                2. What happened?
+              </label>
+              <textarea
+                value={review.happened || ''}
+                onChange={e => handleReviewChange('happened', e.target.value)}
+                placeholder="I got pulled into answering emails for 1 hour and lost momentum on coding..."
+                rows={2}
+                className="v-input"
+                style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
+              />
+            </div>
+
+            {/* Question 3: How did I solve it? */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                3. How did I solve it?
+              </label>
+              <textarea
+                value={review.solved || ''}
+                onChange={e => handleReviewChange('solved', e.target.value)}
+                placeholder="Put my phone in another room, took a 5-minute breather, and did a 25-minute Pomodoro sprint..."
+                rows={2}
+                className="v-input"
+                style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
+              />
+            </div>
+
+            {/* Question 4: What could I do better tomorrow? */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                4. What could I do better tomorrow?
+              </label>
+              <textarea
+                value={review.betterTomorrow || ''}
+                onChange={e => handleReviewChange('betterTomorrow', e.target.value)}
+                placeholder="Block the first 90 minutes of the morning for deep work before opening any notifications..."
+                rows={2}
+                className="v-input"
+                style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 5. TIME & POMODORO SETUP MODAL ── */}
+      {timeModalTask && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setTimeModalTask(null)}
+        >
+          <div
+            className="v-card"
+            style={{
+              width: '100%',
+              maxWidth: 520,
+              padding: isPhone ? '20px 18px' : '28px 32px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 18,
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--accent-color)' }}>
+                SET TASK DEADLINE & POMODORO TARGET
+              </div>
+              <h2
+                className="font-bloody"
+                style={{
+                  fontSize: 22,
+                  margin: '4px 0 0',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                {timeModalTask.title}
+              </h2>
+            </div>
+
+            {/* Duration Selector Buttons */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
+                Choose Target Duration:
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                {[25, 50, 75, 100].map(mins => (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => {
+                      setModalDuration(mins);
+                      setCustomMinutesInput(String(mins));
+                    }}
+                    className={`v-pill-btn${modalDuration === mins ? ' v-pill-btn-primary' : ''}`}
+                    style={{ padding: '8px 10px', fontSize: 13, fontWeight: 700, textAlign: 'center' }}
+                  >
+                    {mins}m
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Minutes Input */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Custom minutes:</span>
+                <input
+                  type="number"
+                  min="5"
+                  max="600"
+                  value={customMinutesInput}
+                  onChange={e => {
+                    setCustomMinutesInput(e.target.value);
+                    const val = parseInt(e.target.value, 10);
+                    if (!isNaN(val) && val > 0) {
+                      setModalDuration(val);
+                    }
+                  }}
+                  className="v-input"
+                  style={{ width: 90, padding: '6px 10px', fontSize: 13 }}
+                />
+              </div>
+            </div>
+
+            {/* ── AUTOMATIC POMODORO CALCULATION BREAKDOWN ── */}
+            <div
+              style={{
+                padding: '14px 18px',
+                borderRadius: 14,
+                background: 'var(--v-glass-bg-subtle)',
+                border: '1.5px solid var(--v-glass-border-bright)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
+                AUTOMATIC POMODORO SESSIONS NEEDED:
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: '#38bdf8' }}>
+                  <span>🎯 {pomodoroCalculations.sessions} Focus Sessions</span>
+                  <span style={{ fontSize: 12, opacity: 0.8 }}>(25m each)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#22c55e' }}>
+                  <span>☕ {pomodoroCalculations.breaks} Breaks</span>
+                  <span style={{ fontSize: 11, opacity: 0.8 }}>(5m each)</span>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--v-glass-border-subtle)', paddingTop: 8, marginTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  Total Span: <strong>{pomodoroCalculations.totalSpanMinutes} minutes</strong>
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-color)' }}>
+                  Expected Completion: <strong>{pomodoroCalculations.expectedTimeStr}</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* ── NOTIFICATION PERMISSION + FALLBACK PROMPT ── */}
+            <div
+              style={{
+                padding: '12px 16px',
+                borderRadius: 12,
+                background:
+                  notificationStatus === 'granted'
+                    ? 'rgba(34, 197, 94, 0.1)'
+                    : notificationStatus === 'denied'
+                    ? 'rgba(239, 68, 68, 0.1)'
+                    : 'rgba(56, 189, 248, 0.1)',
+                border: `1px solid ${
+                  notificationStatus === 'granted'
+                    ? 'rgba(34, 197, 94, 0.3)'
+                    : notificationStatus === 'denied'
+                    ? 'rgba(239, 68, 68, 0.3)'
+                    : 'rgba(56, 189, 248, 0.3)'
+                }`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {notificationStatus === 'granted' ? (
+                  <Bell size={18} style={{ color: '#22c55e', flexShrink: 0 }} />
+                ) : notificationStatus === 'denied' ? (
+                  <BellOff size={18} style={{ color: '#ef4444', flexShrink: 0 }} />
+                ) : (
+                  <AlertTriangle size={18} style={{ color: '#38bdf8', flexShrink: 0 }} />
+                )}
+                <div style={{ fontSize: 12, lineHeight: 1.4 }}>
+                  {notificationStatus === 'granted' ? (
+                    <span style={{ color: '#22c55e', fontWeight: 600 }}>
+                      Notifications Active (Alerts ready online & offline)
+                    </span>
+                  ) : notificationStatus === 'denied' ? (
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      Notifications disabled in browser. In-app banner & audio chimes will alert you.
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      Enable notifications to get session start, break, and completion alerts.
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {notificationStatus === 'default' && (
+                <button
+                  type="button"
+                  onClick={enableNotifications}
+                  className="v-pill-btn v-pill-btn-primary"
+                  style={{ padding: '4px 12px', fontSize: 11, flexShrink: 0 }}
+                >
+                  Enable
+                </button>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
+              <button
+                type="button"
+                onClick={() => setTimeModalTask(null)}
+                className="v-pill-btn"
+                style={{ padding: '8px 18px', fontSize: 13 }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmStartTimer}
+                className="v-pill-btn v-pill-btn-primary"
+                style={{ padding: '8px 24px', fontSize: 13 }}
+              >
+                <Play size={14} fill="currentColor" />
+                <span>Start Focus ({modalDuration}m)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

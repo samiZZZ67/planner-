@@ -31,6 +31,11 @@ export interface Task {
   tags: string[];
   icon: string;
   textColor?: string;
+  isBold?: boolean;
+  isUnderline?: boolean;
+  isStrikethrough?: boolean;
+  targetMinutes?: number;
+  expectedCompletionTime?: string;
   image?: string | null; // compressed data URL <= 150KB
   isCompleted: boolean;
   completedAt?: number | null;
@@ -61,6 +66,11 @@ export interface DayReview {
   worked: string;
   blocked: string;
   change: string;
+  // Psychological reflection questions
+  obstacles?: string;
+  happened?: string;
+  solved?: string;
+  betterTomorrow?: string;
 }
 
 export interface DaySheetData {
@@ -99,6 +109,9 @@ export interface ActiveTimer {
   mode?: PomodoroMode;
   targetDurationMs?: number;
   completedPomodoros?: number;
+  totalTargetMinutes?: number;
+  expectedCompletionEpochMs?: number;
+  totalSessionsPlanned?: number;
 }
 
 export interface DraftTask {

@@ -52,9 +52,29 @@ class SyncEngine {
       this.updateState({ status: 'offline' });
     });
 
-    // Periodic sync every 60 seconds
-    setInterval(() => {
+    // Instant sync when tab is brought to focus or unhidden (PC <-> Phone immediate reflection)
+    window.addEventListener('focus', () => {
       if (navigator.onLine && !this.isSyncing) {
+        this.triggerSync();
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && navigator.onLine && !this.isSyncing) {
+        this.triggerSync();
+      }
+    });
+
+    // Fast polling every 6 seconds when tab is active for immediate cross-device updates
+    setInterval(() => {
+      if (navigator.onLine && !this.isSyncing && !document.hidden) {
+        this.triggerSync();
+      }
+    }, 6000);
+
+    // Periodic background sync when hidden
+    setInterval(() => {
+      if (navigator.onLine && !this.isSyncing && document.hidden) {
         this.triggerSync();
       }
     }, 60000);
@@ -67,7 +87,7 @@ class SyncEngine {
     // Initial sync
     setTimeout(() => {
       this.triggerSync();
-    }, 1000);
+    }, 300);
   }
 
   public subscribe(listener: SyncListener): () => void {
@@ -134,11 +154,11 @@ class SyncEngine {
 
   public notifyLocalMutation() {
     this.refreshUnsyncedCount();
-    // Debounce sync trigger by 1.5s to batch rapid changes
+    // Fast debounced sync trigger (250ms) for near-instant reflection between devices
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.debounceTimer = setTimeout(() => {
       this.triggerSync();
-    }, 1500);
+    }, 250);
   }
 
   public async triggerSync(): Promise<void> {

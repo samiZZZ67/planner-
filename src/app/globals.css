@@ -15,18 +15,17 @@
 
 @font-face {
   font-family: 'Bloody Hell';
-  src: url('/fonts/BloodyHell.woff2') format('woff2'),
-       url('/fonts/BloodyHell.woff') format('woff'),
-       url('/fonts/BloodyHell.ttf') format('truetype'),
-       url('/fonts/Demon Slave.ttf') format('truetype');
+  src: url('/fonts/Demon Slave.ttf') format('truetype'),
+       url('/fonts/BloodyHell.woff2') format('woff2');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
 }
 
 :root {
-  --font-heading: 'Bloody Hell', 'Demon Slave', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-  --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
+  --font-app: 'Demon Slave', 'Bloody Hell', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-heading: 'Demon Slave', 'Bloody Hell', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-body: 'Demon Slave', 'Bloody Hell', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
   /* Dark Obsidian Glass Tokens */
   --v-app-bg: #0d0d11;
@@ -79,8 +78,10 @@
   --accent-glow: rgba(2, 132, 199, 0.25);
 }
 
-*, *::before, *::after {
+*, *::before, *::after,
+html, body, button, input, textarea, select, span, p, h1, h2, h3, h4, h5, h6, a, label, strong, b, em {
   box-sizing: border-box;
+  font-family: 'Demon Slave', 'Bloody Hell', system-ui, -apple-system, sans-serif !important;
 }
 
 html, body {
@@ -88,7 +89,7 @@ html, body {
   padding: 0;
   min-height: 100%;
   overflow-x: hidden;
-  font-family: var(--font-body);
+  font-family: 'Demon Slave', 'Bloody Hell', system-ui, -apple-system, sans-serif !important;
   color: var(--text-primary);
   background-color: var(--v-app-bg);
   transition: background-color 0.25s ease, color 0.25s ease;

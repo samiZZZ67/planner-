@@ -3,41 +3,50 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getActiveTimer, saveActiveTimer, db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import {
+  sendPomodoroNotification,
+  getNotificationStatus,
+  requestNotificationPermission,
+  type NotificationStatus,
+} from '@/lib/notifications/notificationManager';
 import type { ActiveTimer, PomodoroMode, TimeLog } from '@/types';
 
 export const POMODORO_FOCUS_MS = 25 * 60 * 1000; // 25 minutes
 export const POMODORO_BREAK_MS = 5 * 60 * 1000;  // 5 minutes
 
-// Web Audio API chime generator for Pomodoro alerts
-function playChime(isBreakStart: boolean) {
+function formatEpochTime(ms?: number): string {
+  if (!ms) return '';
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = isBreakStart ? 'sine' : 'triangle';
-    osc.frequency.setValueAtTime(isBreakStart ? 587.33 : 880, ctx.currentTime); // D5 or A5
-    osc.frequency.exponentialRampToValueAtTime(isBreakStart ? 880 : 1174.66, ctx.currentTime + 0.3);
-
-    gain.gain.setValueAtTime(0.25, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    osc.stop(ctx.currentTime + 0.6);
+    const d = new Date(ms);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   } catch {
-    // AudioContext not allowed or not supported in background
+    return '';
   }
 }
 
 export function useTimer() {
   const [activeTimer, setActiveTimerState] = useState<ActiveTimer | null>(null);
   const [elapsedMs, setElapsedMs] = useState<number>(0);
+  const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>('default');
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load timer from storage on mount
+  // Check notification status on mount
+  useEffect(() => {
+    setNotificationStatus(getNotificationStatus());
+  }, []);
+
+  const refreshNotificationStatus = useCallback(() => {
+    setNotificationStatus(getNotificationStatus());
+  }, []);
+
+  // Request permission helper
+  const enableNotifications = useCallback(async () => {
+    const result = await requestNotificationPermission();
+    setNotificationStatus(result);
+    return result;
+  }, []);
+
+  // Load timer from Dexie on mount
   useEffect(() => {
     getActiveTimer().then(timer => {
       if (timer) {
@@ -64,8 +73,9 @@ export function useTimer() {
         // Check if current Pomodoro session reached target
         if (currentElapsed >= target) {
           if (mode === 'focus') {
-            // Completed 25-minute focus session!
-            playChime(true);
+            const nextCompleted = (activeTimer.completedPomodoros || 0) + 1;
+            const totalPlanned = activeTimer.totalSessionsPlanned || 1;
+            const isAllComplete = nextCompleted >= totalPlanned;
 
             // Log 25 minutes to TimeLog for Analytics
             const todayDate = new Date().toLocaleDateString('en-CA');
@@ -84,6 +94,22 @@ export function useTimer() {
             await db.timeLogs.put(newLog);
             syncEngine.notifyLocalMutation();
 
+            if (isAllComplete) {
+              // Task target completed!
+              await sendPomodoroNotification('task_complete', {
+                taskTitle: activeTimer.taskTitle,
+                sessionIndex: nextCompleted,
+                totalSessions: totalPlanned,
+              });
+            } else {
+              // 25m Focus done -> notify break
+              await sendPomodoroNotification('break_start', {
+                taskTitle: activeTimer.taskTitle,
+                sessionIndex: nextCompleted,
+                totalSessions: totalPlanned,
+              });
+            }
+
             // Transition to 5-minute break
             const breakTimer: ActiveTimer = {
               ...activeTimer,
@@ -91,7 +117,7 @@ export function useTimer() {
               startedAt: Date.now(),
               accumulatedMs: 0,
               targetDurationMs: POMODORO_BREAK_MS,
-              completedPomodoros: (activeTimer.completedPomodoros || 0) + 1,
+              completedPomodoros: nextCompleted,
               isRunning: true,
             };
             setActiveTimerState(breakTimer);
@@ -99,7 +125,14 @@ export function useTimer() {
             setElapsedMs(0);
           } else {
             // Completed 5-minute break session!
-            playChime(false);
+            const totalPlanned = activeTimer.totalSessionsPlanned || 1;
+            const nextSession = (activeTimer.completedPomodoros || 0) + 1;
+
+            await sendPomodoroNotification('break_end', {
+              taskTitle: activeTimer.taskTitle,
+              sessionIndex: nextSession,
+              totalSessions: totalPlanned,
+            });
 
             // Ready for next focus block
             const nextFocusTimer: ActiveTimer = {
@@ -108,7 +141,7 @@ export function useTimer() {
               startedAt: Date.now(),
               accumulatedMs: 0,
               targetDurationMs: POMODORO_FOCUS_MS,
-              isRunning: false, // Pause so user chooses when to resume next focus block
+              isRunning: false, // Paused so user can take a breath and hit Resume when ready
             };
             setActiveTimerState(nextFocusTimer);
             await saveActiveTimer(nextFocusTimer);
@@ -165,30 +198,62 @@ export function useTimer() {
     setElapsedMs(0);
   }, [activeTimer]);
 
-  // Start 25-minute Pomodoro focus session on a task
-  const startTimer = useCallback(async (taskId: string, taskTitle: string, sectionColor?: string) => {
-    // If a different timer was running, stop it and log progress first
-    if (activeTimer && activeTimer.taskId !== taskId) {
-      await stopTimer();
-    }
+  // Start Pomodoro timer on a task with target duration or section color
+  const startTimer = useCallback(
+    async (
+      taskId: string,
+      taskTitle: string,
+      durationOrColor: number | string = 25,
+      sectionColorParam = '#38bdf8'
+    ) => {
+      let durationMinutes = 25;
+      let sectionColor = sectionColorParam;
 
-    const now = Date.now();
-    const newTimer: ActiveTimer = {
-      taskId,
-      taskTitle,
-      sectionColor: sectionColor || '#38bdf8',
-      startedAt: now,
-      accumulatedMs: 0,
-      isRunning: true,
-      mode: 'focus',
-      targetDurationMs: POMODORO_FOCUS_MS,
-      completedPomodoros: activeTimer?.taskId === taskId ? (activeTimer.completedPomodoros || 0) : 0,
-    };
+      if (typeof durationOrColor === 'number') {
+        durationMinutes = durationOrColor;
+      } else if (typeof durationOrColor === 'string') {
+        sectionColor = durationOrColor;
+      }
 
-    setActiveTimerState(newTimer);
-    await saveActiveTimer(newTimer);
-    setElapsedMs(0);
-  }, [activeTimer, stopTimer]);
+      // If a different timer was running, stop it and log progress first
+      if (activeTimer && activeTimer.taskId !== taskId) {
+        await stopTimer();
+      }
+
+      const sessionsNeeded = Math.max(1, Math.ceil(durationMinutes / 25));
+      const totalSpanMinutes = sessionsNeeded * 25 + (sessionsNeeded - 1) * 5;
+      const expectedCompletionMs = Date.now() + totalSpanMinutes * 60 * 1000;
+      const now = Date.now();
+
+      const newTimer: ActiveTimer = {
+        taskId,
+        taskTitle,
+        sectionColor,
+        startedAt: now,
+        accumulatedMs: 0,
+        isRunning: true,
+        mode: 'focus',
+        targetDurationMs: POMODORO_FOCUS_MS,
+        completedPomodoros: activeTimer?.taskId === taskId ? (activeTimer.completedPomodoros || 0) : 0,
+        totalTargetMinutes: durationMinutes,
+        totalSessionsPlanned: sessionsNeeded,
+        expectedCompletionEpochMs: expectedCompletionMs,
+      };
+
+      setActiveTimerState(newTimer);
+      await saveActiveTimer(newTimer);
+      setElapsedMs(0);
+
+      // Trigger focus start notification and sound
+      await sendPomodoroNotification('focus_start', {
+        taskTitle,
+        sessionIndex: (newTimer.completedPomodoros || 0) + 1,
+        totalSessions: sessionsNeeded,
+        expectedCompletion: formatEpochTime(expectedCompletionMs),
+      });
+    },
+    [activeTimer, stopTimer]
+  );
 
   const pauseTimer = useCallback(async () => {
     if (!activeTimer || !activeTimer.isRunning) return;
@@ -215,6 +280,14 @@ export function useTimer() {
 
     setActiveTimerState(updated);
     await saveActiveTimer(updated);
+
+    if (updated.mode === 'focus') {
+      await sendPomodoroNotification('focus_start', {
+        taskTitle: updated.taskTitle,
+        sessionIndex: (updated.completedPomodoros || 0) + 1,
+        totalSessions: updated.totalSessionsPlanned || 1,
+      });
+    }
   }, [activeTimer]);
 
   // Skip break and start next focus session immediately
@@ -231,6 +304,12 @@ export function useTimer() {
     setActiveTimerState(nextTimer);
     await saveActiveTimer(nextTimer);
     setElapsedMs(0);
+
+    await sendPomodoroNotification('focus_start', {
+      taskTitle: nextTimer.taskTitle,
+      sessionIndex: (nextTimer.completedPomodoros || 0) + 1,
+      totalSessions: nextTimer.totalSessionsPlanned || 1,
+    });
   }, [activeTimer]);
 
   // Calculate remaining countdown in MM:SS
@@ -240,6 +319,10 @@ export function useTimer() {
   const mins = Math.floor(remainingSecs / 60);
   const secs = remainingSecs % 60;
   const formattedCountdown = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+  const currentSessionNumber = (activeTimer?.completedPomodoros || 0) + 1;
+  const totalSessions = activeTimer?.totalSessionsPlanned || 1;
+  const expectedCompletionFormatted = formatEpochTime(activeTimer?.expectedCompletionEpochMs);
 
   return {
     activeTimer,
@@ -251,6 +334,12 @@ export function useTimer() {
     isFocus: (activeTimer?.mode || 'focus') === 'focus',
     isBreak: activeTimer?.mode === 'break',
     completedPomodoros: activeTimer?.completedPomodoros || 0,
+    currentSessionNumber,
+    totalSessions,
+    expectedCompletionFormatted,
+    notificationStatus,
+    refreshNotificationStatus,
+    enableNotifications,
     startTimer,
     pauseTimer,
     resumeTimer,
