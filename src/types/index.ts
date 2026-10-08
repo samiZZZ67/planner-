@@ -87,6 +87,8 @@ export interface Day {
   serverSeq?: number;
 }
 
+export type PomodoroMode = 'focus' | 'break';
+
 export interface ActiveTimer {
   taskId: string;
   taskTitle: string;
@@ -94,6 +96,9 @@ export interface ActiveTimer {
   startedAt: number;
   accumulatedMs: number;
   isRunning: boolean;
+  mode?: PomodoroMode;
+  targetDurationMs?: number;
+  completedPomodoros?: number;
 }
 
 export interface DraftTask {

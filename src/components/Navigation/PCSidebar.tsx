@@ -1,48 +1,47 @@
 'use client';
 
 import React from 'react';
-import { Calendar, CheckSquare, BarChart3, Settings, Plus, Pin, MoreHorizontal } from 'lucide-react';
+import { CheckSquare, BarChart3, Settings } from 'lucide-react';
 import type { TabType } from './PhoneTabBar';
 
 interface PCSidebarProps {
   currentTab: TabType;
   onSelectTab: (tab: TabType) => void;
-  onOpenNewTask: () => void;
 }
 
-export function PCSidebar({ currentTab, onSelectTab, onOpenNewTask }: PCSidebarProps) {
+export function PCSidebar({ currentTab, onSelectTab }: PCSidebarProps) {
   return (
     <aside
       className="v-dock"
       style={{
-        width: 66,
-        padding: '18px 8px',
+        width: 68,
+        padding: '20px 8px',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 12,
+        gap: 16,
         flexShrink: 0,
         height: 'fit-content',
         position: 'sticky',
-        top: 24,
+        top: 28,
         zIndex: 30,
         marginRight: 24,
       }}
-      aria-label="VisionOS Navigation Dock"
+      aria-label="Navigation Dock"
     >
       {/* Top Logo Emblem Circle */}
       <div
         style={{
-          width: 46,
-          height: 46,
+          width: 48,
+          height: 48,
           borderRadius: '50%',
-          background: 'rgba(255, 255, 255, 0.12)',
-          border: '1.5px solid rgba(255, 255, 255, 0.3)',
+          background: 'var(--v-glass-bg-subtle)',
+          border: '1.5px solid var(--v-glass-border)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 20,
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255,255,255,0.4)',
+          fontSize: 22,
+          boxShadow: 'var(--v-shadow-btn)',
           cursor: 'pointer',
         }}
         title="Night Planner"
@@ -50,79 +49,40 @@ export function PCSidebar({ currentTab, onSelectTab, onOpenNewTask }: PCSidebarP
         <span>🌙</span>
       </div>
 
-      <div style={{ width: 30, height: 1, background: 'rgba(255,255,255,0.12)', margin: '4px 0' }} />
+      <div style={{ width: 32, height: 1, background: 'var(--v-glass-border-subtle)', margin: '2px 0' }} />
 
-      {/* Nav Icons Stack */}
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+      {/* Nav Icons Stack: Todo, Analytics, Settings */}
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
         <button
-          onClick={() => onSelectTab('plan')}
-          className={`v-circle-btn${currentTab === 'plan' ? ' active' : ''}`}
-          title="Plan Tomorrow (1)"
-          aria-label="Plan Tomorrow"
+          type="button"
+          onClick={() => onSelectTab('todo')}
+          className={`v-circle-btn${currentTab === 'todo' ? ' active' : ''}`}
+          title="Todo (1)"
+          aria-label="Todo"
         >
-          <Calendar size={18} />
+          <CheckSquare size={20} />
         </button>
 
         <button
-          onClick={() => onSelectTab('today')}
-          className={`v-circle-btn${currentTab === 'today' ? ' active' : ''}`}
-          title="Today Tasks & Live Timer (2)"
-          aria-label="Today"
-        >
-          <CheckSquare size={18} />
-        </button>
-
-        <button
-          onClick={onOpenNewTask}
-          className="v-circle-btn"
-          title="New Task (N)"
-          aria-label="New Task"
-          style={{ background: 'rgba(255, 255, 255, 0.2)', color: '#ffffff' }}
-        >
-          <Plus size={20} />
-        </button>
-
-        <button
-          onClick={() => onSelectTab('progress')}
-          className={`v-circle-btn${currentTab === 'progress' ? ' active' : ''}`}
-          title="Analytics & Progress (3)"
+          type="button"
+          onClick={() => onSelectTab('analytics')}
+          className={`v-circle-btn${currentTab === 'analytics' ? ' active' : ''}`}
+          title="Analytics (2)"
           aria-label="Analytics"
         >
-          <BarChart3 size={18} />
+          <BarChart3 size={20} />
         </button>
 
         <button
+          type="button"
           onClick={() => onSelectTab('settings')}
           className={`v-circle-btn${currentTab === 'settings' ? ' active' : ''}`}
-          title="Settings (4)"
+          title="Settings (3)"
           aria-label="Settings"
         >
-          <Settings size={18} />
+          <Settings size={20} />
         </button>
       </nav>
-
-      <div style={{ width: 30, height: 1, background: 'rgba(255,255,255,0.12)', margin: '4px 0' }} />
-
-      {/* Pin and More Buttons (matching reference image) */}
-      <button
-        onClick={onOpenNewTask}
-        className="v-circle-btn"
-        title="Quick Pin"
-        aria-label="Quick Pin"
-        style={{ width: 38, height: 38 }}
-      >
-        <Pin size={15} />
-      </button>
-
-      <button
-        onClick={() => onSelectTab('settings')}
-        className="v-circle-btn"
-        title="More Options"
-        aria-label="More Options"
-        style={{ width: 38, height: 38 }}
-      >
-        <MoreHorizontal size={15} />
-      </button>
     </aside>
   );
 }

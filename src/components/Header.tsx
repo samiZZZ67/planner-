@@ -13,12 +13,19 @@ interface HeaderProps {
   isPC: boolean;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
-  onOpenNewTask?: () => void;
 }
 
 export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps) {
   const sync = useSync();
-  const { activeTimer, formattedTime, isTimerRunning, pauseTimer, resumeTimer, stopTimer } = useTimer();
+  const {
+    activeTimer,
+    formattedCountdown,
+    isFocus,
+    isTimerRunning,
+    pauseTimer,
+    resumeTimer,
+    stopTimer,
+  } = useTimer();
 
   const formatTime = (ts: number | null) => {
     if (!ts) return 'Never';
@@ -31,10 +38,10 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps)
         <button
           onClick={() => sync.triggerSync()}
           className="v-pill-btn animate-pulse"
-          style={{ padding: '4px 10px', fontSize: 11, borderColor: 'rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.15)', color: '#f87171' }}
+          style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, borderColor: '#f87171', color: '#f87171' }}
           title="Changes stale — click to retry"
         >
-          <AlertTriangle size={11} />
+          <AlertTriangle size={12} />
           <span>{sync.unsyncedCount} stale</span>
         </button>
       );
@@ -42,15 +49,15 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps)
     switch (sync.status) {
       case 'offline':
         return (
-          <div className="v-pill-btn" style={{ padding: '4px 10px', fontSize: 11, borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.1)', color: '#facc15' }}>
-            <WifiOff size={11} />
+          <div className="v-pill-btn" style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: '#f59e0b' }}>
+            <WifiOff size={12} />
             <span>Offline</span>
           </div>
         );
       case 'syncing':
         return (
-          <div className="v-pill-btn" style={{ padding: '4px 10px', fontSize: 11, borderColor: 'rgba(99,102,241,0.35)', background: 'rgba(99,102,241,0.15)', color: '#a5b4fc' }}>
-            <RefreshCw size={11} className="animate-spin" />
+          <div className="v-pill-btn" style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: 'var(--accent-color)' }}>
+            <RefreshCw size={12} className="animate-spin" />
             <span>Syncing</span>
           </div>
         );
@@ -59,9 +66,9 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps)
           <button
             onClick={onOpenLogin}
             className="v-pill-btn"
-            style={{ padding: '4px 10px', fontSize: 11, borderColor: 'rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.15)', color: '#ffffff' }}
+            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34 }}
           >
-            <Lock size={11} />
+            <Lock size={12} />
             <span>Login to Sync</span>
           </button>
         );
@@ -70,9 +77,9 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps)
           <button
             onClick={() => sync.triggerSync()}
             className="v-pill-btn"
-            style={{ padding: '4px 10px', fontSize: 11, borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.1)', color: '#facc15' }}
+            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: '#f59e0b' }}
           >
-            <Clock size={11} />
+            <Clock size={12} />
             <span>{sync.unsyncedCount} waiting</span>
           </button>
         );
@@ -80,14 +87,11 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps)
         return (
           <div
             className="v-pill-btn"
-            style={{ padding: '4px 12px', fontSize: 11, borderColor: 'rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.9)' }}
+            style={{ padding: '6px 14px', fontSize: 11, minHeight: 34 }}
             title={sync.lastSyncedAt ? `Last sync: ${formatTime(sync.lastSyncedAt)}` : 'Synced with Cloud'}
           >
-            <CheckCircle2 size={11} style={{ color: '#4ade80' }} />
+            <CheckCircle2 size={12} style={{ color: '#22c55e' }} />
             <span>Saved</span>
-            {sync.lastSyncedAt && (
-              <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10 }}>· {formatTime(sync.lastSyncedAt)}</span>
-            )}
           </div>
         );
     }
@@ -99,7 +103,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps)
         width: '100%',
         maxWidth: 960,
         margin: '0 auto',
-        padding: '16px 20px 8px',
+        padding: isPC ? '20px 24px 10px' : '12px 16px 6px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -108,23 +112,23 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps)
         zIndex: 40,
       }}
     >
-      {/* Left Title / Spatial Capsule */}
-      <div className="v-pill-btn" style={{ padding: '6px 14px', background: 'rgba(28,28,34,0.7)', cursor: 'default' }}>
-        <span style={{ fontSize: 14 }}>🌙</span>
-        <span className="font-bloody" style={{ fontSize: 15, fontWeight: 700, letterSpacing: '0.04em' }}>
+      {/* Brand Title Badge in Bloody Hell font */}
+      <div className="v-pill-btn" style={{ padding: '6px 16px', minHeight: 38, cursor: 'default' }}>
+        <span style={{ fontSize: 15 }}>🌙</span>
+        <span className="font-bloody" style={{ fontSize: 17, fontWeight: 700, letterSpacing: '0.04em' }}>
           Night Planner
         </span>
-        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}>SPATIAL</span>
       </div>
 
-      {/* Active Timer Pill */}
+      {/* Active Pomodoro Timer Pill (when active on PC/Header) */}
       {activeTimer && (
         <div
           className="v-pill-btn"
           style={{
-            padding: '5px 12px 5px 8px',
-            background: 'rgba(20,20,25,0.85)',
-            borderColor: 'rgba(255,255,255,0.3)',
+            padding: '6px 14px 6px 10px',
+            minHeight: 38,
+            borderColor: isFocus ? '#38bdf8' : '#22c55e',
+            background: isFocus ? 'rgba(56, 189, 248, 0.15)' : 'rgba(34, 197, 94, 0.15)',
           }}
         >
           <div
@@ -132,44 +136,76 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps)
               width: 8,
               height: 8,
               borderRadius: '50%',
-              background: activeTimer.sectionColor || '#3b82f6',
-              boxShadow: `0 0 8px ${activeTimer.sectionColor || '#3b82f6'}`,
+              background: isFocus ? '#38bdf8' : '#22c55e',
               animation: 'timerPulse 1.4s infinite',
             }}
           />
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              maxWidth: 120,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              color: 'var(--text-primary)',
+            }}
+          >
             {activeTimer.taskTitle}
           </span>
-          <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: '#ffffff' }}>
-            {formattedTime}
+          <span
+            style={{
+              fontFamily: 'monospace',
+              fontSize: 13,
+              fontWeight: 800,
+              color: isFocus ? '#38bdf8' : '#22c55e',
+            }}
+          >
+            {isFocus ? '🎯' : '☕'} {formattedCountdown}
           </span>
           <div style={{ display: 'flex', gap: 4 }}>
             {isTimerRunning ? (
-              <button onClick={pauseTimer} className="v-circle-btn" style={{ width: 24, height: 24 }} aria-label="Pause">
-                <Pause size={10} />
+              <button
+                onClick={pauseTimer}
+                className="v-circle-btn"
+                style={{ width: 26, height: 26 }}
+                aria-label="Pause"
+              >
+                <Pause size={11} />
               </button>
             ) : (
-              <button onClick={resumeTimer} className="v-circle-btn" style={{ width: 24, height: 24 }} aria-label="Resume">
-                <Play size={10} />
+              <button
+                onClick={resumeTimer}
+                className="v-circle-btn"
+                style={{ width: 26, height: 26 }}
+                aria-label="Resume"
+              >
+                <Play size={11} />
               </button>
             )}
-            <button onClick={stopTimer} className="v-circle-btn" style={{ width: 24, height: 24, color: '#f87171' }} aria-label="Stop">
-              <Square size={10} />
+            <button
+              onClick={stopTimer}
+              className="v-circle-btn"
+              style={{ width: 26, height: 26, color: '#f87171' }}
+              aria-label="Stop & Log Time"
+            >
+              <Square size={11} />
             </button>
           </div>
         </div>
       )}
 
-      {/* Right Controls */}
+      {/* Right Controls: Sync & Theme Switch */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <SyncBadge />
         <button
           onClick={onToggleTheme}
           className="v-circle-btn"
-          style={{ width: 34, height: 34 }}
-          aria-label={`Switch theme`}
+          style={{ width: 38, height: 38 }}
+          aria-label="Toggle theme"
+          title={theme === 'dark' ? 'Switch to White Glass' : 'Switch to Dark Glass'}
         >
-          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+          {theme === 'dark' ? <Sun size={15} style={{ color: '#f59e0b' }} /> : <Moon size={15} style={{ color: '#38bdf8' }} />}
         </button>
       </div>
     </header>
