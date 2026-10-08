@@ -438,30 +438,55 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     setTimeModalTask(null);
   };
 
-  // Auto-save Notes / Reflection
+  // Auto-save Notes / Reflection — waits 30 seconds not instantly
+  const [noteCountdown, setNoteCountdown] = useState<number | null>(null);
+  const noteCountdownRef = useRef<NodeJS.Timeout | null>(null);
+
+  const executeSaveReview = async (updatedReview: DayReview) => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (noteCountdownRef.current) clearInterval(noteCountdownRef.current);
+    setNoteCountdown(null);
+
+    const now = Date.now();
+    const existing = await db.days.get(currentDate);
+    const dayData: Day = {
+      id: currentDate,
+      date: currentDate,
+      freeHours: existing?.freeHours ?? 8,
+      review: updatedReview,
+      updatedAt: now,
+      deleted: false,
+      isSample: false,
+      synced: 0,
+    };
+    await db.days.put(dayData);
+    setNoteSaved(true);
+    syncEngine.notifyLocalMutation();
+  };
+
   const handleReviewChange = (field: keyof DayReview, value: string) => {
     const updated = { ...review, [field]: value };
     setReview(updated);
     setNoteSaved(false);
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(async () => {
-      const now = Date.now();
-      const existing = await db.days.get(currentDate);
-      const dayData: Day = {
-        id: currentDate,
-        date: currentDate,
-        freeHours: existing?.freeHours ?? 8,
-        review: updated,
-        updatedAt: now,
-        deleted: false,
-        isSample: false,
-        synced: 0,
-      };
-      await db.days.put(dayData);
-      setNoteSaved(true);
-      syncEngine.notifyLocalMutation();
-    }, 400);
+    if (noteCountdownRef.current) clearInterval(noteCountdownRef.current);
+
+    // Requirement: Wait 30 seconds before saving, not instantly
+    setNoteCountdown(30);
+    let count = 30;
+    noteCountdownRef.current = setInterval(() => {
+      count -= 1;
+      if (count > 0) {
+        setNoteCountdown(count);
+      } else {
+        if (noteCountdownRef.current) clearInterval(noteCountdownRef.current);
+      }
+    }, 1000);
+
+    saveTimeoutRef.current = setTimeout(() => {
+      executeSaveReview(updated);
+    }, 30000);
   };
 
   // Check if today has any written notes
@@ -780,13 +805,28 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               </div>
             </div>
 
-            {/* Sub-tabs: Writing View vs Answer Dashboard */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {noteSaved && (
+            {/* Sub-tabs: Writing View vs Answer Dashboard & 30s Save Countdown */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {noteCountdown && noteCountdown > 0 ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600 }}>
+                    ⏳ Saving in {noteCountdown}s
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => executeSaveReview(review)}
+                    className="v-pill-btn"
+                    style={{ padding: '2px 8px', fontSize: 10, minHeight: 24 }}
+                    title="Save right now without waiting 30 seconds"
+                  >
+                    Save now
+                  </button>
+                </div>
+              ) : noteSaved ? (
                 <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600, marginRight: 4 }}>
-                  ✓ Saved locally
+                  ✓ Saved locally (Syncs in 30s)
                 </span>
-              )}
+              ) : null}
               <button
                 type="button"
                 onClick={() => setNoteTab('write')}

@@ -77,10 +77,15 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps)
           <button
             onClick={() => sync.triggerSync()}
             className="v-pill-btn"
-            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: '#f59e0b' }}
+            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.4)' }}
+            title="Waiting 30 seconds before saving to server. Click to save now."
           >
             <Clock size={12} />
-            <span>{sync.unsyncedCount} waiting</span>
+            <span>
+              {sync.secondsUntilSync && sync.secondsUntilSync > 0
+                ? `Saving in ${sync.secondsUntilSync}s`
+                : `${sync.unsyncedCount} saving in 30s`}
+            </span>
           </button>
         );
       default:

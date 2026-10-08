@@ -10,6 +10,7 @@ export interface SyncEngineState {
   lastSyncedAt: number | null;
   errorMessage: string | null;
   warningIfStale: boolean;
+  secondsUntilSync?: number;
 }
 
 class SyncEngine {
@@ -26,6 +27,8 @@ class SyncEngine {
   private retryCount = 0;
   private retryTimer: NodeJS.Timeout | null = null;
   private debounceTimer: NodeJS.Timeout | null = null;
+  private countdownInterval: NodeJS.Timeout | null = null;
+  private syncCountdown = 0;
   private firstUnsyncedTimestamp: number | null = null;
   private initialized = false;
 
@@ -52,25 +55,25 @@ class SyncEngine {
       this.updateState({ status: 'offline' });
     });
 
-    // Instant sync when tab is brought to focus or unhidden (PC <-> Phone immediate reflection)
+    // Sync on focus/visibility only if not currently waiting for 30s save window
     window.addEventListener('focus', () => {
-      if (navigator.onLine && !this.isSyncing) {
+      if (navigator.onLine && !this.isSyncing && !this.debounceTimer) {
         this.triggerSync();
       }
     });
 
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && navigator.onLine && !this.isSyncing) {
+      if (!document.hidden && navigator.onLine && !this.isSyncing && !this.debounceTimer) {
         this.triggerSync();
       }
     });
 
-    // Fast polling every 6 seconds when tab is active for immediate cross-device updates
+    // Periodic sync check every 30 seconds
     setInterval(() => {
-      if (navigator.onLine && !this.isSyncing && !document.hidden) {
+      if (navigator.onLine && !this.isSyncing && !document.hidden && !this.debounceTimer) {
         this.triggerSync();
       }
-    }, 6000);
+    }, 30000);
 
     // Periodic background sync when hidden
     setInterval(() => {
@@ -154,16 +157,55 @@ class SyncEngine {
 
   public notifyLocalMutation() {
     this.refreshUnsyncedCount();
-    // Fast debounced sync trigger (250ms) for near-instant reflection between devices
+
+    // Reset countdown and debounce timers
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    if (this.countdownInterval) clearInterval(this.countdownInterval);
+
+    // Requirement: When saving, wait exactly 30 seconds before saving to server
+    this.syncCountdown = 30;
+    this.updateState({
+      status: 'changes_waiting',
+      secondsUntilSync: 30,
+    });
+
+    this.countdownInterval = setInterval(() => {
+      this.syncCountdown -= 1;
+      if (this.syncCountdown > 0) {
+        this.updateState({
+          status: 'changes_waiting',
+          secondsUntilSync: this.syncCountdown,
+        });
+      } else {
+        if (this.countdownInterval) clearInterval(this.countdownInterval);
+        this.countdownInterval = null;
+      }
+    }, 1000);
+
     this.debounceTimer = setTimeout(() => {
+      if (this.countdownInterval) clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
+      this.debounceTimer = null;
+      this.updateState({ secondsUntilSync: 0 });
       this.triggerSync();
-    }, 250);
+    }, 30000);
   }
 
   public async triggerSync(): Promise<void> {
     if (this.isSyncing) return;
     if (typeof window === 'undefined') return;
+
+    // Clear 30s wait timers if triggerSync is called
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
+    }
+    this.syncCountdown = 0;
+    this.updateState({ secondsUntilSync: 0 });
 
     if (!navigator.onLine) {
       this.updateState({ status: 'offline' });
