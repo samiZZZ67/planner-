@@ -8,7 +8,7 @@ import {
   Calendar, Check, Play, Pause, Square as StopIcon,
   Trash2, Edit2, Plus, Sparkles, Clock, ChevronLeft, ChevronRight,
   Bold as BoldIcon, Underline as UnderlineIcon, Strikethrough as StrikethroughIcon,
-  Palette, Bell, BellOff, AlertTriangle, BookOpen, ChevronDown, ChevronUp, Save
+  Palette, Bell, BellOff, AlertTriangle, FileText, ChevronDown, ChevronUp, Eye, Edit3
 } from 'lucide-react';
 import type { Task, TimeLog, Day, DayReview } from '@/types';
 
@@ -26,6 +26,17 @@ const COLOR_OPTIONS = [
   { label: 'Default', value: '', ring: 'rgba(255, 255, 255, 0.3)' },
 ];
 
+/**
+ * Safely render text that may contain HTML formatting tags (<b>, <u>, <s>, <span style="...">)
+ */
+function FormattedText({ text, style, className }: { text?: string; style?: React.CSSProperties; className?: string }) {
+  if (!text) return null;
+  if (text.includes('<b') || text.includes('<u') || text.includes('<s') || text.includes('<span')) {
+    return <span className={className} style={style} dangerouslySetInnerHTML={{ __html: text }} />;
+  }
+  return <span className={className} style={style}>{text}</span>;
+}
+
 export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
@@ -38,6 +49,16 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
   const [isUnderline, setIsUnderline] = useState(false);
   const [isStrikethrough, setIsStrikethrough] = useState(false);
   const [textColor, setTextColor] = useState('');
+
+  // Active focused input ref for formatting toolbar
+  const activeInputRef = useRef<{
+    element: HTMLInputElement | HTMLTextAreaElement | null;
+    setter: (val: string) => void;
+    getValue: () => string;
+  } | null>(null);
+
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const strategyInputRef = useRef<HTMLInputElement | null>(null);
 
   // Inline editing state
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -53,7 +74,9 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
   const [modalDuration, setModalDuration] = useState<number>(25);
   const [customMinutesInput, setCustomMinutesInput] = useState<string>('25');
 
-  // Psychological Reflection / Daily Review State
+  // Notes & Reflection State (NOT called Daily Summary)
+  const [isNoteOpen, setIsNoteOpen] = useState(false);
+  const [noteTab, setNoteTab] = useState<'write' | 'dashboard'>('write');
   const [review, setReview] = useState<DayReview>({
     worked: '',
     blocked: '',
@@ -63,9 +86,14 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     solved: '',
     betterTomorrow: '',
   });
-  const [reflectionSaved, setReflectionSaved] = useState(false);
-  const [isReflectionOpen, setIsReflectionOpen] = useState(true);
+  const [noteSaved, setNoteSaved] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Note textarea refs for text selection formatting
+  const obstaclesRef = useRef<HTMLTextAreaElement | null>(null);
+  const happenedRef = useRef<HTMLTextAreaElement | null>(null);
+  const solvedRef = useRef<HTMLTextAreaElement | null>(null);
+  const improveRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Pomodoro Timer hook
   const {
@@ -86,7 +114,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     skipBreak,
   } = useTimer();
 
-  // Load daily tasks, time logs, and daily review
+  // Load daily tasks, time logs, and notes
   const loadData = async () => {
     const dayTasks = await db.tasks.filter(t => t.date === currentDate && !t.deleted).toArray();
     dayTasks.sort((a, b) => a.order - b.order);
@@ -122,9 +150,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
 
   useEffect(() => {
     loadData();
-    // Fast periodic poll for cross-device updates
     const interval = setInterval(loadData, 2000);
-    // Subscribe to syncEngine so when server changes are written to Dexie, we update instantly
     const unsubscribe = syncEngine.subscribe(() => {
       loadData();
     });
@@ -161,6 +187,58 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     const totalMinutes = taskLogs.reduce((acc, l) => acc + (l.minutes || 0), 0);
     const hours = Math.round((totalMinutes / 60) * 10) / 10;
     return { hours, totalMinutes };
+  };
+
+  /**
+   * Apply formatting to selected text in currently focused field
+   */
+  const handleApplyFormattingToSelection = (
+    formatType: 'bold' | 'underline' | 'strikethrough' | 'color',
+    colorValue = '#ef4444'
+  ) => {
+    const active = activeInputRef.current;
+    if (!active || !active.element) {
+      // Fallback: toggle task creation flags if no input is focused
+      if (formatType === 'bold') setIsBold(prev => !prev);
+      if (formatType === 'underline') setIsUnderline(prev => !prev);
+      if (formatType === 'strikethrough') setIsStrikethrough(prev => !prev);
+      if (formatType === 'color') setTextColor(colorValue);
+      return;
+    }
+
+    const elem = active.element;
+    const currentVal = active.getValue();
+    const start = elem.selectionStart ?? 0;
+    const end = elem.selectionEnd ?? 0;
+    const selected = currentVal.substring(start, end);
+
+    let prefix = '';
+    let suffix = '';
+
+    if (formatType === 'bold') {
+      prefix = '<b>';
+      suffix = '</b>';
+    } else if (formatType === 'underline') {
+      prefix = '<u>';
+      suffix = '</u>';
+    } else if (formatType === 'strikethrough') {
+      prefix = '<s>';
+      suffix = '</s>';
+    } else if (formatType === 'color') {
+      prefix = `<span style="color:${colorValue}">`;
+      suffix = '</span>';
+    }
+
+    const textToWrap = selected || 'text';
+    const nextVal = currentVal.substring(0, start) + prefix + textToWrap + suffix + currentVal.substring(end);
+    active.setter(nextVal);
+
+    setTimeout(() => {
+      elem.focus();
+      const newCursorStart = start + prefix.length;
+      const newCursorEnd = newCursorStart + textToWrap.length;
+      elem.setSelectionRange(newCursorStart, newCursorEnd);
+    }, 10);
   };
 
   // Add new task
@@ -232,7 +310,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     syncEngine.notifyLocalMutation();
   };
 
-  // Start inline editing
+  // Inline editing
   const handleStartEdit = (t: Task) => {
     setEditingTaskId(t.id);
     setEditTitle(t.title);
@@ -243,7 +321,6 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     setEditColor(t.textColor || '');
   };
 
-  // Save inline edit
   const handleSaveEdit = async (taskId: string) => {
     if (!editTitle.trim()) return;
     await db.tasks.update(taskId, {
@@ -275,7 +352,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     syncEngine.notifyLocalMutation();
   };
 
-  // Quick formatting directly on a task card (e.g. toggle Bold, Underline, Strikethrough, Red)
+  // Toggle format directly on card
   const handleToggleTaskFormat = async (
     task: Task,
     type: 'bold' | 'underline' | 'strikethrough' | 'color' | 'preset_exercise'
@@ -289,22 +366,28 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     } else if (type === 'strikethrough') {
       updates.isStrikethrough = !task.isStrikethrough;
     } else if (type === 'color') {
-      // Cycle colors: Red -> Blue -> Green -> None
-      const nextColor = task.textColor === '#ef4444' ? '#38bdf8' : task.textColor === '#38bdf8' ? '#22c55e' : task.textColor === '#22c55e' ? '' : '#ef4444';
+      const nextColor =
+        task.textColor === '#ef4444'
+          ? '#38bdf8'
+          : task.textColor === '#38bdf8'
+          ? '#22c55e'
+          : task.textColor === '#22c55e'
+          ? ''
+          : '#ef4444';
       updates.textColor = nextColor || undefined;
     } else if (type === 'preset_exercise') {
-      // Exactly fulfill requirement: Make title bold, strikethrough, and red!
+      // Fulfill exercise requirement: Make title bold, strikethrough, and red
       updates.isBold = true;
       updates.isStrikethrough = true;
       updates.textColor = '#ef4444';
     }
 
     await db.tasks.update(task.id, updates);
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updates } : t));
+    setTasks(prev => prev.map(t => (t.id === task.id ? { ...t, ...updates } : t)));
     syncEngine.notifyLocalMutation();
   };
 
-  // Open Time / Duration Setup Modal
+  // Open Time Modal
   const handleOpenTimeModal = (task: Task) => {
     setTimeModalTask(task);
     const currentTarget = task.targetMinutes || task.estimatedMinutes || 25;
@@ -312,7 +395,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     setCustomMinutesInput(String(currentTarget));
   };
 
-  // Calculate Pomodoro Breakdown for duration
+  // Pomodoro duration calculations
   const pomodoroCalculations = useMemo(() => {
     const mins = Math.max(5, modalDuration);
     const sessions = Math.max(1, Math.ceil(mins / 25));
@@ -330,12 +413,11 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     };
   }, [modalDuration]);
 
-  // Start Pomodoro Timer from Modal
+  // Start Pomodoro timer from Modal
   const handleConfirmStartTimer = async () => {
     if (!timeModalTask) return;
     const duration = Math.max(5, modalDuration);
 
-    // Update targetMinutes on task
     await db.tasks.update(timeModalTask.id, {
       targetMinutes: duration,
       estimatedMinutes: duration,
@@ -352,16 +434,15 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     );
     syncEngine.notifyLocalMutation();
 
-    // Start timer with calculated duration
     await startTimer(timeModalTask.id, timeModalTask.title, duration, '#38bdf8');
     setTimeModalTask(null);
   };
 
-  // Auto-save psychological reflection
+  // Auto-save Notes / Reflection
   const handleReviewChange = (field: keyof DayReview, value: string) => {
     const updated = { ...review, [field]: value };
     setReview(updated);
-    setReflectionSaved(false);
+    setNoteSaved(false);
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
@@ -378,10 +459,15 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
         synced: 0,
       };
       await db.days.put(dayData);
-      setReflectionSaved(true);
+      setNoteSaved(true);
       syncEngine.notifyLocalMutation();
     }, 400);
   };
+
+  // Check if today has any written notes
+  const hasNotesContent = Boolean(
+    review.obstacles || review.happened || review.solved || review.betterTomorrow
+  );
 
   // Day total hours
   const totalDayMinutes = useMemo(() => {
@@ -393,7 +479,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
 
-      {/* ── 0. RUNNING POMODORO BANNER (PROMINENT STATUS) ── */}
+      {/* ── 0. RUNNING POMODORO BANNER (STICKY PROMINENCE) ── */}
       {activeTimer && (
         <div
           className="v-card"
@@ -473,7 +559,6 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
             </div>
           </div>
 
-          {/* Running Timer Countdown & Action Controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
               style={{
@@ -586,8 +671,27 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
           </div>
         </div>
 
-        {/* Date switcher buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Date switcher buttons & Small "Note" Button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* ── SMALL "NOTE" BUTTON (Requirement: Opens reflection questions and answer dashboard) ── */}
+          <button
+            type="button"
+            onClick={() => setIsNoteOpen(prev => !prev)}
+            className={`v-pill-btn${isNoteOpen ? ' v-pill-btn-primary' : ''}`}
+            style={{
+              padding: '6px 14px',
+              minHeight: 38,
+              fontSize: 13,
+              gap: 6,
+              boxShadow: isNoteOpen ? '0 0 15px var(--accent-glow)' : undefined,
+            }}
+            title={isNoteOpen ? 'Close Note' : 'Open Note'}
+          >
+            <FileText size={15} />
+            <span>Note</span>
+            {hasNotesContent && <span style={{ fontSize: 11, color: '#22c55e' }}>●</span>}
+          </button>
+
           <button
             type="button"
             onClick={() => shiftDate(-1)}
@@ -641,7 +745,347 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
         </div>
       </div>
 
-      {/* ── 2. ADD TASK BOX WITH FORMATTING TOOLBAR ── */}
+      {/* ── 2. NOTES SECTION (EXPANDED ON "NOTE" BUTTON CLICK, COMPRESSED WHEN CLOSED) ── */}
+      {isNoteOpen && (
+        <div
+          className="v-card"
+          style={{
+            padding: isPhone ? '18px 16px' : '24px 28px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+            border: '2px solid var(--accent-color)',
+            boxShadow: '0 0 35px var(--accent-glow)',
+          }}
+        >
+          {/* Header of Note Section */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <FileText size={20} style={{ color: 'var(--accent-color)' }} />
+              <div>
+                <h2
+                  className="font-bloody"
+                  style={{
+                    fontSize: isPhone ? 20 : 24,
+                    margin: 0,
+                    color: 'var(--text-primary)',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  NOTES & REFLECTION DASHBOARD
+                </h2>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Private psychological debrief for {dayName} • Auto-saved & synced
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-tabs: Writing View vs Answer Dashboard */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {noteSaved && (
+                <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600, marginRight: 4 }}>
+                  ✓ Saved locally
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setNoteTab('write')}
+                className={`v-pill-btn${noteTab === 'write' ? ' v-pill-btn-primary' : ''}`}
+                style={{ padding: '4px 12px', fontSize: 12 }}
+              >
+                <Edit3 size={13} />
+                <span>Write</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setNoteTab('dashboard')}
+                className={`v-pill-btn${noteTab === 'dashboard' ? ' v-pill-btn-primary' : ''}`}
+                style={{ padding: '4px 12px', fontSize: 12 }}
+              >
+                <Eye size={13} />
+                <span>Dashboard</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsNoteOpen(false)}
+                className="v-circle-btn"
+                style={{ width: 30, height: 30 }}
+                title="Compress & Close Note"
+              >
+                <ChevronUp size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* ── WRITING TOOLBAR FOR NOTES (Applies to highlighted text in active field) ── */}
+          {noteTab === 'write' && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 8,
+                padding: '8px 12px',
+                borderRadius: 10,
+                background: 'var(--v-glass-bg-subtle)',
+                border: '1px solid var(--v-glass-border-subtle)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginRight: 4 }}>
+                  Format Selection:
+                </span>
+                <button
+                  type="button"
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    handleApplyFormattingToSelection('bold');
+                  }}
+                  className="v-circle-btn"
+                  style={{ width: 28, height: 28 }}
+                  title="Make Selected Text Bold"
+                >
+                  <BoldIcon size={12} />
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    handleApplyFormattingToSelection('underline');
+                  }}
+                  className="v-circle-btn"
+                  style={{ width: 28, height: 28 }}
+                  title="Underline Selected Text"
+                >
+                  <UnderlineIcon size={12} />
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    handleApplyFormattingToSelection('strikethrough');
+                  }}
+                  className="v-circle-btn"
+                  style={{ width: 28, height: 28 }}
+                  title="Strikethrough Selected Text"
+                >
+                  <StrikethroughIcon size={12} />
+                </button>
+
+                <div style={{ display: 'flex', gap: 6, marginLeft: 6 }}>
+                  {COLOR_OPTIONS.filter(c => c.value).map(c => (
+                    <button
+                      key={c.label}
+                      type="button"
+                      onMouseDown={e => {
+                        e.preventDefault();
+                        handleApplyFormattingToSelection('color', c.value);
+                      }}
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: '50%',
+                        background: c.value,
+                        border: '1px solid var(--v-glass-border)',
+                        cursor: 'pointer',
+                      }}
+                      title={`Color Selected Text: ${c.label}`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                Highlight text, then click formatting
+              </div>
+            </div>
+          )}
+
+          {/* ── WRITING VIEW: 4 REFLECTION QUESTIONS ── */}
+          {noteTab === 'write' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Question 1: What obstacles did I face today? */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  1. What obstacles did I face today?
+                </label>
+                <textarea
+                  ref={obstaclesRef}
+                  value={review.obstacles || ''}
+                  onFocus={() => {
+                    activeInputRef.current = {
+                      element: obstaclesRef.current,
+                      setter: val => handleReviewChange('obstacles', val),
+                      getValue: () => review.obstacles || '',
+                    };
+                  }}
+                  onChange={e => handleReviewChange('obstacles', e.target.value)}
+                  placeholder="Distractions, low energy around 2 PM, unexpected calls..."
+                  rows={2}
+                  className="v-input"
+                  style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
+                />
+              </div>
+
+              {/* Question 2: What happened? */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  2. What happened?
+                </label>
+                <textarea
+                  ref={happenedRef}
+                  value={review.happened || ''}
+                  onFocus={() => {
+                    activeInputRef.current = {
+                      element: happenedRef.current,
+                      setter: val => handleReviewChange('happened', val),
+                      getValue: () => review.happened || '',
+                    };
+                  }}
+                  onChange={e => handleReviewChange('happened', e.target.value)}
+                  placeholder="I got pulled into answering emails for 1 hour and lost momentum..."
+                  rows={2}
+                  className="v-input"
+                  style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
+                />
+              </div>
+
+              {/* Question 3: How did I solve it? */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  3. How did I solve it?
+                </label>
+                <textarea
+                  ref={solvedRef}
+                  value={review.solved || ''}
+                  onFocus={() => {
+                    activeInputRef.current = {
+                      element: solvedRef.current,
+                      setter: val => handleReviewChange('solved', val),
+                      getValue: () => review.solved || '',
+                    };
+                  }}
+                  onChange={e => handleReviewChange('solved', e.target.value)}
+                  placeholder="Silenced phone, took a 5-minute walk, and ran a 25m Pomodoro sprint..."
+                  rows={2}
+                  className="v-input"
+                  style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
+                />
+              </div>
+
+              {/* Question 4: What can I improve? */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  4. What can I improve?
+                </label>
+                <textarea
+                  ref={improveRef}
+                  value={review.betterTomorrow || ''}
+                  onFocus={() => {
+                    activeInputRef.current = {
+                      element: improveRef.current,
+                      setter: val => handleReviewChange('betterTomorrow', val),
+                      getValue: () => review.betterTomorrow || '',
+                    };
+                  }}
+                  onChange={e => handleReviewChange('betterTomorrow', e.target.value)}
+                  placeholder="Block the first 90 minutes of the morning for deep work before opening messages..."
+                  rows={2}
+                  className="v-input"
+                  style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
+                />
+              </div>
+            </div>
+          ) : (
+            /* ── ANSWER DASHBOARD (Displays user's written responses cleanly) ── */
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: isPhone ? '1fr' : 'repeat(2, 1fr)',
+                gap: 14,
+              }}
+            >
+              <div
+                style={{
+                  padding: '16px',
+                  borderRadius: 12,
+                  background: 'var(--v-glass-bg-subtle)',
+                  border: '1px solid var(--v-glass-border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#f87171', letterSpacing: '0.04em' }}>
+                  1. OBSTACLES FACED
+                </span>
+                <div style={{ fontSize: 14, color: 'var(--text-primary)', minHeight: 40, lineHeight: 1.5 }}>
+                  <FormattedText text={review.obstacles || 'No obstacles recorded.'} />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: '16px',
+                  borderRadius: 12,
+                  background: 'var(--v-glass-bg-subtle)',
+                  border: '1px solid var(--v-glass-border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
+                  2. WHAT HAPPENED
+                </span>
+                <div style={{ fontSize: 14, color: 'var(--text-primary)', minHeight: 40, lineHeight: 1.5 }}>
+                  <FormattedText text={review.happened || 'Nothing recorded.'} />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: '16px',
+                  borderRadius: 12,
+                  background: 'var(--v-glass-bg-subtle)',
+                  border: '1px solid var(--v-glass-border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', letterSpacing: '0.04em' }}>
+                  3. HOW I SOLVED IT
+                </span>
+                <div style={{ fontSize: 14, color: 'var(--text-primary)', minHeight: 40, lineHeight: 1.5 }}>
+                  <FormattedText text={review.solved || 'No solution recorded.'} />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: '16px',
+                  borderRadius: 12,
+                  background: 'var(--v-glass-bg-subtle)',
+                  border: '1px solid var(--v-glass-border)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', letterSpacing: '0.04em' }}>
+                  4. WHAT CAN I IMPROVE
+                </span>
+                <div style={{ fontSize: 14, color: 'var(--text-primary)', minHeight: 40, lineHeight: 1.5 }}>
+                  <FormattedText text={review.betterTomorrow || 'No improvement notes recorded.'} />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── 3. ADD TASK BOX WITH FORMATTING TOOLBAR ── */}
       <form
         onSubmit={handleAddTask}
         className="v-card"
@@ -657,7 +1101,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
             + ADD TASK FOR {dayName}
           </div>
 
-          {/* Quick preset button for Exercise requirement */}
+          {/* Quick preset button for Exercise title requirement */}
           <button
             type="button"
             onClick={() => {
@@ -674,7 +1118,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               borderColor: 'rgba(239, 68, 68, 0.4)',
               background: 'rgba(239, 68, 68, 0.1)',
             }}
-            title="Apply Bold, Strikethrough & Red style"
+            title="Preset: Make title Bold, Strikethrough & Red"
           >
             🔴 Preset: Bold, Strikethrough & Red
           </button>
@@ -682,10 +1126,18 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
 
         {/* Title Input */}
         <input
+          ref={titleInputRef}
           type="text"
           value={title}
+          onFocus={() => {
+            activeInputRef.current = {
+              element: titleInputRef.current,
+              setter: setTitle,
+              getValue: () => title,
+            };
+          }}
           onChange={e => setTitle(e.target.value)}
-          placeholder="Title (What will you do? e.g. Exercise or Complete quarterly report)"
+          placeholder="Title (e.g. Exercise or Finish design specs)"
           className="v-input"
           style={{
             fontSize: 15,
@@ -700,8 +1152,16 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
 
         {/* Strategy Input */}
         <input
+          ref={strategyInputRef}
           type="text"
           value={strategy}
+          onFocus={() => {
+            activeInputRef.current = {
+              element: strategyInputRef.current,
+              setter: setStrategy,
+              getValue: () => strategy,
+            };
+          }}
           onChange={e => setStrategy(e.target.value)}
           placeholder="Strategy (How will you do it? e.g. 2 Pomodoro focus sessions, phone silenced)"
           className="v-input"
@@ -727,10 +1187,13 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               Format:
             </span>
 
-            {/* Bold Toggle */}
+            {/* Bold Toggle / Selection apply */}
             <button
               type="button"
-              onClick={() => setIsBold(prev => !prev)}
+              onMouseDown={e => {
+                e.preventDefault();
+                handleApplyFormattingToSelection('bold');
+              }}
               className="v-circle-btn"
               style={{
                 width: 32,
@@ -739,15 +1202,18 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                 borderColor: isBold ? 'var(--accent-color)' : undefined,
                 color: isBold ? 'var(--accent-color)' : 'var(--text-secondary)',
               }}
-              title="Toggle Bold"
+              title="Bold"
             >
               <BoldIcon size={14} />
             </button>
 
-            {/* Underline Toggle */}
+            {/* Underline Toggle / Selection apply */}
             <button
               type="button"
-              onClick={() => setIsUnderline(prev => !prev)}
+              onMouseDown={e => {
+                e.preventDefault();
+                handleApplyFormattingToSelection('underline');
+              }}
               className="v-circle-btn"
               style={{
                 width: 32,
@@ -756,15 +1222,18 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                 borderColor: isUnderline ? 'var(--accent-color)' : undefined,
                 color: isUnderline ? 'var(--accent-color)' : 'var(--text-secondary)',
               }}
-              title="Toggle Underline"
+              title="Underline"
             >
               <UnderlineIcon size={14} />
             </button>
 
-            {/* Strikethrough Toggle */}
+            {/* Strikethrough Toggle / Selection apply */}
             <button
               type="button"
-              onClick={() => setIsStrikethrough(prev => !prev)}
+              onMouseDown={e => {
+                e.preventDefault();
+                handleApplyFormattingToSelection('strikethrough');
+              }}
               className="v-circle-btn"
               style={{
                 width: 32,
@@ -773,18 +1242,25 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                 borderColor: isStrikethrough ? 'var(--accent-color)' : undefined,
                 color: isStrikethrough ? 'var(--accent-color)' : 'var(--text-secondary)',
               }}
-              title="Toggle Strikethrough"
+              title="Strikethrough"
             >
               <StrikethroughIcon size={14} />
             </button>
 
-            {/* Text Color Picker Buttons */}
+            {/* Color Palette */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
               {COLOR_OPTIONS.map(c => (
                 <button
                   key={c.label}
                   type="button"
-                  onClick={() => setTextColor(c.value)}
+                  onMouseDown={e => {
+                    e.preventDefault();
+                    if (c.value) {
+                      handleApplyFormattingToSelection('color', c.value);
+                    } else {
+                      setTextColor('');
+                    }
+                  }}
                   style={{
                     width: 22,
                     height: 22,
@@ -819,7 +1295,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
         </div>
       </form>
 
-      {/* ── 3. TASK LIST BOX ── */}
+      {/* ── 4. TASK LIST BOX ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', paddingLeft: 4 }}>
           TASKS FOR {dayName} ({tasks.length})
@@ -865,9 +1341,8 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                   boxShadow: isThisTimerActive ? '0 0 25px var(--accent-glow)' : undefined,
                 }}
               >
-                {/* Task Main Row */}
                 {isEditing ? (
-                  /* Inline Editing Mode with Formatting Controls */
+                  /* Inline Editing Mode */
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <input
                       type="text"
@@ -892,7 +1367,6 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                       placeholder="Strategy"
                     />
 
-                    {/* Inline edit format toolbar */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <button
                         type="button"
@@ -1000,7 +1474,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                         {task.isCompleted && <Check size={14} strokeWidth={3} />}
                       </button>
 
-                      {/* Title & Info with Formatting applied strictly */}
+                      {/* Title & Info */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div
                           className="font-bloody"
@@ -1009,14 +1483,16 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                             fontWeight: task.isBold ? 800 : 600,
                             color: task.textColor || 'var(--text-primary)',
                             textDecoration: [
-                              (task.isStrikethrough || task.isCompleted) ? 'line-through' : '',
+                              task.isStrikethrough || task.isCompleted ? 'line-through' : '',
                               task.isUnderline ? 'underline' : '',
-                            ].filter(Boolean).join(' ') || 'none',
+                            ]
+                              .filter(Boolean)
+                              .join(' ') || 'none',
                             lineHeight: 1.3,
                             wordBreak: 'break-word',
                           }}
                         >
-                          {task.title}
+                          <FormattedText text={task.title} />
                         </div>
 
                         {/* Strategy Box */}
@@ -1036,7 +1512,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                             }}
                           >
                             <span style={{ color: 'var(--accent-color)', fontWeight: 700 }}>Strategy:</span>
-                            <span>{task.strategy}</span>
+                            <FormattedText text={task.strategy} />
                           </div>
                         ) : (
                           <div
@@ -1054,9 +1530,8 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                         )}
                       </div>
 
-                      {/* Top Action Toolbar (Quick Format + Edit + Delete) */}
+                      {/* Top Action Toolbar (Format + Edit + Delete) */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                        {/* Quick Bold Toggle */}
                         <button
                           type="button"
                           onClick={() => handleToggleTaskFormat(task, 'bold')}
@@ -1072,7 +1547,6 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                           <BoldIcon size={12} />
                         </button>
 
-                        {/* Quick Strikethrough Toggle */}
                         <button
                           type="button"
                           onClick={() => handleToggleTaskFormat(task, 'strikethrough')}
@@ -1088,7 +1562,6 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                           <StrikethroughIcon size={12} />
                         </button>
 
-                        {/* Quick Color Cycle */}
                         <button
                           type="button"
                           onClick={() => handleToggleTaskFormat(task, 'color')}
@@ -1098,12 +1571,11 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                             height: 30,
                             color: task.textColor || undefined,
                           }}
-                          title="Cycle Color (Red, Blue, Green)"
+                          title="Cycle Color"
                         >
                           <Palette size={12} />
                         </button>
 
-                        {/* Edit Button */}
                         <button
                           type="button"
                           onClick={() => handleStartEdit(task)}
@@ -1115,7 +1587,6 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                           <Edit2 size={12} />
                         </button>
 
-                        {/* Delete Button */}
                         <button
                           type="button"
                           onClick={() => handleDeleteTask(task.id)}
@@ -1150,10 +1621,9 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                         </strong>
                       </div>
 
-                      {/* ── TIME (POMODORO) BUTTON ── */}
+                      {/* TIME BUTTON */}
                       <div>
                         {isThisTimerActive ? (
-                          /* Active Pomodoro Controller on Card */
                           <div
                             style={{
                               display: 'flex',
@@ -1209,7 +1679,6 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                             </button>
                           </div>
                         ) : (
-                          /* Inactive: Clicking Time opens Duration Setup Modal */
                           <button
                             type="button"
                             onClick={() => handleOpenTimeModal(task)}
@@ -1232,128 +1701,6 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               </div>
             );
           })
-        )}
-      </div>
-
-      {/* ── 4. DAILY SUMMARY / PSYCHOLOGICAL REFLECTION SECTION ── */}
-      <div
-        className="v-card"
-        style={{
-          padding: isPhone ? '18px 16px' : '24px 28px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <div
-          onClick={() => setIsReflectionOpen(prev => !prev)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            cursor: 'pointer',
-            userSelect: 'none',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <BookOpen size={20} style={{ color: 'var(--accent-color)' }} />
-            <div>
-              <h2
-                className="font-bloody"
-                style={{
-                  fontSize: isPhone ? 20 : 24,
-                  margin: 0,
-                  color: 'var(--text-primary)',
-                  letterSpacing: '0.02em',
-                }}
-              >
-                DAILY SUMMARY & PSYCHOLOGICAL REFLECTION
-              </h2>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                Nightly mental debrief to clarify tomorrow&apos;s planning
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {reflectionSaved && (
-              <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>
-                ✓ Saved locally
-              </span>
-            )}
-            <button
-              type="button"
-              className="v-circle-btn"
-              style={{ width: 32, height: 32 }}
-              aria-label={isReflectionOpen ? 'Collapse reflection' : 'Expand reflection'}
-            >
-              {isReflectionOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-          </div>
-        </div>
-
-        {isReflectionOpen && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 6 }}>
-            {/* Question 1: What obstacles did I face today? */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                1. What obstacles did I face today?
-              </label>
-              <textarea
-                value={review.obstacles || ''}
-                onChange={e => handleReviewChange('obstacles', e.target.value)}
-                placeholder="Distractions, low energy around 2 PM, unexpected urgent calls..."
-                rows={2}
-                className="v-input"
-                style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
-              />
-            </div>
-
-            {/* Question 2: What happened? */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                2. What happened?
-              </label>
-              <textarea
-                value={review.happened || ''}
-                onChange={e => handleReviewChange('happened', e.target.value)}
-                placeholder="I got pulled into answering emails for 1 hour and lost momentum on coding..."
-                rows={2}
-                className="v-input"
-                style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
-              />
-            </div>
-
-            {/* Question 3: How did I solve it? */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                3. How did I solve it?
-              </label>
-              <textarea
-                value={review.solved || ''}
-                onChange={e => handleReviewChange('solved', e.target.value)}
-                placeholder="Put my phone in another room, took a 5-minute breather, and did a 25-minute Pomodoro sprint..."
-                rows={2}
-                className="v-input"
-                style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
-              />
-            </div>
-
-            {/* Question 4: What could I do better tomorrow? */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                4. What could I do better tomorrow?
-              </label>
-              <textarea
-                value={review.betterTomorrow || ''}
-                onChange={e => handleReviewChange('betterTomorrow', e.target.value)}
-                placeholder="Block the first 90 minutes of the morning for deep work before opening any notifications..."
-                rows={2}
-                className="v-input"
-                style={{ resize: 'vertical', fontSize: 13, minHeight: 64 }}
-              />
-            </div>
-          </div>
         )}
       </div>
 
@@ -1401,7 +1748,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               </h2>
             </div>
 
-            {/* Duration Selector Buttons */}
+            {/* Duration Selector */}
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8 }}>
                 Choose Target Duration:
@@ -1423,7 +1770,6 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                 ))}
               </div>
 
-              {/* Custom Minutes Input */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Custom minutes:</span>
                 <input
@@ -1444,7 +1790,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               </div>
             </div>
 
-            {/* ── AUTOMATIC POMODORO CALCULATION BREAKDOWN ── */}
+            {/* Automatic Pomodoro calculation */}
             <div
               style={{
                 padding: '14px 18px',
@@ -1481,7 +1827,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               </div>
             </div>
 
-            {/* ── NOTIFICATION PERMISSION + FALLBACK PROMPT ── */}
+            {/* Notification permission prompt */}
             <div
               style={{
                 padding: '12px 16px',
@@ -1542,7 +1888,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               )}
             </div>
 
-            {/* Modal Actions */}
+            {/* Actions */}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
               <button
                 type="button"

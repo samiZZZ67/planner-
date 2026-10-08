@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Lock, Shield, Eye, EyeOff } from 'lucide-react';
+import { syncEngine } from '@/lib/sync/syncEngine';
 
 interface LoginModalProps {
   isOpen?: boolean;
@@ -22,8 +23,12 @@ export function LoginModal({ isOpen = true, onClose }: LoginModalProps) {
     try {
       const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
       const data = await res.json();
-      if (res.ok) { onClose(); }
-      else { setError(data.error || `Failed (${res.status})`); }
+      if (res.ok) {
+        syncEngine.triggerSync();
+        onClose();
+      } else {
+        setError(data.error || `Failed (${res.status})`);
+      }
     } catch { setError('Network error'); }
     finally { setLoading(false); }
   };
