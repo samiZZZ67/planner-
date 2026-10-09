@@ -212,7 +212,7 @@ describe('AI Planning & Hierarchy Test Suite', () => {
     it('should return safe provider status without exposing API keys', () => {
       const status = getAIProvidersStatus();
       expect(status).toHaveProperty('providers');
-      expect(status.providers).toHaveLength(4);
+      expect(status.providers).toHaveLength(5); // Gemini 1, Gemini 2, Gemini 3, Groq, xAI Grok
 
       for (const p of status.providers) {
         expect(p).toHaveProperty('configured');
@@ -228,6 +228,7 @@ describe('AI Planning & Hierarchy Test Suite', () => {
       const originalG = process.env.GEMINI_API_KEY;
       const originalX = process.env.XAI_API_KEY;
       const originalGk = process.env.GROK_API_KEY;
+      const originalGroq = process.env.GROQ_API_KEY;
 
       try {
         delete process.env.GEMINI_API_KEY_1;
@@ -236,6 +237,7 @@ describe('AI Planning & Hierarchy Test Suite', () => {
         delete process.env.GEMINI_API_KEY;
         delete process.env.XAI_API_KEY;
         delete process.env.GROK_API_KEY;
+        delete process.env.GROQ_API_KEY;
 
         await expect(executeAIRequestWithFallback('Hello')).rejects.toThrow('NO_CONFIGURED_KEYS');
       } finally {
@@ -243,6 +245,7 @@ describe('AI Planning & Hierarchy Test Suite', () => {
         if (originalG) process.env.GEMINI_API_KEY = originalG;
         if (originalX) process.env.XAI_API_KEY = originalX;
         if (originalGk) process.env.GROK_API_KEY = originalGk;
+        if (originalGroq) process.env.GROQ_API_KEY = originalGroq;
       }
     });
   });

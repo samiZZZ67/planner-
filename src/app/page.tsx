@@ -20,6 +20,7 @@ import { MonthlyPlanScreen } from '@/components/Monthly/MonthlyPlanScreen';
 import { AnalyticsScreen } from '@/components/Analytics/AnalyticsScreen';
 import { SettingsScreen } from '@/components/Settings/SettingsScreen';
 import { LoginModal } from '@/components/Modals/LoginModal';
+import { AIChatPanel } from '@/components/Chat/AIChatPanel';
 
 export default function NightPlannerApp() {
   const { isPhone, isPC } = useDeviceType();
@@ -35,6 +36,7 @@ export default function NightPlannerApp() {
   const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isAIChatOpen, setIsAIChatOpen] = useState(false);
 
   // Lifecycle Initialization
   useEffect(() => {
@@ -149,6 +151,7 @@ export default function NightPlannerApp() {
         isPC={isPC}
         theme={theme}
         onToggleTheme={toggleTheme}
+        onOpenAIChat={() => setIsAIChatOpen(true)}
       />
 
       {/* ── 4. Main Spacious Workspace ── */}
@@ -171,6 +174,7 @@ export default function NightPlannerApp() {
           <PCSidebar
             currentTab={currentTab}
             onSelectTab={setCurrentTab}
+            onOpenAIChat={() => setIsAIChatOpen(true)}
           />
         )}
 
@@ -352,6 +356,47 @@ export default function NightPlannerApp() {
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
+      />
+
+      {/* ── 7. Floating Moon Button for AI Assistant ── */}
+      {!isAIChatOpen && (
+        <button
+          onClick={() => setIsAIChatOpen(true)}
+          className="v-pill-btn"
+          aria-label="Open AI Assistant"
+          title="Open AI Chat Assistant"
+          style={{
+            position: 'fixed',
+            bottom: isPhone ? 84 : 28,
+            right: isPhone ? 16 : 28,
+            zIndex: 45,
+            width: 48,
+            height: 48,
+            borderRadius: '50%',
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 22,
+            background: 'var(--v-glass-bg)',
+            border: '1.5px solid var(--v-glass-border)',
+            boxShadow: 'var(--v-shadow-btn), 0 0 20px rgba(168, 85, 247, 0.3)',
+            cursor: 'pointer',
+            transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.08)')}
+          onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+        >
+          <span>🌙</span>
+        </button>
+      )}
+
+      {/* ── 8. AI Chat Assistant Panel ── */}
+      <AIChatPanel
+        isOpen={isAIChatOpen}
+        onClose={() => setIsAIChatOpen(false)}
+        currentDate={currentDate}
+        isPhone={isPhone}
       />
     </div>
   );

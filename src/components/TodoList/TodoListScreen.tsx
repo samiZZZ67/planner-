@@ -151,7 +151,7 @@ export function TodoListScreen({
       updatedAt: Date.now(),
       synced: 0,
     });
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, isCompleted: nextCompleted } : t));
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, isCompleted: nextCompleted, status: nextCompleted ? 'completed' : 'not_started' } : t));
     syncEngine.notifyLocalMutation();
   };
 

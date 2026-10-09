@@ -20,25 +20,41 @@ const tokenUsage = {
 const CONFIG_PATH = path.join(process.cwd(), '.data', 'ai_config.json');
 
 export interface StoredAIConfig {
-  activeProviderId: string; // 'auto' | 'gemini-1' | 'gemini-2' | 'gemini-3' | 'xai-grok'
+  activeProviderId: string; // 'auto' | 'gemini-1' | 'gemini-2' | 'gemini-3' | 'groq' | 'xai-grok'
   fallbackEnabled: boolean;
   modelOverrides: Record<string, string>;
 }
+
+// Verified and currently supported models on Google Gemini API v1beta
+export const VERIFIED_GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+export const VERIFIED_GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+export const VERIFIED_XAI_MODELS = ['grok-2-latest', 'grok-2-mini', 'grok-beta'];
 
 export function getStoredAIConfig(): StoredAIConfig {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      // Migrate away from any unreleased models like gemini-2.5-flash that cause 404
+      if (parsed.modelOverrides) {
+        for (const k of Object.keys(parsed.modelOverrides)) {
+          if (parsed.modelOverrides[k] === 'gemini-2.5-flash' || parsed.modelOverrides[k] === 'gemini-2.5-pro') {
+            parsed.modelOverrides[k] = 'gemini-1.5-flash';
+          }
+        }
+      }
+      return parsed;
     }
   } catch {}
+
   return {
     activeProviderId: 'auto',
     fallbackEnabled: true,
     modelOverrides: {
-      'gemini-1': 'gemini-2.5-flash',
-      'gemini-2': 'gemini-2.5-flash',
-      'gemini-3': 'gemini-2.5-flash',
+      'gemini-1': 'gemini-1.5-flash',
+      'gemini-2': 'gemini-1.5-flash',
+      'gemini-3': 'gemini-1.5-flash',
+      'groq': 'llama-3.3-70b-versatile',
       'xai-grok': 'grok-2-latest',
     },
   };
@@ -78,10 +94,8 @@ export function getAIProvidersStatus(): AIConfigState {
   const geminiKey1 = process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY || '';
   const geminiKey2 = process.env.GEMINI_API_KEY_2 || '';
   const geminiKey3 = process.env.GEMINI_API_KEY_3 || '';
-  const xaiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY || '';
-
-  const geminiModels = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-1.5-flash'];
-  const grokModels = ['grok-2-latest', 'grok-2-mini', 'grok-beta'];
+  const groqKey = process.env.GROQ_API_KEY || '';
+  const xaiKey = process.env.XAI_API_KEY || '';
 
   const providers: AIProviderInfo[] = [
     {
@@ -89,8 +103,8 @@ export function getAIProvidersStatus(): AIConfigState {
       name: 'Google Gemini (Key 1)',
       provider: 'gemini',
       configured: Boolean(geminiKey1 && geminiKey1.trim().length > 0),
-      model: config.modelOverrides['gemini-1'] || 'gemini-2.5-flash',
-      availableModels: geminiModels,
+      model: config.modelOverrides['gemini-1'] || 'gemini-1.5-flash',
+      availableModels: VERIFIED_GEMINI_MODELS,
       isRateLimited: (cooldowns.get('gemini-1')?.until || 0) > now,
     },
     {
@@ -98,8 +112,8 @@ export function getAIProvidersStatus(): AIConfigState {
       name: 'Google Gemini (Key 2)',
       provider: 'gemini',
       configured: Boolean(geminiKey2 && geminiKey2.trim().length > 0),
-      model: config.modelOverrides['gemini-2'] || 'gemini-2.5-flash',
-      availableModels: geminiModels,
+      model: config.modelOverrides['gemini-2'] || 'gemini-1.5-flash',
+      availableModels: VERIFIED_GEMINI_MODELS,
       isRateLimited: (cooldowns.get('gemini-2')?.until || 0) > now,
     },
     {
@@ -107,9 +121,18 @@ export function getAIProvidersStatus(): AIConfigState {
       name: 'Google Gemini (Key 3)',
       provider: 'gemini',
       configured: Boolean(geminiKey3 && geminiKey3.trim().length > 0),
-      model: config.modelOverrides['gemini-3'] || 'gemini-2.5-flash',
-      availableModels: geminiModels,
+      model: config.modelOverrides['gemini-3'] || 'gemini-1.5-flash',
+      availableModels: VERIFIED_GEMINI_MODELS,
       isRateLimited: (cooldowns.get('gemini-3')?.until || 0) > now,
+    },
+    {
+      id: 'groq',
+      name: 'Groq Cloud',
+      provider: 'gemini', // Grouped as high-speed fallback provider
+      configured: Boolean(groqKey && groqKey.trim().length > 0),
+      model: config.modelOverrides['groq'] || 'llama-3.3-70b-versatile',
+      availableModels: VERIFIED_GROQ_MODELS,
+      isRateLimited: (cooldowns.get('groq')?.until || 0) > now,
     },
     {
       id: 'xai-grok',
@@ -117,7 +140,7 @@ export function getAIProvidersStatus(): AIConfigState {
       provider: 'xai',
       configured: Boolean(xaiKey && xaiKey.trim().length > 0),
       model: config.modelOverrides['xai-grok'] || 'grok-2-latest',
-      availableModels: grokModels,
+      availableModels: VERIFIED_XAI_MODELS,
       isRateLimited: (cooldowns.get('xai-grok')?.until || 0) > now,
     },
   ];
@@ -141,66 +164,150 @@ interface ProviderCallResult {
 }
 
 /**
- * Execute call to Google Gemini API
+ * Execute call to Google Gemini API with verified endpoints and 404 auto-healing
  */
 async function callGemini(
   apiKey: string,
   model: string,
   prompt: string,
-  systemInstruction?: string
-): Promise<{ text: string; tokens?: { prompt: number; completion: number; total: number } }> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-  const body: any = {
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: prompt }],
-      },
-    ],
-    generationConfig: {
-      temperature: 0.2,
-      maxOutputTokens: 2048,
-      responseMimeType: 'application/json',
-    },
-  };
-
-  if (systemInstruction) {
-    body.systemInstruction = {
-      parts: [{ text: systemInstruction }],
-    };
+  systemInstruction?: string,
+  jsonMode: boolean = true
+): Promise<{ text: string; tokens?: { prompt: number; completion: number; total: number }; finalModel: string }> {
+  // Ensure we don't request non-existent model
+  let targetModel = model;
+  if (!VERIFIED_GEMINI_MODELS.includes(targetModel)) {
+    targetModel = 'gemini-1.5-flash';
   }
 
+  const makeRequest = async (m: string) => {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+    const body: any = {
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 2500,
+        ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+      },
+    };
+
+    if (systemInstruction) {
+      body.systemInstruction = {
+        parts: [{ text: systemInstruction }],
+      };
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        const status = res.status;
+        const error: any = new Error(`Gemini API returned HTTP ${status}: ${errText.slice(0, 300)}`);
+        error.status = status;
+        throw error;
+      }
+
+      const data = await res.json();
+      const candidate = data.candidates?.[0];
+      const text = candidate?.content?.parts?.[0]?.text || '';
+
+      const promptTokens = data.usageMetadata?.promptTokenCount || 0;
+      const completionTokens = data.usageMetadata?.candidatesTokenCount || 0;
+      const totalTokens = data.usageMetadata?.totalTokenCount || promptTokens + completionTokens;
+
+      return {
+        text,
+        tokens: { prompt: promptTokens, completion: completionTokens, total: totalTokens },
+        finalModel: m,
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+
+  try {
+    return await makeRequest(targetModel);
+  } catch (err: any) {
+    // If HTTP 404 occurs on an experimental or custom model, auto-heal with verified 'gemini-1.5-flash'
+    if (err.status === 404 && targetModel !== 'gemini-1.5-flash') {
+      console.warn(`Gemini model ${targetModel} returned 404. Falling back to verified gemini-1.5-flash.`);
+      return await makeRequest('gemini-1.5-flash');
+    }
+    throw err;
+  }
+}
+
+/**
+ * Execute call to Groq Cloud API (Ultra-fast OpenAI-compatible)
+ */
+async function callGroq(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  systemInstruction?: string,
+  jsonMode: boolean = true
+): Promise<{ text: string; tokens?: { prompt: number; completion: number; total: number }; finalModel: string }> {
+  const targetModel = VERIFIED_GROQ_MODELS.includes(model) ? model : 'llama-3.3-70b-versatile';
+  const url = 'https://api.groq.com/openai/v1/chat/completions';
+
+  const messages: any[] = [];
+  if (systemInstruction) {
+    messages.push({ role: 'system', content: systemInstruction });
+  }
+  messages.push({ role: 'user', content: prompt });
+
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000); // 20s timeout
+  const timeout = setTimeout(() => controller.abort(), 20000);
 
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: targetModel,
+        messages,
+        temperature: 0.3,
+        ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+      }),
       signal: controller.signal,
     });
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
       const status = res.status;
-      const error: any = new Error(`Gemini API returned HTTP ${status}: ${errText.slice(0, 300)}`);
+      const error: any = new Error(`Groq API returned HTTP ${status}: ${errText.slice(0, 300)}`);
       error.status = status;
       throw error;
     }
 
     const data = await res.json();
-    const candidate = data.candidates?.[0];
-    const text = candidate?.content?.parts?.[0]?.text || '';
+    const text = data.choices?.[0]?.message?.content || '';
 
-    const promptTokens = data.usageMetadata?.promptTokenCount || 0;
-    const completionTokens = data.usageMetadata?.candidatesTokenCount || 0;
-    const totalTokens = data.usageMetadata?.totalTokenCount || promptTokens + completionTokens;
+    const promptTokens = data.usage?.prompt_tokens || 0;
+    const completionTokens = data.usage?.completion_tokens || 0;
+    const totalTokens = data.usage?.total_tokens || promptTokens + completionTokens;
 
     return {
       text,
       tokens: { prompt: promptTokens, completion: completionTokens, total: totalTokens },
+      finalModel: targetModel,
     };
   } finally {
     clearTimeout(timeout);
@@ -214,8 +321,10 @@ async function callXAI(
   apiKey: string,
   model: string,
   prompt: string,
-  systemInstruction?: string
-): Promise<{ text: string; tokens?: { prompt: number; completion: number; total: number } }> {
+  systemInstruction?: string,
+  jsonMode: boolean = true
+): Promise<{ text: string; tokens?: { prompt: number; completion: number; total: number }; finalModel: string }> {
+  const targetModel = VERIFIED_XAI_MODELS.includes(model) ? model : 'grok-2-latest';
   const url = 'https://api.x.ai/v1/chat/completions';
 
   const messages: any[] = [];
@@ -235,10 +344,10 @@ async function callXAI(
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model,
+        model: targetModel,
         messages,
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
+        temperature: 0.3,
+        ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
       }),
       signal: controller.signal,
     });
@@ -261,6 +370,7 @@ async function callXAI(
     return {
       text,
       tokens: { prompt: promptTokens, completion: completionTokens, total: totalTokens },
+      finalModel: targetModel,
     };
   } finally {
     clearTimeout(timeout);
@@ -268,27 +378,29 @@ async function callXAI(
 }
 
 /**
- * Core AI Dispatch with Ordered Fallback Pipeline
+ * Core AI Dispatch with Ordered Fallback Pipeline (Gemini 1-3 -> Groq -> xAI)
  */
 export async function executeAIRequestWithFallback(
   prompt: string,
   systemInstruction?: string,
-  requestedProviderId?: string
+  requestedProviderId?: string,
+  options?: { jsonMode?: boolean }
 ): Promise<ProviderCallResult> {
+  const jsonMode = options?.jsonMode ?? true;
   const config = getStoredAIConfig();
   const chosenProvider = requestedProviderId || config.activeProviderId;
   const now = Date.now();
 
-  // Keys
   const geminiKeys: Record<string, string> = {
     'gemini-1': process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY || '',
     'gemini-2': process.env.GEMINI_API_KEY_2 || '',
     'gemini-3': process.env.GEMINI_API_KEY_3 || '',
   };
-  const xaiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY || '';
+  const groqKey = process.env.GROQ_API_KEY || '';
+  const xaiKey = process.env.XAI_API_KEY || '';
 
-  // Determine candidate order
-  const allProviderIds = ['gemini-1', 'gemini-2', 'gemini-3', 'xai-grok'];
+  // Candidate order: Gemini 1 -> Gemini 2 -> Gemini 3 -> Groq -> xAI Grok
+  const allProviderIds = ['gemini-1', 'gemini-2', 'gemini-3', 'groq', 'xai-grok'];
   let candidateOrder: string[] = [];
 
   if (chosenProvider && chosenProvider !== 'auto') {
@@ -303,7 +415,11 @@ export async function executeAIRequestWithFallback(
 
   // Filter candidates to those with configured keys and not in active cooldown
   const availableCandidates = candidateOrder.filter(id => {
-    const hasKey = id === 'xai-grok' ? Boolean(xaiKey.trim()) : Boolean(geminiKeys[id]?.trim());
+    let hasKey = false;
+    if (id.startsWith('gemini')) hasKey = Boolean(geminiKeys[id]?.trim());
+    else if (id === 'groq') hasKey = Boolean(groqKey.trim());
+    else if (id === 'xai-grok') hasKey = Boolean(xaiKey.trim());
+
     if (!hasKey) return false;
 
     const cooldown = cooldowns.get(id);
@@ -324,10 +440,10 @@ export async function executeAIRequestWithFallback(
     try {
       if (candidateId.startsWith('gemini')) {
         const key = geminiKeys[candidateId];
-        const model = config.modelOverrides[candidateId] || 'gemini-2.5-flash';
+        const model = config.modelOverrides[candidateId] || 'gemini-1.5-flash';
         const keyIndex = parseInt(candidateId.replace('gemini-', ''), 10) || 1;
 
-        const res = await callGemini(key, model, prompt, systemInstruction);
+        const res = await callGemini(key, model, prompt, systemInstruction, jsonMode);
         const latencyMs = Date.now() - startTime;
 
         if (res.tokens) {
@@ -339,15 +455,34 @@ export async function executeAIRequestWithFallback(
         return {
           text: res.text,
           provider: `Google Gemini (Key ${keyIndex})`,
-          model,
+          model: res.finalModel,
           keyIndex,
+          tokensUsed: res.tokens,
+          latencyMs,
+          fallbackUsed: isFallback,
+        };
+      } else if (candidateId === 'groq') {
+        const model = config.modelOverrides['groq'] || 'llama-3.3-70b-versatile';
+        const res = await callGroq(groqKey, model, prompt, systemInstruction, jsonMode);
+        const latencyMs = Date.now() - startTime;
+
+        if (res.tokens) {
+          tokenUsage.prompt += res.tokens.prompt;
+          tokenUsage.completion += res.tokens.completion;
+          tokenUsage.total += res.tokens.total;
+        }
+
+        return {
+          text: res.text,
+          provider: 'Groq Cloud',
+          model: res.finalModel,
           tokensUsed: res.tokens,
           latencyMs,
           fallbackUsed: isFallback,
         };
       } else if (candidateId === 'xai-grok') {
         const model = config.modelOverrides['xai-grok'] || 'grok-2-latest';
-        const res = await callXAI(xaiKey, model, prompt, systemInstruction);
+        const res = await callXAI(xaiKey, model, prompt, systemInstruction, jsonMode);
         const latencyMs = Date.now() - startTime;
 
         if (res.tokens) {
@@ -359,7 +494,7 @@ export async function executeAIRequestWithFallback(
         return {
           text: res.text,
           provider: 'xAI Grok',
-          model,
+          model: res.finalModel,
           tokensUsed: res.tokens,
           latencyMs,
           fallbackUsed: isFallback,
@@ -382,8 +517,13 @@ export async function executeAIRequestWithFallback(
     }
   }
 
-  // If no external provider succeeded or none were configured, throw informative error
-  const allConfiguredCount = [geminiKeys['gemini-1'], geminiKeys['gemini-2'], geminiKeys['gemini-3'], xaiKey].filter(k => Boolean(k?.trim())).length;
+  const allConfiguredCount = [
+    geminiKeys['gemini-1'],
+    geminiKeys['gemini-2'],
+    geminiKeys['gemini-3'],
+    groqKey,
+    xaiKey,
+  ].filter(k => Boolean(k?.trim())).length;
 
   if (allConfiguredCount === 0) {
     throw new Error('NO_CONFIGURED_KEYS');

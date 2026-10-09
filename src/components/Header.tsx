@@ -13,9 +13,10 @@ interface HeaderProps {
   isPC: boolean;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
+  onOpenAIChat?: () => void;
 }
 
-export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps) {
+export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }: HeaderProps) {
   const sync = useSync();
   const {
     activeTimer,
@@ -117,8 +118,17 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme }: HeaderProps)
         zIndex: 40,
       }}
     >
-      {/* Brand Title Badge in Bloody Hell font */}
-      <div className="v-pill-btn" style={{ padding: '6px 16px', minHeight: 38, cursor: 'default' }}>
+      {/* Brand Title Badge in Bloody Hell font (AI Assistant Trigger) */}
+      <div
+        onClick={onOpenAIChat}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenAIChat?.(); } }}
+        className="v-pill-btn"
+        style={{ padding: '6px 16px', minHeight: 38, cursor: 'pointer', transition: 'all 0.2s ease' }}
+        title="Open AI Assistant & Plan Review"
+        aria-label="Open AI Assistant"
+      >
         <span style={{ fontSize: 15 }}>🌙</span>
         <span className="font-bloody" style={{ fontSize: 17, fontWeight: 700, letterSpacing: '0.04em' }}>
           Night Planner

@@ -7,9 +7,10 @@ import type { TabType } from './PhoneTabBar';
 interface PCSidebarProps {
   currentTab: TabType;
   onSelectTab: (tab: TabType) => void;
+  onOpenAIChat?: () => void;
 }
 
-export function PCSidebar({ currentTab, onSelectTab }: PCSidebarProps) {
+export function PCSidebar({ currentTab, onSelectTab, onOpenAIChat }: PCSidebarProps) {
   const navItems: { id: TabType; icon: React.ReactNode; label: string; shortcut: string }[] = [
     { id: 'todo', icon: <ListChecks size={20} />, label: 'To-Do List', shortcut: '1' },
     { id: 'weekly', icon: <CalendarRange size={20} />, label: 'Weekly Plan', shortcut: '2' },
@@ -38,8 +39,12 @@ export function PCSidebar({ currentTab, onSelectTab }: PCSidebarProps) {
       }}
       aria-label="Navigation Dock"
     >
-      {/* Top Logo Emblem Circle */}
+      {/* Top Logo Emblem Circle (AI Assistant Trigger) */}
       <div
+        onClick={onOpenAIChat}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenAIChat?.(); } }}
         style={{
           width: 48,
           height: 48,
@@ -52,8 +57,10 @@ export function PCSidebar({ currentTab, onSelectTab }: PCSidebarProps) {
           fontSize: 22,
           boxShadow: 'var(--v-shadow-btn)',
           cursor: 'pointer',
+          transition: 'all 0.2s ease',
         }}
-        title="Night Planner"
+        title="Open AI Assistant & Plan Review"
+        aria-label="Open AI Assistant"
       >
         <span>🌙</span>
       </div>
