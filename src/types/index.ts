@@ -151,12 +151,109 @@ export type SyncStatus =
   | 'error' 
   | 'auth_required';
 
+export interface WeeklyPlan {
+  id: string; // e.g. "week-2026-W41" or "2026-10-05_2026-10-11"
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  monthId: string; // YYYY-MM
+  prompt: string; // Detailed planning prompt (>= 100 words)
+  wordCount: number;
+  goals: string; // Main goals & expected outcomes
+  aastuCommitments: string; // AASTU classes, assignments, deadlines
+  deepWorkTargets: string; // Deep-work & video-editing targets
+  constraints: string; // Important priorities & constraints
+  outcomes: string; // What must be accomplished by end of week
+  aiWeeklyReport?: string | null; // Generated progress report
+  status: 'active' | 'completed' | 'archived';
+  completionPercentage?: number;
+  createdAt: number;
+  updatedAt: number;
+  deleted: boolean;
+  synced?: number;
+  serverSeq?: number;
+}
+
+export interface MonthlyGoalItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+export interface MonthlyPlan {
+  id: string; // e.g. "month-2026-10" or "2026-10"
+  month: string; // YYYY-MM
+  title: string;
+  prompt: string; // Detailed monthly planning prompt
+  academicPriorities: string; // AASTU academic priorities
+  editingTargets: string; // Video editing / deep work deliverables
+  commitments: string; // Personal commitments & deadlines
+  goals: MonthlyGoalItem[];
+  completionPercentage: number;
+  status: 'active' | 'completed' | 'archived';
+  createdAt: number;
+  updatedAt: number;
+  deleted: boolean;
+  synced?: number;
+  serverSeq?: number;
+}
+
+export interface AIProviderInfo {
+  id: string; // 'gemini-1' | 'gemini-2' | 'gemini-3' | 'xai-grok'
+  name: string;
+  provider: 'gemini' | 'xai';
+  configured: boolean;
+  model: string;
+  availableModels: string[];
+  isRateLimited?: boolean;
+}
+
+export interface AIConfigState {
+  providers: AIProviderInfo[];
+  activeProviderId: string; // 'auto' | specific id
+  fallbackEnabled: boolean;
+  totalTokensUsed: { prompt: number; completion: number; total: number };
+}
+
+export interface ProposedTask {
+  id?: string;
+  title: string;
+  startTime: string; // HH:MM
+  endTime: string;   // HH:MM
+  scheduledMinutes: number;
+  sectionId: string;
+  sectionName?: string;
+  description: string;
+  strategy: string;
+  priority: PriorityLevel;
+  mustDo: boolean;
+  status: TaskStatus;
+}
+
+export interface AIPlanGenerationResult {
+  ok: boolean;
+  provider: string;
+  model: string;
+  keyIndex?: number;
+  tokensUsed?: { prompt?: number; completion?: number; total?: number };
+  latencyMs: number;
+  rationale: string;
+  recommendations: string[];
+  conflicts: string[];
+  proposedTasks: ProposedTask[];
+  weeklyContextUsed: boolean;
+  monthlyContextUsed: boolean;
+  fallbackUsed?: boolean;
+  error?: string;
+}
+
 export interface SyncPayload {
   lastServerSeq: number;
   sections: Section[];
   tasks: Task[];
   timeLogs: TimeLog[];
   days: Day[];
+  weeklyPlans?: WeeklyPlan[];
+  monthlyPlans?: MonthlyPlan[];
 }
 
 export interface SyncResponse {
@@ -167,12 +264,16 @@ export interface SyncResponse {
     tasks: string[];
     timeLogs: string[];
     days: string[];
+    weeklyPlans?: string[];
+    monthlyPlans?: string[];
   };
   serverChanges: {
     sections: Section[];
     tasks: Task[];
     timeLogs: TimeLog[];
     days: Day[];
+    weeklyPlans?: WeeklyPlan[];
+    monthlyPlans?: MonthlyPlan[];
   };
   error?: string;
 }

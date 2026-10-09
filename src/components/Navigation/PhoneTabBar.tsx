@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import { ListChecks, BarChart3, Settings, Play, Pause, Square, Plus, StickyNote, Tag } from 'lucide-react';
+import { ListChecks, BarChart3, Settings, Play, Pause, Square, Plus, StickyNote, Tag, CalendarRange, CalendarDays } from 'lucide-react';
 import { useTimer } from '@/lib/timer/useTimer';
 
-export type TabType = 'add_task' | 'note' | 'todo' | 'category' | 'analytics' | 'settings';
+export type TabType = 'todo' | 'weekly' | 'monthly' | 'add_task' | 'note' | 'category' | 'analytics' | 'settings';
 
 interface PhoneTabBarProps {
   currentTab: TabType;
@@ -23,10 +23,12 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
   } = useTimer();
 
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
-    { id: 'todo', label: 'To-Do', icon: <ListChecks size={19} /> },
-    { id: 'add_task', label: 'Add Task', icon: <Plus size={19} /> },
-    { id: 'note', label: 'Note', icon: <StickyNote size={19} /> },
-    { id: 'category', label: 'Category', icon: <Tag size={19} /> },
+    { id: 'todo', label: 'To-Do', icon: <ListChecks size={18} /> },
+    { id: 'weekly', label: 'Weekly', icon: <CalendarRange size={18} /> },
+    { id: 'monthly', label: 'Monthly', icon: <CalendarDays size={18} /> },
+    { id: 'add_task', label: 'Add', icon: <Plus size={18} /> },
+    { id: 'note', label: 'Note', icon: <StickyNote size={18} /> },
+    { id: 'category', label: 'Category', icon: <Tag size={18} /> },
   ];
 
   return (

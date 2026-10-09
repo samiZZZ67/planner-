@@ -1,0 +1,444 @@
+'use client';
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { db } from '@/lib/db';
+import { syncEngine } from '@/lib/sync/syncEngine';
+import {
+  CalendarDays, CheckCircle2, Plus, Trash2, Save,
+  ChevronLeft, ChevronRight, Target, BookOpen, Video, Clock, History, Check
+} from 'lucide-react';
+import type { MonthlyPlan, MonthlyGoalItem, WeeklyPlan, Task } from '@/types';
+
+interface MonthlyPlanScreenProps {
+  currentDate: string;
+  isPhone: boolean;
+}
+
+function getMonthString(dateStr: string): string {
+  return dateStr.slice(0, 7); // YYYY-MM
+}
+
+function formatMonthLabel(monthStr: string): string {
+  try {
+    const [y, m] = monthStr.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, 1));
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }).toUpperCase();
+  } catch {
+    return monthStr;
+  }
+}
+
+export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenProps) {
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => getMonthString(currentDate));
+
+  // Form State
+  const [title, setTitle] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [academicPriorities, setAcademicPriorities] = useState('');
+  const [editingTargets, setEditingTargets] = useState('');
+  const [commitments, setCommitments] = useState('');
+  const [goals, setGoals] = useState<MonthlyGoalItem[]>([]);
+  const [newGoalInput, setNewGoalInput] = useState('');
+
+  // Status & Saved State
+  const [saved, setSaved] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // History & Associated plans
+  const [allMonthlyPlans, setAllMonthlyPlans] = useState<MonthlyPlan[]>([]);
+  const [monthWeeklyPlans, setMonthWeeklyPlans] = useState<WeeklyPlan[]>([]);
+  const [monthTasks, setMonthTasks] = useState<Task[]>([]);
+
+  // Calculate completion percentage
+  const completionPercentage = useMemo(() => {
+    if (goals.length === 0) return 0;
+    const completed = goals.filter(g => g.completed).length;
+    return Math.round((completed / goals.length) * 100);
+  }, [goals]);
+
+  // Load monthly plan
+  const loadMonthData = async () => {
+    // 1. Active monthly plan
+    const existing = await db.monthlyPlans.get(selectedMonth);
+    if (existing && !existing.deleted) {
+      setTitle(existing.title || '');
+      setPrompt(existing.prompt || '');
+      setAcademicPriorities(existing.academicPriorities || '');
+      setEditingTargets(existing.editingTargets || '');
+      setCommitments(existing.commitments || '');
+      setGoals(Array.isArray(existing.goals) ? existing.goals : []);
+    } else {
+      setTitle(`${formatMonthLabel(selectedMonth)} Master Plan`);
+      setPrompt('');
+      setAcademicPriorities('');
+      setEditingTargets('');
+      setCommitments('');
+      setGoals([]);
+    }
+
+    // 2. All monthly plans for history
+    const all = await db.monthlyPlans.filter(m => !m.deleted).toArray();
+    all.sort((a, b) => b.month.localeCompare(a.month));
+    setAllMonthlyPlans(all);
+
+    // 3. Weekly plans belonging to this month
+    const weekly = await db.weeklyPlans
+      .filter(w => w.monthId === selectedMonth && !w.deleted)
+      .toArray();
+    setMonthWeeklyPlans(weekly);
+
+    // 4. Tasks in this month
+    const tasks = await db.tasks
+      .filter(t => t.date.startsWith(selectedMonth) && !t.deleted)
+      .toArray();
+    setMonthTasks(tasks);
+  };
+
+  useEffect(() => {
+    loadMonthData();
+  }, [selectedMonth]);
+
+  const shiftMonth = (delta: number) => {
+    const [y, m] = selectedMonth.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1 + delta, 1));
+    const nextStr = date.toISOString().slice(0, 7);
+    setSelectedMonth(nextStr);
+  };
+
+  const handleAddGoal = () => {
+    if (!newGoalInput.trim()) return;
+    const item: MonthlyGoalItem = {
+      id: crypto.randomUUID(),
+      text: newGoalInput.trim(),
+      completed: false,
+    };
+    setGoals(prev => [...prev, item]);
+    setNewGoalInput('');
+  };
+
+  const handleToggleGoal = (id: string) => {
+    setGoals(prev => prev.map(g => g.id === id ? { ...g, completed: !g.completed } : g));
+  };
+
+  const handleDeleteGoal = (id: string) => {
+    setGoals(prev => prev.filter(g => g.id !== id));
+  };
+
+  const handleSaveMonthlyPlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    const now = Date.now();
+
+    const plan: MonthlyPlan = {
+      id: selectedMonth,
+      month: selectedMonth,
+      title: title.trim() || `${formatMonthLabel(selectedMonth)} Plan`,
+      prompt: prompt.trim(),
+      academicPriorities: academicPriorities.trim(),
+      editingTargets: editingTargets.trim(),
+      commitments: commitments.trim(),
+      goals,
+      completionPercentage,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+      deleted: false,
+      synced: 0,
+    };
+
+    await db.monthlyPlans.put(plan);
+    syncEngine.notifyLocalMutation();
+
+    setSubmitting(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+    loadMonthData();
+  };
+
+  const completedTasksCount = monthTasks.filter(t => t.isCompleted).length;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* ── 1. Month Navigator Bar ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button
+          type="button"
+          onClick={() => shiftMonth(-1)}
+          className="v-circle-btn"
+          style={{ width: 38, height: 38, flexShrink: 0 }}
+          aria-label="Previous month"
+        >
+          ‹
+        </button>
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div className="font-bloody" style={{ fontSize: isPhone ? 18 : 22, fontWeight: 700, letterSpacing: '0.04em' }}>
+            MONTHLY PLAN
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--accent-color)', fontWeight: 600, marginTop: 2 }}>
+            {formatMonthLabel(selectedMonth)}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => shiftMonth(1)}
+          className="v-circle-btn"
+          style={{ width: 38, height: 38, flexShrink: 0 }}
+          aria-label="Next month"
+        >
+          ›
+        </button>
+      </div>
+
+      {/* ── 2. Monthly Metrics Progress Bar ── */}
+      <div className="v-card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CalendarDays size={16} color="var(--accent-color)" />
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>
+              Monthly Deliverables Completion
+            </span>
+          </div>
+          <span style={{ fontSize: 14, fontWeight: 800, color: completionPercentage === 100 ? '#22c55e' : 'var(--accent-color)' }}>
+            {completionPercentage}%
+          </span>
+        </div>
+
+        <div className="v-budget-bar">
+          <div
+            className="v-budget-bar-fill"
+            style={{
+              width: `${completionPercentage}%`,
+              background: completionPercentage === 100 ? '#22c55e' : 'var(--accent-color)',
+            }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)' }}>
+          <span>Goals: <strong>{goals.filter(g => g.completed).length} / {goals.length}</strong></span>
+          <span>Connected Weeks: <strong>{monthWeeklyPlans.length}</strong></span>
+          <span>Tasks Executed: <strong>{completedTasksCount} / {monthTasks.length}</strong></span>
+        </div>
+      </div>
+
+      {/* ── 3. Monthly Planning Form ── */}
+      <form onSubmit={handleSaveMonthlyPlan}>
+        <div className="v-card" style={{ padding: '24px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+              PLAN TITLE
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="e.g. October 2026 Academic & Deep Work Master Plan"
+              className="v-input"
+              style={{ fontSize: 15, fontWeight: 600 }}
+            />
+          </div>
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+              DETAILED MONTHLY PLANNING PROMPT & VISION
+            </label>
+            <textarea
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              rows={5}
+              placeholder="Define high-level targets for this month:
+• Overarching goals and academic themes.
+• Key deliverables and personal growth commitments.
+• Major milestones to achieve before month's end..."
+              className="v-input font-handle"
+              style={{ fontSize: 14, lineHeight: 1.6 }}
+            />
+          </div>
+
+          {/* Academic & Editing Columns */}
+          <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : 'repeat(2, 1fr)', gap: 14 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <BookOpen size={13} color="#38bdf8" /> Academic Priorities & Coursework (AASTU)
+              </label>
+              <textarea
+                value={academicPriorities}
+                onChange={e => setAcademicPriorities(e.target.value)}
+                rows={3}
+                placeholder="Major exams, lab projects, syllabus milestones..."
+                className="v-input font-handle"
+                style={{ fontSize: 13, lineHeight: 1.5 }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <Video size={13} color="#a855f7" /> Video-Editing & Deep-Work Deliverables
+              </label>
+              <textarea
+                value={editingTargets}
+                onChange={e => setEditingTargets(e.target.value)}
+                rows={3}
+                placeholder="Deliverables, YouTube uploads, creative production quotas..."
+                className="v-input font-handle"
+                style={{ fontSize: 13, lineHeight: 1.5 }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
+              Personal Commitments & Fixed Deadlines
+            </label>
+            <textarea
+              value={commitments}
+              onChange={e => setCommitments(e.target.value)}
+              rows={2}
+              placeholder="Critical submission dates, events, health/fitness commitments..."
+              className="v-input font-handle"
+              style={{ fontSize: 13, lineHeight: 1.5 }}
+            />
+          </div>
+
+          {/* Interactive Goals Checklist */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em', marginBottom: 10 }}>
+              KEY MONTHLY DELIVERABLES CHECKLIST
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input
+                type="text"
+                value={newGoalInput}
+                onChange={e => setNewGoalInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddGoal(); } }}
+                placeholder="Add a milestone (e.g. Complete AASTU Embedded Systems Project)..."
+                className="v-input"
+                style={{ fontSize: 13, flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={handleAddGoal}
+                className="v-pill-btn v-pill-btn-primary"
+                style={{ padding: '0 16px', fontSize: 13 }}
+              >
+                <Plus size={14} /> Add Goal
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {goals.map(g => (
+                <div
+                  key={g.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 12px',
+                    borderRadius: 10,
+                    background: g.completed ? 'rgba(34, 197, 94, 0.08)' : 'var(--v-glass-bg-subtle)',
+                    border: '1px solid var(--v-glass-border-subtle)',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleToggleGoal(g.id)}
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 6,
+                      border: `2px solid ${g.completed ? '#22c55e' : 'var(--v-glass-border)'}`,
+                      background: g.completed ? '#22c55e' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {g.completed && <Check size={12} color="#0d0d11" strokeWidth={3} />}
+                  </button>
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: g.completed ? 'var(--text-muted)' : 'var(--text-primary)',
+                      textDecoration: g.completed ? 'line-through' : 'none',
+                    }}
+                  >
+                    {g.text}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteGoal(g.id)}
+                    className="v-circle-btn"
+                    style={{ width: 26, height: 26, color: '#f87171' }}
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="v-pill-btn v-pill-btn-primary"
+            style={{ minHeight: 44 }}
+          >
+            {submitting ? '⏳ Saving Monthly Plan…' : saved ? '✅ Monthly Plan Saved!' : <><Save size={15} /> Save Monthly Plan</>}
+          </button>
+        </div>
+      </form>
+
+      {/* ── 4. Saved Monthly History ── */}
+      {allMonthlyPlans.length > 0 && (
+        <div className="v-card" style={{ padding: '20px 22px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <History size={16} color="var(--text-muted)" />
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em' }}>
+              SAVED MONTHLY HISTORY
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {allMonthlyPlans.map(m => {
+              const isSelected = m.month === selectedMonth;
+              return (
+                <div
+                  key={m.id}
+                  onClick={() => setSelectedMonth(m.month)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    borderRadius: 12,
+                    background: isSelected ? 'var(--accent-glow)' : 'var(--v-glass-bg-subtle)',
+                    border: `1.5px solid ${isSelected ? 'var(--accent-color)' : 'var(--v-glass-border-subtle)'}`,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <CalendarDays size={14} color={isSelected ? 'var(--accent-color)' : 'var(--text-muted)'} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {formatMonthLabel(m.month)}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      {m.title}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>
+                    {m.completionPercentage}% deliverables complete
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

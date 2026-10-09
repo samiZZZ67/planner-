@@ -1,11 +1,13 @@
 import Dexie, { type Table } from 'dexie';
-import type { Section, Task, TimeLog, Day, DraftTask, ActiveTimer } from '@/types';
+import type { Section, Task, TimeLog, Day, DraftTask, ActiveTimer, WeeklyPlan, MonthlyPlan } from '@/types';
 
 export class NightPlannerDB extends Dexie {
   sections!: Table<Section, string>;
   tasks!: Table<Task, string>;
   timeLogs!: Table<TimeLog, string>;
   days!: Table<Day, string>;
+  weeklyPlans!: Table<WeeklyPlan, string>;
+  monthlyPlans!: Table<MonthlyPlan, string>;
   meta!: Table<{ key: string; value: any }, string>;
 
   constructor() {
@@ -16,6 +18,10 @@ export class NightPlannerDB extends Dexie {
       timeLogs: 'id, taskId, date, updatedAt, deleted, synced, isSample',
       days: 'id, date, updatedAt, deleted, synced, isSample',
       meta: 'key',
+    });
+    this.version(2).stores({
+      weeklyPlans: 'id, startDate, endDate, monthId, status, updatedAt, deleted, synced',
+      monthlyPlans: 'id, month, status, updatedAt, deleted, synced',
     });
   }
 }
@@ -131,15 +137,19 @@ export async function getUnsyncedChanges(): Promise<{
   tasks: Task[];
   timeLogs: TimeLog[];
   days: Day[];
+  weeklyPlans: WeeklyPlan[];
+  monthlyPlans: MonthlyPlan[];
 }> {
-  const [sections, tasks, timeLogs, days] = await Promise.all([
+  const [sections, tasks, timeLogs, days, weeklyPlans, monthlyPlans] = await Promise.all([
     db.sections.filter(s => s.synced === 0).toArray(),
     db.tasks.filter(t => t.synced === 0).toArray(),
     db.timeLogs.filter(tl => tl.synced === 0).toArray(),
     db.days.filter(d => d.synced === 0).toArray(),
+    db.weeklyPlans.filter(w => w.synced === 0).toArray(),
+    db.monthlyPlans.filter(m => m.synced === 0).toArray(),
   ]);
 
-  return { sections, tasks, timeLogs, days };
+  return { sections, tasks, timeLogs, days, weeklyPlans, monthlyPlans };
 }
 
 /**
@@ -147,5 +157,12 @@ export async function getUnsyncedChanges(): Promise<{
  */
 export async function getUnsyncedCount(): Promise<number> {
   const changes = await getUnsyncedChanges();
-  return changes.sections.length + changes.tasks.length + changes.timeLogs.length + changes.days.length;
+  return (
+    changes.sections.length +
+    changes.tasks.length +
+    changes.timeLogs.length +
+    changes.days.length +
+    changes.weeklyPlans.length +
+    changes.monthlyPlans.length
+  );
 }

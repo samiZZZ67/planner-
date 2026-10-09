@@ -117,7 +117,13 @@ class SyncEngine {
   public async refreshUnsyncedCount(): Promise<number> {
     try {
       const unsynced = await getUnsyncedChanges();
-      const count = unsynced.sections.length + unsynced.tasks.length + unsynced.timeLogs.length + unsynced.days.length;
+      const count =
+        unsynced.sections.length +
+        unsynced.tasks.length +
+        unsynced.timeLogs.length +
+        unsynced.days.length +
+        (unsynced.weeklyPlans?.length || 0) +
+        (unsynced.monthlyPlans?.length || 0);
 
       if (count > 0 && !this.firstUnsyncedTimestamp) {
         this.firstUnsyncedTimestamp = Date.now();
@@ -225,6 +231,8 @@ class SyncEngine {
         tasks: unsynced.tasks,
         timeLogs: unsynced.timeLogs,
         days: unsynced.days,
+        weeklyPlans: unsynced.weeklyPlans,
+        monthlyPlans: unsynced.monthlyPlans,
       };
 
       const response = await fetch('/api/sync', {
@@ -259,7 +267,7 @@ class SyncEngine {
       const result: SyncResponse = await response.json();
 
       // 1. Mark pushed records as synced in local Dexie
-      await db.transaction('rw', [db.sections, db.tasks, db.timeLogs, db.days], async () => {
+      await db.transaction('rw', [db.sections, db.tasks, db.timeLogs, db.days, db.weeklyPlans, db.monthlyPlans], async () => {
         for (const id of result.acknowledgedIds.sections) {
           await db.sections.update(id, { synced: 1 });
         }
@@ -272,13 +280,23 @@ class SyncEngine {
         for (const id of result.acknowledgedIds.days) {
           await db.days.update(id, { synced: 1 });
         }
+        if (result.acknowledgedIds.weeklyPlans) {
+          for (const id of result.acknowledgedIds.weeklyPlans) {
+            await db.weeklyPlans.update(id, { synced: 1 });
+          }
+        }
+        if (result.acknowledgedIds.monthlyPlans) {
+          for (const id of result.acknowledgedIds.monthlyPlans) {
+            await db.monthlyPlans.update(id, { synced: 1 });
+          }
+        }
       });
 
       // 2. Apply remote changes into local Dexie with conflict check
       if (result.serverChanges) {
-        const { sections, tasks, timeLogs, days } = result.serverChanges;
+        const { sections, tasks, timeLogs, days, weeklyPlans, monthlyPlans } = result.serverChanges;
 
-        await db.transaction('rw', [db.sections, db.tasks, db.timeLogs, db.days], async () => {
+        await db.transaction('rw', [db.sections, db.tasks, db.timeLogs, db.days, db.weeklyPlans, db.monthlyPlans], async () => {
           for (const s of sections) {
             const local = await db.sections.get(s.id);
             const { recordToSave } = resolveRecordConflict(local, s);
@@ -298,6 +316,20 @@ class SyncEngine {
             const local = await db.days.get(d.id);
             const { recordToSave } = resolveRecordConflict(local, d);
             await db.days.put(recordToSave);
+          }
+          if (weeklyPlans) {
+            for (const w of weeklyPlans) {
+              const local = await db.weeklyPlans.get(w.id);
+              const { recordToSave } = resolveRecordConflict(local, w);
+              await db.weeklyPlans.put(recordToSave);
+            }
+          }
+          if (monthlyPlans) {
+            for (const m of monthlyPlans) {
+              const local = await db.monthlyPlans.get(m.id);
+              const { recordToSave } = resolveRecordConflict(local, m);
+              await db.monthlyPlans.put(recordToSave);
+            }
           }
         });
       }

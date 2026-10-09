@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ListChecks, BarChart3, Settings, Plus, StickyNote, Tag } from 'lucide-react';
+import { ListChecks, BarChart3, Settings, Plus, StickyNote, Tag, CalendarRange, CalendarDays } from 'lucide-react';
 import type { TabType } from './PhoneTabBar';
 
 interface PCSidebarProps {
@@ -11,10 +11,12 @@ interface PCSidebarProps {
 
 export function PCSidebar({ currentTab, onSelectTab }: PCSidebarProps) {
   const navItems: { id: TabType; icon: React.ReactNode; label: string; shortcut: string }[] = [
-    { id: 'add_task', icon: <Plus size={20} />, label: 'Add Task', shortcut: '1' },
-    { id: 'note', icon: <StickyNote size={20} />, label: 'Note', shortcut: '2' },
-    { id: 'todo', icon: <ListChecks size={20} />, label: 'To-Do List', shortcut: '3' },
-    { id: 'category', icon: <Tag size={20} />, label: 'Category', shortcut: '4' },
+    { id: 'todo', icon: <ListChecks size={20} />, label: 'To-Do List', shortcut: '1' },
+    { id: 'weekly', icon: <CalendarRange size={20} />, label: 'Weekly Plan', shortcut: '2' },
+    { id: 'monthly', icon: <CalendarDays size={20} />, label: 'Monthly Plan', shortcut: '3' },
+    { id: 'add_task', icon: <Plus size={20} />, label: 'Add Task', shortcut: '4' },
+    { id: 'note', icon: <StickyNote size={20} />, label: 'Note', shortcut: '5' },
+    { id: 'category', icon: <Tag size={20} />, label: 'Category', shortcut: '6' },
   ];
 
   return (

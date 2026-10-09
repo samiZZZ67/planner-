@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import type { Section, Task, TimeLog, Day } from '@/types';
+import type { Section, Task, TimeLog, Day, WeeklyPlan, MonthlyPlan } from '@/types';
 
 export function getDb() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -91,6 +91,44 @@ export async function ensureSchema(sql: any): Promise<void> {
       is_sample BOOLEAN NOT NULL DEFAULT FALSE,
       server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
     );
+
+    CREATE TABLE IF NOT EXISTS weekly_plans (
+      id VARCHAR(64) PRIMARY KEY,
+      start_date VARCHAR(10) NOT NULL,
+      end_date VARCHAR(10) NOT NULL,
+      month_id VARCHAR(10) NOT NULL,
+      prompt TEXT NOT NULL,
+      word_count INTEGER NOT NULL DEFAULT 0,
+      goals TEXT DEFAULT '',
+      aastu_commitments TEXT DEFAULT '',
+      deep_work_targets TEXT DEFAULT '',
+      constraints TEXT DEFAULT '',
+      outcomes TEXT DEFAULT '',
+      ai_weekly_report TEXT,
+      status VARCHAR(20) DEFAULT 'active',
+      completion_percentage NUMERIC(5,2) DEFAULT 0,
+      created_at BIGINT NOT NULL,
+      updated_at BIGINT NOT NULL,
+      deleted BOOLEAN NOT NULL DEFAULT FALSE,
+      server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+    );
+
+    CREATE TABLE IF NOT EXISTS monthly_plans (
+      id VARCHAR(64) PRIMARY KEY,
+      month VARCHAR(10) NOT NULL,
+      title TEXT NOT NULL,
+      prompt TEXT DEFAULT '',
+      academic_priorities TEXT DEFAULT '',
+      editing_targets TEXT DEFAULT '',
+      commitments TEXT DEFAULT '',
+      goals JSONB DEFAULT '[]'::jsonb,
+      completion_percentage NUMERIC(5,2) DEFAULT 0,
+      status VARCHAR(20) DEFAULT 'active',
+      created_at BIGINT NOT NULL,
+      updated_at BIGINT NOT NULL,
+      deleted BOOLEAN NOT NULL DEFAULT FALSE,
+      server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+    );
   `;
 }
 
@@ -104,6 +142,8 @@ export async function syncBatch(
     tasks: Task[];
     timeLogs: TimeLog[];
     days: Day[];
+    weeklyPlans?: WeeklyPlan[];
+    monthlyPlans?: MonthlyPlan[];
     lastServerSeq: number;
   }
 ) {
@@ -114,6 +154,8 @@ export async function syncBatch(
     tasks: [] as string[],
     timeLogs: [] as string[],
     days: [] as string[],
+    weeklyPlans: [] as string[],
+    monthlyPlans: [] as string[],
   };
 
   // Upsert Sections
@@ -233,16 +275,86 @@ export async function syncBatch(
     ack.days.push(d.id);
   }
 
+  // Upsert Weekly Plans
+  if (incoming.weeklyPlans) {
+    for (const w of incoming.weeklyPlans) {
+      await sql`
+        INSERT INTO weekly_plans (
+          id, start_date, end_date, month_id, prompt, word_count, goals,
+          aastu_commitments, deep_work_targets, constraints, outcomes,
+          ai_weekly_report, status, completion_percentage, created_at, updated_at, deleted, server_seq
+        )
+        VALUES (
+          ${w.id}, ${w.startDate}, ${w.endDate}, ${w.monthId}, ${w.prompt}, ${w.wordCount || 0}, ${w.goals || ''},
+          ${w.aastuCommitments || ''}, ${w.deepWorkTargets || ''}, ${w.constraints || ''}, ${w.outcomes || ''},
+          ${w.aiWeeklyReport || null}, ${w.status || 'active'}, ${w.completionPercentage || 0},
+          ${w.createdAt}, ${w.updatedAt}, ${w.deleted}, nextval('server_seq')
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          prompt = EXCLUDED.prompt,
+          word_count = EXCLUDED.word_count,
+          goals = EXCLUDED.goals,
+          aastu_commitments = EXCLUDED.aastu_commitments,
+          deep_work_targets = EXCLUDED.deep_work_targets,
+          constraints = EXCLUDED.constraints,
+          outcomes = EXCLUDED.outcomes,
+          ai_weekly_report = EXCLUDED.ai_weekly_report,
+          status = EXCLUDED.status,
+          completion_percentage = EXCLUDED.completion_percentage,
+          updated_at = EXCLUDED.updated_at,
+          deleted = EXCLUDED.deleted,
+          server_seq = nextval('server_seq')
+        WHERE EXCLUDED.updated_at >= weekly_plans.updated_at
+      `;
+      ack.weeklyPlans.push(w.id);
+    }
+  }
+
+  // Upsert Monthly Plans
+  if (incoming.monthlyPlans) {
+    for (const m of incoming.monthlyPlans) {
+      const goalsJson = JSON.stringify(m.goals || []);
+      await sql`
+        INSERT INTO monthly_plans (
+          id, month, title, prompt, academic_priorities, editing_targets,
+          commitments, goals, completion_percentage, status, created_at, updated_at, deleted, server_seq
+        )
+        VALUES (
+          ${m.id}, ${m.month}, ${m.title}, ${m.prompt || ''}, ${m.academicPriorities || ''},
+          ${m.editingTargets || ''}, ${m.commitments || ''}, ${goalsJson}::jsonb,
+          ${m.completionPercentage || 0}, ${m.status || 'active'},
+          ${m.createdAt}, ${m.updatedAt}, ${m.deleted}, nextval('server_seq')
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title,
+          prompt = EXCLUDED.prompt,
+          academic_priorities = EXCLUDED.academic_priorities,
+          editing_targets = EXCLUDED.editing_targets,
+          commitments = EXCLUDED.commitments,
+          goals = EXCLUDED.goals,
+          completion_percentage = EXCLUDED.completion_percentage,
+          status = EXCLUDED.status,
+          updated_at = EXCLUDED.updated_at,
+          deleted = EXCLUDED.deleted,
+          server_seq = nextval('server_seq')
+        WHERE EXCLUDED.updated_at >= monthly_plans.updated_at
+      `;
+      ack.monthlyPlans.push(m.id);
+    }
+  }
+
   // Fetch changes newer than client's lastServerSeq
   const clientSeq = incoming.lastServerSeq || 0;
 
-  const [changedSections, changedTasks, changedTimeLogs, changedDays, seqRow] = (await Promise.all([
+  const [changedSections, changedTasks, changedTimeLogs, changedDays, changedWeekly, changedMonthly, seqRow] = (await Promise.all([
     sql`SELECT * FROM sections WHERE server_seq > ${clientSeq}`,
     sql`SELECT * FROM tasks WHERE server_seq > ${clientSeq}`,
     sql`SELECT * FROM time_logs WHERE server_seq > ${clientSeq}`,
     sql`SELECT * FROM days WHERE server_seq > ${clientSeq}`,
+    sql`SELECT * FROM weekly_plans WHERE server_seq > ${clientSeq}`,
+    sql`SELECT * FROM monthly_plans WHERE server_seq > ${clientSeq}`,
     sql`SELECT last_value FROM server_seq`,
-  ])) as [any[], any[], any[], any[], any[]];
+  ])) as [any[], any[], any[], any[], any[], any[], any[]];
 
   const currentServerSeq = seqRow && seqRow.length > 0 ? Number(seqRow[0].last_value) : clientSeq;
 
@@ -322,6 +434,44 @@ export async function syncBatch(
     serverSeq: Number(r.server_seq),
   }));
 
+  const serverWeekly: WeeklyPlan[] = (changedWeekly || []).map((r: any) => ({
+    id: r.id,
+    startDate: r.start_date,
+    endDate: r.end_date,
+    monthId: r.month_id,
+    prompt: r.prompt,
+    wordCount: Number(r.word_count || 0),
+    goals: r.goals || '',
+    aastuCommitments: r.aastu_commitments || '',
+    deepWorkTargets: r.deep_work_targets || '',
+    constraints: r.constraints || '',
+    outcomes: r.outcomes || '',
+    aiWeeklyReport: r.ai_weekly_report || null,
+    status: r.status || 'active',
+    completionPercentage: Number(r.completion_percentage || 0),
+    createdAt: Number(r.created_at),
+    updatedAt: Number(r.updated_at),
+    deleted: Boolean(r.deleted),
+    serverSeq: Number(r.server_seq),
+  }));
+
+  const serverMonthly: MonthlyPlan[] = (changedMonthly || []).map((r: any) => ({
+    id: r.id,
+    month: r.month,
+    title: r.title,
+    prompt: r.prompt || '',
+    academicPriorities: r.academic_priorities || '',
+    editingTargets: r.editing_targets || '',
+    commitments: r.commitments || '',
+    goals: Array.isArray(r.goals) ? r.goals : (typeof r.goals === 'string' ? JSON.parse(r.goals) : []),
+    completionPercentage: Number(r.completion_percentage || 0),
+    status: r.status || 'active',
+    createdAt: Number(r.created_at),
+    updatedAt: Number(r.updated_at),
+    deleted: Boolean(r.deleted),
+    serverSeq: Number(r.server_seq),
+  }));
+
   return {
     currentServerSeq,
     ack,
@@ -330,6 +480,8 @@ export async function syncBatch(
       tasks: serverTasks,
       timeLogs: serverTimeLogs,
       days: serverDays,
+      weeklyPlans: serverWeekly,
+      monthlyPlans: serverMonthly,
     },
   };
 }

@@ -15,6 +15,8 @@ import { AddTaskScreen } from '@/components/AddTask/AddTaskScreen';
 import { NoteScreen } from '@/components/Note/NoteScreen';
 import { TodoListScreen } from '@/components/TodoList/TodoListScreen';
 import { CategoryScreen } from '@/components/Category/CategoryScreen';
+import { WeeklyPlanScreen } from '@/components/Weekly/WeeklyPlanScreen';
+import { MonthlyPlanScreen } from '@/components/Monthly/MonthlyPlanScreen';
 import { AnalyticsScreen } from '@/components/Analytics/AnalyticsScreen';
 import { SettingsScreen } from '@/components/Settings/SettingsScreen';
 import { LoginModal } from '@/components/Modals/LoginModal';
@@ -87,20 +89,26 @@ export default function NightPlannerApp() {
 
       if (e.key === '1') {
         e.preventDefault();
-        setCurrentTab('add_task');
+        setCurrentTab('todo');
       } else if (e.key === '2') {
         e.preventDefault();
-        setCurrentTab('note');
+        setCurrentTab('weekly');
       } else if (e.key === '3') {
         e.preventDefault();
-        setCurrentTab('todo');
+        setCurrentTab('monthly');
       } else if (e.key === '4') {
         e.preventDefault();
-        setCurrentTab('category');
+        setCurrentTab('add_task');
       } else if (e.key === '5') {
         e.preventDefault();
-        setCurrentTab('analytics');
+        setCurrentTab('note');
       } else if (e.key === '6') {
+        e.preventDefault();
+        setCurrentTab('category');
+      } else if (e.key === '7') {
+        e.preventDefault();
+        setCurrentTab('analytics');
+      } else if (e.key === '8') {
         e.preventDefault();
         setCurrentTab('settings');
       } else if (e.key === ' ' && activeTimer) {
@@ -176,8 +184,35 @@ export default function NightPlannerApp() {
             transition: 'max-width 0.25s ease',
           }}
         >
-          {/* Segmented Glass Tabs: 4 Primary Buttons */}
-          <div className="v-tabs" role="tablist" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', gap: isPhone ? 16 : 28 }}>
+          {/* Segmented Glass Tabs: Planning Hierarchy & Actions */}
+          <div className="v-tabs" role="tablist" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', gap: isPhone ? 14 : 24 }}>
+            <button
+              onClick={() => setCurrentTab('todo')}
+              className={`v-tab-btn${currentTab === 'todo' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={currentTab === 'todo'}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              To-Do List
+            </button>
+            <button
+              onClick={() => setCurrentTab('weekly')}
+              className={`v-tab-btn${currentTab === 'weekly' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={currentTab === 'weekly'}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Weekly Plan
+            </button>
+            <button
+              onClick={() => setCurrentTab('monthly')}
+              className={`v-tab-btn${currentTab === 'monthly' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={currentTab === 'monthly'}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Monthly Plan
+            </button>
             <button
               onClick={() => setCurrentTab('add_task')}
               className={`v-tab-btn${currentTab === 'add_task' ? ' active' : ''}`}
@@ -195,15 +230,6 @@ export default function NightPlannerApp() {
               style={{ whiteSpace: 'nowrap' }}
             >
               Note
-            </button>
-            <button
-              onClick={() => setCurrentTab('todo')}
-              className={`v-tab-btn${currentTab === 'todo' ? ' active' : ''}`}
-              role="tab"
-              aria-selected={currentTab === 'todo'}
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              To-Do List
             </button>
             <button
               onClick={() => setCurrentTab('category')}
@@ -242,6 +268,33 @@ export default function NightPlannerApp() {
 
           {/* Active Screen Content */}
           <div style={{ padding: isPhone ? '20px 16px' : '28px 32px' }}>
+            {currentTab === 'todo' && (
+              <TodoListScreen
+                currentDate={currentDate}
+                onChangeDate={setCurrentDate}
+                isPhone={isPhone}
+                onOpenTaskInCategory={(taskId) => {
+                  setFocusTaskId(taskId);
+                  setCurrentTab('category');
+                }}
+                onNavigateToAddTask={() => setCurrentTab('add_task')}
+              />
+            )}
+
+            {currentTab === 'weekly' && (
+              <WeeklyPlanScreen
+                currentDate={currentDate}
+                isPhone={isPhone}
+              />
+            )}
+
+            {currentTab === 'monthly' && (
+              <MonthlyPlanScreen
+                currentDate={currentDate}
+                isPhone={isPhone}
+              />
+            )}
+
             {currentTab === 'add_task' && (
               <AddTaskScreen
                 currentDate={currentDate}
@@ -256,19 +309,6 @@ export default function NightPlannerApp() {
                 currentDate={currentDate}
                 onChangeDate={setCurrentDate}
                 isPhone={isPhone}
-              />
-            )}
-
-            {currentTab === 'todo' && (
-              <TodoListScreen
-                currentDate={currentDate}
-                onChangeDate={setCurrentDate}
-                isPhone={isPhone}
-                onOpenTaskInCategory={(taskId) => {
-                  setFocusTaskId(taskId);
-                  setCurrentTab('category');
-                }}
-                onNavigateToAddTask={() => setCurrentTab('add_task')}
               />
             )}
 

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type { Section, Task, TimeLog, Day } from '@/types';
+import type { Section, Task, TimeLog, Day, WeeklyPlan, MonthlyPlan } from '@/types';
 
 interface ServerDbData {
   lastServerSeq: number;
@@ -8,6 +8,8 @@ interface ServerDbData {
   tasks: Record<string, Task & { serverSeq: number }>;
   timeLogs: Record<string, TimeLog & { serverSeq: number }>;
   days: Record<string, Day & { serverSeq: number }>;
+  weeklyPlans: Record<string, WeeklyPlan & { serverSeq: number }>;
+  monthlyPlans: Record<string, MonthlyPlan & { serverSeq: number }>;
 }
 
 const DATA_DIR = path.join(process.cwd(), '.data');
@@ -20,7 +22,10 @@ function ensureDataFile(): ServerDbData {
     }
     if (fs.existsSync(DB_FILE)) {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!parsed.weeklyPlans) parsed.weeklyPlans = {};
+      if (!parsed.monthlyPlans) parsed.monthlyPlans = {};
+      return parsed;
     }
   } catch {
     // Fallback to empty memory state
@@ -32,6 +37,8 @@ function ensureDataFile(): ServerDbData {
     tasks: {},
     timeLogs: {},
     days: {},
+    weeklyPlans: {},
+    monthlyPlans: {},
   };
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), 'utf-8');
@@ -69,6 +76,8 @@ export async function syncBatchLocal(incoming: {
   tasks: Task[];
   timeLogs: TimeLog[];
   days: Day[];
+  weeklyPlans?: WeeklyPlan[];
+  monthlyPlans?: MonthlyPlan[];
   lastServerSeq: number;
 }) {
   const db = getDb();
@@ -79,6 +88,8 @@ export async function syncBatchLocal(incoming: {
     tasks: [] as string[],
     timeLogs: [] as string[],
     days: [] as string[],
+    weeklyPlans: [] as string[],
+    monthlyPlans: [] as string[],
   };
 
   // 1. Process Sections
@@ -121,16 +132,42 @@ export async function syncBatchLocal(incoming: {
     ack.days.push(d.id);
   }
 
+  // 5. Process Weekly Plans
+  if (incoming.weeklyPlans) {
+    for (const w of incoming.weeklyPlans) {
+      const existing = db.weeklyPlans[w.id];
+      if (!existing || w.updatedAt >= existing.updatedAt) {
+        currentSeq += 1;
+        db.weeklyPlans[w.id] = { ...w, serverSeq: currentSeq };
+      }
+      ack.weeklyPlans.push(w.id);
+    }
+  }
+
+  // 6. Process Monthly Plans
+  if (incoming.monthlyPlans) {
+    for (const m of incoming.monthlyPlans) {
+      const existing = db.monthlyPlans[m.id];
+      if (!existing || m.updatedAt >= existing.updatedAt) {
+        currentSeq += 1;
+        db.monthlyPlans[m.id] = { ...m, serverSeq: currentSeq };
+      }
+      ack.monthlyPlans.push(m.id);
+    }
+  }
+
   db.lastServerSeq = currentSeq;
   saveDb(db);
 
-  // 5. Gather all server changes that have serverSeq > clientSeq
+  // 7. Gather all server changes that have serverSeq > clientSeq
   const clientSeq = incoming.lastServerSeq || 0;
 
   const changedSections = Object.values(db.sections).filter(s => (s.serverSeq || 0) > clientSeq);
   const changedTasks = Object.values(db.tasks).filter(t => (t.serverSeq || 0) > clientSeq);
   const changedTimeLogs = Object.values(db.timeLogs).filter(tl => (tl.serverSeq || 0) > clientSeq);
   const changedDays = Object.values(db.days).filter(d => (d.serverSeq || 0) > clientSeq);
+  const changedWeeklyPlans = Object.values(db.weeklyPlans).filter(w => (w.serverSeq || 0) > clientSeq);
+  const changedMonthlyPlans = Object.values(db.monthlyPlans).filter(m => (m.serverSeq || 0) > clientSeq);
 
   return {
     currentServerSeq: currentSeq,
@@ -140,6 +177,8 @@ export async function syncBatchLocal(incoming: {
       tasks: changedTasks,
       timeLogs: changedTimeLogs,
       days: changedDays,
+      weeklyPlans: changedWeeklyPlans,
+      monthlyPlans: changedMonthlyPlans,
     },
   };
 }

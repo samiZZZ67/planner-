@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
       tasks: body.tasks || [],
       timeLogs: body.timeLogs || [],
       days: body.days || [],
+      weeklyPlans: body.weeklyPlans || [],
+      monthlyPlans: body.monthlyPlans || [],
       lastServerSeq: body.lastServerSeq || 0,
     };
 

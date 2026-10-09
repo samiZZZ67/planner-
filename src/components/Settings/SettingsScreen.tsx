@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { exportAllDataToJson, importDataFromJson } from '@/lib/data/sampleData';
 import { syncEngine } from '@/lib/sync/syncEngine';
 import {
@@ -239,6 +239,9 @@ export function SettingsScreen({
         </div>
       </div>
 
+      {/* ── 3. AI PROVIDERS & MODEL CONFIGURATION ── */}
+      <AIProviderSettingsSection showMsg={showMsg} isPhone={isPhone} />
+
       {/* ── 3. ACCOUNT & CLOUD DATABASE SYNC ── */}
       <div
         className="v-card"
@@ -329,6 +332,232 @@ export function SettingsScreen({
         )}
       </div>
 
+    </div>
+  );
+}
+
+function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string) => void; isPhone?: boolean }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [config, setConfig] = useState<any>(null);
+
+  const [activeProvider, setActiveProvider] = useState('auto');
+  const [fallbackEnabled, setFallbackEnabled] = useState(true);
+  const [gemini1Model, setGemini1Model] = useState('gemini-2.5-flash');
+  const [xaiModel, setXaiModel] = useState('grok-2-latest');
+
+  const loadConfig = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/ai/config');
+      if (res.ok) {
+        const data = await res.json();
+        setConfig(data);
+        setActiveProvider(data.activeProviderId || 'auto');
+        setFallbackEnabled(Boolean(data.fallbackEnabled));
+        const g1 = data.providers?.find((p: any) => p.id === 'gemini-1');
+        if (g1) setGemini1Model(g1.model || 'gemini-2.5-flash');
+        const xk = data.providers?.find((p: any) => p.id === 'xai-grok');
+        if (xk) setXaiModel(xk.model || 'grok-2-latest');
+      }
+    } catch {
+      // Offline fallback
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      const res = await fetch('/api/ai/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activeProviderId: activeProvider,
+          fallbackEnabled,
+          modelOverrides: {
+            'gemini-1': gemini1Model,
+            'gemini-2': gemini1Model,
+            'gemini-3': gemini1Model,
+            'xai-grok': xaiModel,
+          },
+        }),
+      });
+
+      if (res.ok) {
+        showMsg('AI provider configuration saved successfully!');
+        loadConfig();
+      } else {
+        showMsg('Failed to save configuration.');
+      }
+    } catch {
+      showMsg('Failed to save configuration.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="v-card"
+      style={{
+        padding: isPhone ? '18px 16px' : '22px 28px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
+          AI PROVIDERS & MODEL CONFIGURATION
+        </div>
+        <button
+          type="button"
+          onClick={loadConfig}
+          className="v-circle-btn"
+          style={{ width: 28, height: 28 }}
+          title="Refresh Provider Status"
+        >
+          <Sparkles size={12} color="var(--accent-color)" />
+        </button>
+      </div>
+
+      <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        Configure Google Gemini (up to 3 keys) and xAI Grok. Keys are stored safely in server environment variables (<code style={{ color: 'var(--accent-color)' }}>.env.local</code>) and are never exposed to the client.
+      </p>
+
+      {/* Provider Slots Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : 'repeat(2, 1fr)', gap: 10 }}>
+        {config?.providers?.map((p: any) => (
+          <div
+            key={p.id}
+            style={{
+              padding: '12px 14px',
+              borderRadius: 12,
+              background: 'var(--v-glass-bg-subtle)',
+              border: `1.5px solid ${p.configured ? 'rgba(34, 197, 94, 0.3)' : 'var(--v-glass-border-subtle)'}`,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {p.name}
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: p.configured ? '#22c55e' : 'var(--text-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                {p.configured ? '● Configured' : '○ Missing Key'}
+              </span>
+            </div>
+
+            {p.id === 'gemini-1' && (
+              <div style={{ marginTop: 4 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Model:</label>
+                <select
+                  value={gemini1Model}
+                  onChange={e => setGemini1Model(e.target.value)}
+                  className="v-input"
+                  style={{ fontSize: 12, minHeight: 32, padding: '4px 8px' }}
+                >
+                  <option value="gemini-2.5-flash">gemini-2.5-flash (Fast & Generous)</option>
+                  <option value="gemini-2.5-pro">gemini-2.5-pro (Deep Reasoning)</option>
+                  <option value="gemini-1.5-flash">gemini-1.5-flash (Legacy)</option>
+                </select>
+              </div>
+            )}
+
+            {p.id === 'xai-grok' && (
+              <div style={{ marginTop: 4 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Model:</label>
+                <select
+                  value={xaiModel}
+                  onChange={e => setXaiModel(e.target.value)}
+                  className="v-input"
+                  style={{ fontSize: 12, minHeight: 32, padding: '4px 8px' }}
+                >
+                  <option value="grok-2-latest">grok-2-latest (Frontier)</option>
+                  <option value="grok-2-mini">grok-2-mini (Fast)</option>
+                  <option value="grok-beta">grok-beta</option>
+                </select>
+              </div>
+            )}
+
+            {p.isRateLimited && (
+              <span style={{ fontSize: 11, color: '#f59e0b' }}>
+                ⏳ Rate limit cooldown active
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Active Provider & Fallback Settings */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 6 }}>
+            Primary Active Provider
+          </label>
+          <select
+            value={activeProvider}
+            onChange={e => setActiveProvider(e.target.value)}
+            className="v-input"
+            style={{ fontSize: 13 }}
+          >
+            <option value="auto">Auto (Smart Fallback across all configured keys)</option>
+            <option value="gemini-1">Google Gemini (Key 1)</option>
+            <option value="gemini-2">Google Gemini (Key 2)</option>
+            <option value="gemini-3">Google Gemini (Key 3)</option>
+            <option value="xai-grok">xAI Grok</option>
+          </select>
+        </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={fallbackEnabled}
+            onChange={e => setFallbackEnabled(e.target.checked)}
+            style={{ width: 16, height: 16, accentColor: 'var(--accent-color)' }}
+          />
+          <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+            Automatic fallback to another provider if primary is rate-limited or fails
+          </span>
+        </label>
+      </div>
+
+      {/* Token Usage Stats */}
+      {config?.totalTokensUsed && (
+        <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)' }}>
+          <span>Session Tokens: <strong style={{ color: 'var(--text-primary)' }}>{config.totalTokensUsed.total || 0}</strong></span>
+          <span>(Prompt: {config.totalTokensUsed.prompt || 0} / Completion: {config.totalTokensUsed.completion || 0})</span>
+        </div>
+      )}
+
+      {/* Save Button */}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="v-pill-btn v-pill-btn-primary"
+          style={{ padding: '8px 24px', fontSize: 13 }}
+        >
+          {saving ? 'Saving…' : 'Save AI Settings'}
+        </button>
+      </div>
     </div>
   );
 }

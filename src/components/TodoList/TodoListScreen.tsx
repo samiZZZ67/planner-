@@ -9,6 +9,7 @@ import {
   Plus, Target, ChevronLeft, ChevronRight, X, ExternalLink, Sparkles
 } from 'lucide-react';
 import type { Task, Section, TimeLog } from '@/types';
+import { AIPlanModal } from '@/components/Modals/AIPlanModal';
 
 interface TodoListScreenProps {
   currentDate: string;
@@ -45,6 +46,7 @@ export function TodoListScreen({
   const [dayFreeHours, setDayFreeHours] = useState<number>(8);
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState('8');
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
 
   // Quick inline add
   const [inlineTitle, setInlineTitle] = useState('');
@@ -410,7 +412,16 @@ export function TodoListScreen({
             ({tasks.filter(t => t.isCompleted).length}/{tasks.length})
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setIsAIModalOpen(true)}
+            className="v-pill-btn"
+            style={{ padding: '6px 14px', fontSize: 12, minHeight: 34, gap: 5, borderColor: 'var(--accent-color)' }}
+            title="Generate Day Schedule with AI based on Monthly & Weekly goals"
+          >
+            <Sparkles size={13} color="var(--accent-color)" /> AI Day Plan
+          </button>
           <button
             type="button"
             onClick={() => setShowInlineAdd(prev => !prev)}
@@ -618,6 +629,15 @@ export function TodoListScreen({
           })
         )}
       </div>
+
+      {/* ── AI Plan Generation Modal ── */}
+      <AIPlanModal
+        isOpen={isAIModalOpen}
+        onClose={() => setIsAIModalOpen(false)}
+        targetDate={currentDate}
+        focusBudgetHours={dayFreeHours}
+        onTasksScheduled={loadData}
+      />
     </div>
   );
 }
