@@ -1,5 +1,5 @@
 {
-  "lastServerSeq": 6,
+  "lastServerSeq": 10,
   "sections": {
     "default-sec-1": {
       "name": "Entertainment",
@@ -86,9 +86,74 @@
       "serverSeq": 6
     }
   },
-  "tasks": {},
+  "tasks": {
+    "09892fc3-c986-4f84-934b-6744dfa2a0d4": {
+      "id": "09892fc3-c986-4f84-934b-6744dfa2a0d4",
+      "date": "2026-10-09",
+      "sectionId": "default-sec-1",
+      "title": "exercise",
+      "description": "",
+      "strategy": "",
+      "doneMeans": "",
+      "estimatedMinutes": 25,
+      "priority": "Medium",
+      "mustDo": false,
+      "tags": [],
+      "icon": "🎯",
+      "isCompleted": false,
+      "completedAt": null,
+      "order": 0,
+      "createdAt": 1791543185155,
+      "updatedAt": 1791543206396,
+      "deleted": true,
+      "isSample": false,
+      "synced": 0,
+      "status": "not_started",
+      "serverSeq": 7
+    },
+    "d5283d7d-1273-4e04-bc85-55972ea47410": {
+      "id": "d5283d7d-1273-4e04-bc85-55972ea47410",
+      "date": "2026-10-09",
+      "sectionId": "default-sec-1",
+      "title": "cvgfd",
+      "description": "",
+      "strategy": "",
+      "doneMeans": "",
+      "estimatedMinutes": 25,
+      "priority": "Medium",
+      "mustDo": false,
+      "tags": [],
+      "icon": "🎯",
+      "isCompleted": false,
+      "completedAt": null,
+      "order": 0,
+      "createdAt": 1791543219654,
+      "updatedAt": 1791543223911,
+      "deleted": true,
+      "isSample": false,
+      "synced": 0,
+      "status": "not_started",
+      "serverSeq": 8
+    }
+  },
   "timeLogs": {},
-  "days": {},
+  "days": {
+    "2026-10-09": {
+      "id": "2026-10-09",
+      "date": "2026-10-09",
+      "freeHours": 5,
+      "review": {
+        "worked": "",
+        "blocked": "",
+        "change": ""
+      },
+      "updatedAt": 1791543448552,
+      "deleted": false,
+      "isSample": false,
+      "synced": 0,
+      "serverSeq": 10
+    }
+  },
   "weeklyPlans": {},
   "monthlyPlans": {}
 }

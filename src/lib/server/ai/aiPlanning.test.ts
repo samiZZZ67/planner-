@@ -264,6 +264,31 @@ describe('AI Planning & Hierarchy Test Suite', () => {
       expect(isValidApiKey('xai-validGrokKey1234567890ABCDEF')).toBe(true);
     });
 
+    it('should respect GEMINI_MODEL environment variable and support verified models', () => {
+      const originalModel = process.env.GEMINI_MODEL;
+      try {
+        process.env.GEMINI_MODEL = 'gemini-3.8-flash';
+        const status = getAIProvidersStatus();
+        const gemini1 = status.providers.find(p => p.id === 'gemini-1');
+        expect(gemini1).toBeDefined();
+        expect(gemini1?.availableModels).toContain('gemini-3.8-flash');
+        expect(gemini1?.availableModels).toContain('gemini-flash-latest');
+        expect(gemini1?.availableModels).toContain('gemini-2.5-flash');
+
+        // Test custom GEMINI_MODEL override
+        process.env.GEMINI_MODEL = 'gemini-flash-latest';
+        const statusCustom = getAIProvidersStatus();
+        const geminiCustom = statusCustom.providers.find(p => p.id === 'gemini-1');
+        expect(geminiCustom?.model).toBe('gemini-flash-latest');
+      } finally {
+        if (originalModel !== undefined) {
+          process.env.GEMINI_MODEL = originalModel;
+        } else {
+          delete process.env.GEMINI_MODEL;
+        }
+      }
+    });
+
     it('should treat placeholder keys as unconfigured without making failed network calls', async () => {
       const originalG1 = process.env.GEMINI_API_KEY_1;
       const originalGroq = process.env.GROQ_API_KEY;
@@ -286,5 +311,42 @@ describe('AI Planning & Hierarchy Test Suite', () => {
         else delete process.env.GROQ_API_KEY;
       }
     });
+
+    it('should successfully execute live request with default verified model or auto-heal deprecated model', async () => {
+      if (!isValidApiKey(process.env.GEMINI_API_KEY_1)) {
+        try {
+          const fs = await import('fs');
+          const path = await import('path');
+          const envPath = path.join(process.cwd(), '.env.local');
+          if (fs.existsSync(envPath)) {
+            const lines = fs.readFileSync(envPath, 'utf-8').split('\n');
+            for (const line of lines) {
+              const match = line.match(/^([^=]+)=(.*)$/);
+              if (match) {
+                const k = match[1].trim();
+                const v = match[2].trim().replace(/^["']|["']$/g, '');
+                if (!process.env[k]) process.env[k] = v;
+              }
+            }
+          }
+        } catch {}
+      }
+
+      if (!isValidApiKey(process.env.GEMINI_API_KEY_1)) {
+        return; // Skip if no real key in test environment
+      }
+
+      // Test 1: Default verified model (gemini-3.8-flash)
+      const res = await executeAIRequestWithFallback('Respond with ONLY: OK', undefined, undefined, { jsonMode: false });
+      expect(res.text).toBeDefined();
+      expect(res.model).toBe('gemini-3.8-flash');
+
+      // Test 2: Auto-healing when gemini-2.5-flash is passed
+      process.env.GEMINI_MODEL = 'gemini-2.5-flash';
+      const healedRes = await executeAIRequestWithFallback('Respond with ONLY: OK', undefined, undefined, { jsonMode: false });
+      expect(healedRes.text).toBeDefined();
+      // Auto-healed to verified model!
+      expect(['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash']).toContain(healedRes.model);
+    }, 30000);
   });
 });

@@ -26,20 +26,33 @@ export interface StoredAIConfig {
 }
 
 // Verified and currently supported models on Google Gemini API v1beta
-export const VERIFIED_GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+export const VERIFIED_GEMINI_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-flash-latest',
+  'gemini-3.5-flash',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
+];
 export const VERIFIED_GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
 export const VERIFIED_XAI_MODELS = ['grok-2-latest', 'grok-2-mini', 'grok-beta'];
 
+export function getDefaultGeminiModel(): string {
+  return (process.env.GEMINI_MODEL || '').trim() || 'gemini-3.8-flash';
+}
+
 export function getStoredAIConfig(): StoredAIConfig {
+  const defaultGemini = getDefaultGeminiModel();
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
       const parsed = JSON.parse(raw);
-      // Migrate away from any unreleased models like gemini-2.5-flash that cause 404
+      // Migrate away from deprecated legacy models like gemini-1.5-flash that return 404
       if (parsed.modelOverrides) {
         for (const k of Object.keys(parsed.modelOverrides)) {
-          if (parsed.modelOverrides[k] === 'gemini-2.5-flash' || parsed.modelOverrides[k] === 'gemini-2.5-pro') {
-            parsed.modelOverrides[k] = 'gemini-1.5-flash';
+          if (parsed.modelOverrides[k] === 'gemini-1.5-flash' || parsed.modelOverrides[k] === 'gemini-2.0-flash') {
+            parsed.modelOverrides[k] = defaultGemini;
           }
         }
       }
@@ -51,9 +64,9 @@ export function getStoredAIConfig(): StoredAIConfig {
     activeProviderId: 'auto',
     fallbackEnabled: true,
     modelOverrides: {
-      'gemini-1': 'gemini-1.5-flash',
-      'gemini-2': 'gemini-1.5-flash',
-      'gemini-3': 'gemini-1.5-flash',
+      'gemini-1': defaultGemini,
+      'gemini-2': defaultGemini,
+      'gemini-3': defaultGemini,
       'groq': 'llama-3.3-70b-versatile',
       'xai-grok': 'grok-2-latest',
     },
@@ -109,6 +122,7 @@ export function isValidApiKey(key: string | undefined): boolean {
  */
 export function getAIProvidersStatus(): AIConfigState {
   const config = getStoredAIConfig();
+  const defaultGemini = getDefaultGeminiModel();
   const now = Date.now();
 
   const geminiKey1 = process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY || '';
@@ -123,7 +137,7 @@ export function getAIProvidersStatus(): AIConfigState {
       name: 'Google Gemini (Key 1)',
       provider: 'gemini',
       configured: isValidApiKey(geminiKey1),
-      model: config.modelOverrides['gemini-1'] || 'gemini-1.5-flash',
+      model: config.modelOverrides['gemini-1'] || defaultGemini,
       availableModels: VERIFIED_GEMINI_MODELS,
       isRateLimited: (cooldowns.get('gemini-1')?.until || 0) > now,
     },
@@ -132,7 +146,7 @@ export function getAIProvidersStatus(): AIConfigState {
       name: 'Google Gemini (Key 2)',
       provider: 'gemini',
       configured: isValidApiKey(geminiKey2),
-      model: config.modelOverrides['gemini-2'] || 'gemini-1.5-flash',
+      model: config.modelOverrides['gemini-2'] || defaultGemini,
       availableModels: VERIFIED_GEMINI_MODELS,
       isRateLimited: (cooldowns.get('gemini-2')?.until || 0) > now,
     },
@@ -141,7 +155,7 @@ export function getAIProvidersStatus(): AIConfigState {
       name: 'Google Gemini (Key 3)',
       provider: 'gemini',
       configured: isValidApiKey(geminiKey3),
-      model: config.modelOverrides['gemini-3'] || 'gemini-1.5-flash',
+      model: config.modelOverrides['gemini-3'] || defaultGemini,
       availableModels: VERIFIED_GEMINI_MODELS,
       isRateLimited: (cooldowns.get('gemini-3')?.until || 0) > now,
     },
@@ -193,9 +207,10 @@ async function callGemini(
   systemInstruction?: string,
   jsonMode: boolean = true
 ): Promise<{ text: string; tokens?: { prompt: number; completion: number; total: number }; finalModel: string }> {
-  let targetModel = model;
+  const defaultGemini = getDefaultGeminiModel();
+  let targetModel = (model || defaultGemini).trim();
   if (!VERIFIED_GEMINI_MODELS.includes(targetModel)) {
-    targetModel = 'gemini-1.5-flash';
+    targetModel = defaultGemini;
   }
 
   const makeRequest = async (m: string) => {
@@ -288,9 +303,21 @@ async function callGemini(
   try {
     return await makeRequest(targetModel);
   } catch (err: any) {
-    if (err.status === 404 && targetModel !== 'gemini-1.5-flash') {
-      console.warn(`Gemini model ${targetModel} returned 404. Falling back to verified gemini-1.5-flash.`);
-      return await makeRequest('gemini-1.5-flash');
+    if (err.status === 404) {
+      // 404 auto-healing: Google deprecates older models (e.g. gemini-2.5-flash / gemini-1.5-flash)
+      // and instructs users to use gemini-3.8-flash or gemini-flash-latest.
+      const candidateFallbacks = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(
+        fb => fb !== targetModel
+      );
+      for (const fallbackModel of candidateFallbacks) {
+        try {
+          console.warn(`Gemini model ${targetModel} returned 404. Auto-healing fallback to verified ${fallbackModel}...`);
+          return await makeRequest(fallbackModel);
+        } catch (healErr: any) {
+          if (healErr.status === 404) continue;
+          throw healErr;
+        }
+      }
     }
     throw err;
   }
@@ -540,11 +567,11 @@ export async function executeAIRequestWithFallback(
     const candidateId = availableCandidates[i];
     const startTime = Date.now();
     isFallback = i > 0;
-
     try {
       if (candidateId.startsWith('gemini')) {
         const key = geminiKeys[candidateId];
-        const model = config.modelOverrides[candidateId] || 'gemini-1.5-flash';
+        const defaultGemini = getDefaultGeminiModel();
+        const model = config.modelOverrides[candidateId] || defaultGemini;
         const keyIndex = parseInt(candidateId.replace('gemini-', ''), 10) || 1;
 
         const res = await callGemini(key, model, prompt, systemInstruction, jsonMode);

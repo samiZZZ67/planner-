@@ -343,7 +343,7 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
 
   const [activeProvider, setActiveProvider] = useState('auto');
   const [fallbackEnabled, setFallbackEnabled] = useState(true);
-  const [gemini1Model, setGemini1Model] = useState('gemini-2.5-flash');
+  const [gemini1Model, setGemini1Model] = useState('gemini-3.8-flash');
   const [xaiModel, setXaiModel] = useState('grok-2-latest');
 
   const loadConfig = async () => {
@@ -356,7 +356,7 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
         setActiveProvider(data.activeProviderId || 'auto');
         setFallbackEnabled(Boolean(data.fallbackEnabled));
         const g1 = data.providers?.find((p: any) => p.id === 'gemini-1');
-        if (g1) setGemini1Model(g1.model || 'gemini-2.5-flash');
+        if (g1) setGemini1Model(g1.model || 'gemini-3.8-flash');
         const xk = data.providers?.find((p: any) => p.id === 'xai-grok');
         if (xk) setXaiModel(xk.model || 'grok-2-latest');
       }
@@ -473,8 +473,10 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
                   className="v-input"
                   style={{ fontSize: 12, minHeight: 32, padding: '4px 8px' }}
                 >
-                  <option value="gemini-2.5-flash">gemini-2.5-flash (Fast & Generous)</option>
-                  <option value="gemini-2.5-pro">gemini-2.5-pro (Deep Reasoning)</option>
+                  <option value="gemini-3.8-flash">gemini-3.8-flash (Recommended, Fast & Free)</option>
+                  <option value="gemini-flash-latest">gemini-flash-latest (Auto-Updating)</option>
+                  <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+                  <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                   <option value="gemini-1.5-flash">gemini-1.5-flash (Legacy)</option>
                 </select>
               </div>
