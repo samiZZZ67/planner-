@@ -11,10 +11,10 @@ export async function POST(req: NextRequest) {
   try {
     const isAuth = await verifySession();
     if (!isAuth) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized. Please log in with your app password to use the AI assistant.' }, { status: 401 });
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const {
       messages = [] as ChatMessage[],
       action = 'chat', // 'chat' | 'review_plan'
@@ -79,21 +79,86 @@ Always provide sharp, well-structured, actionable advice.`;
         conversationPrompt,
         systemInstruction,
         preferredProvider,
-        { jsonMode: false } // Normal natural language text response!
+        { jsonMode: false } // Normal natural language text response
       );
     } catch (err: any) {
+      console.warn('AI Chat dispatch notice:', err.message);
+
+      // Scenario A: No API keys configured or only placeholder values
       if (err.message === 'NO_CONFIGURED_KEYS') {
+        let content = `I am your AI Planning Assistant. To connect to live cloud models (Google Gemini or Groq), please add your API key into \`.env.local\`:\n\n\`\`\`bash\nGEMINI_API_KEY_1="AIza..."\n# or\nGROQ_API_KEY="gsk_..."\n\`\`\``;
+
+        if (action === 'review_plan' && currentPlanContext) {
+          const totalMins = (currentPlanContext.tasks || []).reduce((acc: number, t: any) => acc + (t.scheduledMinutes || t.estimatedMinutes || 0), 0);
+          const budgetHours = currentPlanContext.focusBudgetHours || 8;
+          const completedCount = (currentPlanContext.tasks || []).filter((t: any) => t.isCompleted).length;
+
+          content += `\n\n---\n### 📋 Local Focus Plan Review (${currentPlanContext.date})\n`;
+          content += `- **Daily Focus Budget:** ${budgetHours}h (${budgetHours * 60}m)\n`;
+          content += `- **Planned Focus Work:** ${Math.round(totalMins / 60 * 10) / 10}h (${totalMins}m)\n`;
+          content += `- **Scheduled Tasks:** ${(currentPlanContext.tasks || []).length} (${completedCount} completed)\n\n`;
+
+          if (totalMins > budgetHours * 60) {
+            content += `⚠️ **Overallocated**: Your planned duration exceeds your budget by ${Math.round((totalMins - budgetHours * 60) / 60 * 10) / 10}h. Consider deferring lower priority tasks.\n`;
+          } else {
+            content += `✅ **Budget Balanced**: Your tasks fit comfortably within your daily focus hours.\n`;
+          }
+          content += `\n*Tip: Connect a Gemini or Groq API key to activate deep cognitive pacing and break recommendations.*`;
+        }
+
         return NextResponse.json({
           ok: true,
           message: {
             role: 'assistant',
-            content: `I am your AI Planning Assistant. To connect to live models (Google Gemini or Groq), please add your API key (e.g. \`GEMINI_API_KEY_1\` or \`GROQ_API_KEY\`) into \`.env.local\`.\n\nIn the meantime, your tasks and focus time budget are active and fully tracking on your device!`,
+            content,
           },
-          provider: 'System AI Engine (Offline)',
+          provider: 'System AI Engine (Offline Guide)',
           model: 'local-assistant',
         });
       }
-      throw err;
+
+      // Scenario B: Plan review requested but live providers failed (rate limit, invalid key, timeout)
+      if (action === 'review_plan' && currentPlanContext) {
+        const totalMins = (currentPlanContext.tasks || []).reduce((acc: number, t: any) => acc + (t.scheduledMinutes || t.estimatedMinutes || 0), 0);
+        const budgetHours = currentPlanContext.focusBudgetHours || 8;
+        const budgetMins = budgetHours * 60;
+        const completedCount = (currentPlanContext.tasks || []).filter((t: any) => t.isCompleted).length;
+
+        let content = `⚠️ **Provider Notice**: Live AI models were temporarily unreachable (${err.message.slice(0, 100)}).\n`;
+        content += `Here is your **Local Cognitive Schedule Review**:\n\n`;
+        content += `- **Date:** ${currentPlanContext.date}\n`;
+        content += `- **Focus Budget:** ${budgetHours}h available\n`;
+        content += `- **Allocated Work:** ${Math.round(totalMins / 60 * 10) / 10}h across ${(currentPlanContext.tasks || []).length} tasks (${completedCount} completed)\n\n`;
+
+        if (totalMins > budgetMins) {
+          content += `⚠️ **Budget Alert**: Total planned tasks exceed your focus budget by ${Math.round((totalMins - budgetMins) / 60 * 10) / 10}h. Trim or reschedule non-critical tasks.\n`;
+        } else {
+          content += `✅ **Budget Status**: Healthy workload balance (${Math.round((budgetMins - totalMins) / 60 * 10) / 10}h buffer remaining).\n`;
+        }
+
+        content += `\n💡 **Productivity Recommendation**: Remember the Ultradian rhythm rule — after every 90 minutes of focused effort, take a 10–15 minute cognitive rest to prevent cognitive fatigue.`;
+
+        return NextResponse.json({
+          ok: true,
+          message: {
+            role: 'assistant',
+            content,
+          },
+          provider: 'Local Scheduler (Cognitive Rule Engine)',
+          model: 'rule-based-evaluator',
+        });
+      }
+
+      // Scenario C: General chat error with live providers (Rate limits, invalid keys, timeouts)
+      const isRateLimit = err.status === 429 || err.message?.includes('rate-limited') || err.message?.includes('429');
+      const statusCode = isRateLimit ? 429 : (err.status || 502);
+
+      return NextResponse.json({
+        ok: false,
+        error: err.message || 'AI provider request failed',
+        details: err.attempts || undefined,
+        retryAfter: err.retryAfter || undefined,
+      }, { status: statusCode });
     }
 
     return NextResponse.json({

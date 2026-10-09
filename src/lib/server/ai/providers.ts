@@ -85,6 +85,26 @@ export function saveStoredAIConfig(config: Partial<StoredAIConfig>): StoredAICon
 }
 
 /**
+ * Validate that an API key is non-empty, reasonably sized, and not a template placeholder
+ */
+export function isValidApiKey(key: string | undefined): boolean {
+  if (!key) return false;
+  const trimmed = key.trim();
+  if (trimmed.length < 8) return false;
+  if (
+    trimmed.startsWith('your-') ||
+    trimmed.includes('placeholder') ||
+    trimmed.includes('example') ||
+    trimmed === 'your-google-gemini-api-key-1' ||
+    trimmed === 'your-groq-api-key' ||
+    trimmed === 'your-xai-grok-api-key'
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Returns available provider definitions and their status (NEVER exposes API keys)
  */
 export function getAIProvidersStatus(): AIConfigState {
@@ -102,7 +122,7 @@ export function getAIProvidersStatus(): AIConfigState {
       id: 'gemini-1',
       name: 'Google Gemini (Key 1)',
       provider: 'gemini',
-      configured: Boolean(geminiKey1 && geminiKey1.trim().length > 0),
+      configured: isValidApiKey(geminiKey1),
       model: config.modelOverrides['gemini-1'] || 'gemini-1.5-flash',
       availableModels: VERIFIED_GEMINI_MODELS,
       isRateLimited: (cooldowns.get('gemini-1')?.until || 0) > now,
@@ -111,7 +131,7 @@ export function getAIProvidersStatus(): AIConfigState {
       id: 'gemini-2',
       name: 'Google Gemini (Key 2)',
       provider: 'gemini',
-      configured: Boolean(geminiKey2 && geminiKey2.trim().length > 0),
+      configured: isValidApiKey(geminiKey2),
       model: config.modelOverrides['gemini-2'] || 'gemini-1.5-flash',
       availableModels: VERIFIED_GEMINI_MODELS,
       isRateLimited: (cooldowns.get('gemini-2')?.until || 0) > now,
@@ -120,7 +140,7 @@ export function getAIProvidersStatus(): AIConfigState {
       id: 'gemini-3',
       name: 'Google Gemini (Key 3)',
       provider: 'gemini',
-      configured: Boolean(geminiKey3 && geminiKey3.trim().length > 0),
+      configured: isValidApiKey(geminiKey3),
       model: config.modelOverrides['gemini-3'] || 'gemini-1.5-flash',
       availableModels: VERIFIED_GEMINI_MODELS,
       isRateLimited: (cooldowns.get('gemini-3')?.until || 0) > now,
@@ -129,7 +149,7 @@ export function getAIProvidersStatus(): AIConfigState {
       id: 'groq',
       name: 'Groq Cloud',
       provider: 'gemini', // Grouped as high-speed fallback provider
-      configured: Boolean(groqKey && groqKey.trim().length > 0),
+      configured: isValidApiKey(groqKey),
       model: config.modelOverrides['groq'] || 'llama-3.3-70b-versatile',
       availableModels: VERIFIED_GROQ_MODELS,
       isRateLimited: (cooldowns.get('groq')?.until || 0) > now,
@@ -138,7 +158,7 @@ export function getAIProvidersStatus(): AIConfigState {
       id: 'xai-grok',
       name: 'xAI Grok',
       provider: 'xai',
-      configured: Boolean(xaiKey && xaiKey.trim().length > 0),
+      configured: isValidApiKey(xaiKey),
       model: config.modelOverrides['xai-grok'] || 'grok-2-latest',
       availableModels: VERIFIED_XAI_MODELS,
       isRateLimited: (cooldowns.get('xai-grok')?.until || 0) > now,
@@ -173,14 +193,14 @@ async function callGemini(
   systemInstruction?: string,
   jsonMode: boolean = true
 ): Promise<{ text: string; tokens?: { prompt: number; completion: number; total: number }; finalModel: string }> {
-  // Ensure we don't request non-existent model
   let targetModel = model;
   if (!VERIFIED_GEMINI_MODELS.includes(targetModel)) {
     targetModel = 'gemini-1.5-flash';
   }
 
   const makeRequest = async (m: string) => {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const cleanKey = apiKey.trim();
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(cleanKey)}`;
 
     const body: any = {
       contents: [
@@ -208,22 +228,41 @@ async function callGemini(
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': cleanKey,
+        },
         body: JSON.stringify(body),
         signal: controller.signal,
       });
 
       if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        const status = res.status;
-        const error: any = new Error(`Gemini API returned HTTP ${status}: ${errText.slice(0, 300)}`);
-        error.status = status;
+        let errorMessage = `HTTP ${res.status}`;
+        try {
+          const errData = await res.json();
+          if (errData?.error?.message) {
+            errorMessage = errData.error.message;
+          }
+        } catch {
+          const errText = await res.text().catch(() => '');
+          if (errText) errorMessage = errText.slice(0, 200);
+        }
+        const error: any = new Error(`Gemini API error (${res.status}): ${errorMessage}`);
+        error.status = res.status;
         throw error;
       }
 
       const data = await res.json();
       const candidate = data.candidates?.[0];
-      const text = candidate?.content?.parts?.[0]?.text || '';
+      let text = candidate?.content?.parts?.[0]?.text || '';
+
+      if (!text && candidate?.finishReason && candidate.finishReason !== 'STOP') {
+        text = `[Response blocked by Gemini filter: ${candidate.finishReason}]`;
+      }
+
+      if (!text && data.promptFeedback?.blockReason) {
+        throw new Error(`Gemini blocked prompt: ${data.promptFeedback.blockReason}`);
+      }
 
       const promptTokens = data.usageMetadata?.promptTokenCount || 0;
       const completionTokens = data.usageMetadata?.candidatesTokenCount || 0;
@@ -234,6 +273,13 @@ async function callGemini(
         tokens: { prompt: promptTokens, completion: completionTokens, total: totalTokens },
         finalModel: m,
       };
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        const timeoutErr: any = new Error('Gemini API request timed out after 20 seconds');
+        timeoutErr.status = 504;
+        throw timeoutErr;
+      }
+      throw err;
     } finally {
       clearTimeout(timeout);
     }
@@ -242,7 +288,6 @@ async function callGemini(
   try {
     return await makeRequest(targetModel);
   } catch (err: any) {
-    // If HTTP 404 occurs on an experimental or custom model, auto-heal with verified 'gemini-1.5-flash'
     if (err.status === 404 && targetModel !== 'gemini-1.5-flash') {
       console.warn(`Gemini model ${targetModel} returned 404. Falling back to verified gemini-1.5-flash.`);
       return await makeRequest('gemini-1.5-flash');
@@ -270,6 +315,13 @@ async function callGroq(
   }
   messages.push({ role: 'user', content: prompt });
 
+  if (jsonMode) {
+    const hasJsonWord = messages.some(m => /json/i.test(m.content));
+    if (!hasJsonWord) {
+      messages[0].content += ' Respond strictly in valid JSON format.';
+    }
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
 
@@ -278,7 +330,7 @@ async function callGroq(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey.trim()}`,
       },
       body: JSON.stringify({
         model: targetModel,
@@ -290,10 +342,18 @@ async function callGroq(
     });
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      const status = res.status;
-      const error: any = new Error(`Groq API returned HTTP ${status}: ${errText.slice(0, 300)}`);
-      error.status = status;
+      let errorMessage = `HTTP ${res.status}`;
+      try {
+        const errData = await res.json();
+        if (errData?.error?.message) {
+          errorMessage = errData.error.message;
+        }
+      } catch {
+        const errText = await res.text().catch(() => '');
+        if (errText) errorMessage = errText.slice(0, 200);
+      }
+      const error: any = new Error(`Groq API error (${res.status}): ${errorMessage}`);
+      error.status = res.status;
       throw error;
     }
 
@@ -309,6 +369,13 @@ async function callGroq(
       tokens: { prompt: promptTokens, completion: completionTokens, total: totalTokens },
       finalModel: targetModel,
     };
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      const timeoutErr: any = new Error('Groq API request timed out after 20 seconds');
+      timeoutErr.status = 504;
+      throw timeoutErr;
+    }
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
@@ -341,7 +408,7 @@ async function callXAI(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey.trim()}`,
       },
       body: JSON.stringify({
         model: targetModel,
@@ -353,10 +420,18 @@ async function callXAI(
     });
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      const status = res.status;
-      const error: any = new Error(`xAI Grok API returned HTTP ${status}: ${errText.slice(0, 300)}`);
-      error.status = status;
+      let errorMessage = `HTTP ${res.status}`;
+      try {
+        const errData = await res.json();
+        if (errData?.error?.message) {
+          errorMessage = errData.error.message;
+        }
+      } catch {
+        const errText = await res.text().catch(() => '');
+        if (errText) errorMessage = errText.slice(0, 200);
+      }
+      const error: any = new Error(`xAI Grok API error (${res.status}): ${errorMessage}`);
+      error.status = res.status;
       throw error;
     }
 
@@ -372,6 +447,13 @@ async function callXAI(
       tokens: { prompt: promptTokens, completion: completionTokens, total: totalTokens },
       finalModel: targetModel,
     };
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      const timeoutErr: any = new Error('xAI API request timed out after 20 seconds');
+      timeoutErr.status = 504;
+      throw timeoutErr;
+    }
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
@@ -413,12 +495,12 @@ export async function executeAIRequestWithFallback(
     candidateOrder = allProviderIds;
   }
 
-  // Filter candidates to those with configured keys and not in active cooldown
+  // Filter candidates to those with configured, valid keys and not in active cooldown
   const availableCandidates = candidateOrder.filter(id => {
     let hasKey = false;
-    if (id.startsWith('gemini')) hasKey = Boolean(geminiKeys[id]?.trim());
-    else if (id === 'groq') hasKey = Boolean(groqKey.trim());
-    else if (id === 'xai-grok') hasKey = Boolean(xaiKey.trim());
+    if (id.startsWith('gemini')) hasKey = isValidApiKey(geminiKeys[id]);
+    else if (id === 'groq') hasKey = isValidApiKey(groqKey);
+    else if (id === 'xai-grok') hasKey = isValidApiKey(xaiKey);
 
     if (!hasKey) return false;
 
@@ -428,6 +510,28 @@ export async function executeAIRequestWithFallback(
     }
     return true;
   });
+
+  const allConfiguredCount = [
+    geminiKeys['gemini-1'],
+    geminiKeys['gemini-2'],
+    geminiKeys['gemini-3'],
+    groqKey,
+    xaiKey,
+  ].filter(k => isValidApiKey(k)).length;
+
+  if (allConfiguredCount === 0) {
+    throw new Error('NO_CONFIGURED_KEYS');
+  }
+
+  if (availableCandidates.length === 0) {
+    const cooldownEntries = Array.from(cooldowns.entries());
+    const nextExpiry = Math.min(...cooldownEntries.map(([_, c]) => c.until));
+    const waitSeconds = Math.max(1, Math.ceil((nextExpiry - now) / 1000));
+    const error: any = new Error(`All configured AI providers are temporarily rate-limited. Please retry in ${waitSeconds}s.`);
+    error.status = 429;
+    error.retryAfter = waitSeconds;
+    throw error;
+  }
 
   const errorsEncountered: string[] = [];
   let isFallback = false;
@@ -508,26 +612,18 @@ export async function executeAIRequestWithFallback(
       if (isRateLimit) {
         cooldowns.set(candidateId, {
           until: Date.now() + 60000,
-          reason: 'Rate limit or quota exhausted',
+          reason: 'Rate limit or quota exhausted (cooldown 60s)',
         });
       }
 
       errorsEncountered.push(`${candidateId} (${status}): ${err.message?.slice(0, 150)}`);
+      console.warn(`Provider ${candidateId} failed:`, err.message);
       // Proceed to next candidate in fallback pipeline
     }
   }
 
-  const allConfiguredCount = [
-    geminiKeys['gemini-1'],
-    geminiKeys['gemini-2'],
-    geminiKeys['gemini-3'],
-    groqKey,
-    xaiKey,
-  ].filter(k => Boolean(k?.trim())).length;
-
-  if (allConfiguredCount === 0) {
-    throw new Error('NO_CONFIGURED_KEYS');
-  }
-
-  throw new Error(`All configured AI providers failed. Attempts: ${errorsEncountered.join(' | ')}`);
+  const error: any = new Error(`All configured AI providers failed. Attempts: ${errorsEncountered.join(' | ')}`);
+  error.status = 502;
+  error.attempts = errorsEncountered;
+  throw error;
 }

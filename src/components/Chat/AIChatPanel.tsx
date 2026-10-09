@@ -98,19 +98,32 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
         }),
       });
 
+      const data = await res.json().catch(() => null);
+
       if (!res.ok) {
-        throw new Error(`Chat error (${res.status})`);
+        let errDesc = data?.error;
+        if (!errDesc) {
+          if (res.status === 401) {
+            errDesc = 'Please log in with your app password to use the AI assistant.';
+          } else if (res.status === 429) {
+            errDesc = 'AI providers are currently rate-limited. Please wait a moment and try again.';
+          } else if (res.status === 502) {
+            errDesc = 'AI provider service is temporarily unreachable. Please verify API keys in .env.local.';
+          } else {
+            errDesc = `Chat service error (${res.status}).`;
+          }
+        }
+        throw new Error(errDesc);
       }
 
-      const data = await res.json();
-      if (data.provider) setActiveProviderName(data.provider);
+      if (data?.provider) setActiveProviderName(data.provider);
 
       const assistantMsg: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: data.message?.content || 'No response received.',
+        content: data?.message?.content || 'No response received from assistant.',
         timestamp: Date.now(),
-        provider: data.provider,
+        provider: data?.provider,
       };
 
       setMessages(prev => [...prev, assistantMsg]);
@@ -118,7 +131,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
       const errorMsg: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: `Error: ${err.message || 'Could not connect to AI service. Please verify your API key in .env.local.'}`,
+        content: `⚠️ ${err.message || 'Could not connect to AI service. Please verify your API key in .env.local.'}`,
         timestamp: Date.now(),
       };
       setMessages(prev => [...prev, errorMsg]);
