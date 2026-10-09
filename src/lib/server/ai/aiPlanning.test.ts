@@ -336,10 +336,10 @@ describe('AI Planning & Hierarchy Test Suite', () => {
         return; // Skip if no real key in test environment
       }
 
-      // Test 1: Default verified model (gemini-3.8-flash)
+      // Test 1: Default verified model
       const res = await executeAIRequestWithFallback('Respond with ONLY: OK', undefined, undefined, { jsonMode: false });
       expect(res.text).toBeDefined();
-      expect(res.model).toBe('gemini-3.8-flash');
+      expect(['gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest']).toContain(res.model);
 
       // Test 2: Auto-healing when gemini-2.5-flash is passed
       process.env.GEMINI_MODEL = 'gemini-2.5-flash';

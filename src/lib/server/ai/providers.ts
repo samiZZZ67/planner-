@@ -27,9 +27,10 @@ export interface StoredAIConfig {
 
 // Verified and currently supported models on Google Gemini API v1beta
 export const VERIFIED_GEMINI_MODELS = [
+  'gemini-3.5-flash',
   'gemini-3.8-flash',
   'gemini-flash-latest',
-  'gemini-3.5-flash',
+  'gemini-3.1-flash-lite',
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
   'gemini-2.0-flash',
@@ -39,7 +40,7 @@ export const VERIFIED_GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-in
 export const VERIFIED_XAI_MODELS = ['grok-2-latest', 'grok-2-mini', 'grok-beta'];
 
 export function getDefaultGeminiModel(): string {
-  return (process.env.GEMINI_MODEL || '').trim() || 'gemini-3.8-flash';
+  return (process.env.GEMINI_MODEL || '').trim() || 'gemini-3.5-flash';
 }
 
 export function getStoredAIConfig(): StoredAIConfig {
@@ -238,7 +239,7 @@ async function callGemini(
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    const timeout = setTimeout(() => controller.abort(), 12000);
 
     try {
       const res = await fetch(url, {
@@ -290,7 +291,7 @@ async function callGemini(
       };
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        const timeoutErr: any = new Error('Gemini API request timed out after 20 seconds');
+        const timeoutErr: any = new Error(`Gemini API request timed out after 12 seconds on model ${m}`);
         timeoutErr.status = 504;
         throw timeoutErr;
       }
@@ -300,21 +301,44 @@ async function callGemini(
     }
   };
 
+  const isFailoverEligible = (err: any) => {
+    const status = err?.status;
+    const msg = (err?.message || '').toLowerCase();
+    return (
+      status === 404 ||
+      status === 503 ||
+      status === 504 ||
+      status === 408 ||
+      (status === 429 && (msg.includes('quota') || msg.includes('exhausted') || msg.includes('demand') || msg.includes('rate'))) ||
+      msg.includes('timed out') ||
+      msg.includes('high demand') ||
+      msg.includes('temporary')
+    );
+  };
+
   try {
     return await makeRequest(targetModel);
   } catch (err: any) {
-    if (err.status === 404) {
-      // 404 auto-healing: Google deprecates older models (e.g. gemini-2.5-flash / gemini-1.5-flash)
-      // and instructs users to use gemini-3.8-flash or gemini-flash-latest.
-      const candidateFallbacks = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'].filter(
-        fb => fb !== targetModel
-      );
+    if (isFailoverEligible(err)) {
+      // Auto-healing fallback chain across distinct Google clusters:
+      // gemini-3.5-flash (fast & unaffected by 3.8 spikes), gemini-flash-latest, gemini-3.8-flash, gemini-3.1-flash-lite
+      const candidateFallbacks = [
+        'gemini-3.5-flash',
+        'gemini-flash-latest',
+        'gemini-3.8-flash',
+        'gemini-3.1-flash-lite',
+      ].filter(fb => fb !== targetModel);
+
       for (const fallbackModel of candidateFallbacks) {
         try {
-          console.warn(`Gemini model ${targetModel} returned 404. Auto-healing fallback to verified ${fallbackModel}...`);
+          console.warn(
+            `Gemini model ${targetModel} encountered ${err.status || 500} (${err.message?.slice(0, 80)}). Auto-healing fallback to verified ${fallbackModel}...`
+          );
           return await makeRequest(fallbackModel);
         } catch (healErr: any) {
-          if (healErr.status === 404) continue;
+          if (isFailoverEligible(healErr)) {
+            continue;
+          }
           throw healErr;
         }
       }
@@ -562,9 +586,24 @@ export async function executeAIRequestWithFallback(
 
   const errorsEncountered: string[] = [];
   let isFallback = false;
+  const attemptedKeyStrings = new Set<string>();
 
   for (let i = 0; i < availableCandidates.length; i++) {
     const candidateId = availableCandidates[i];
+    let candidateKey = '';
+    if (candidateId.startsWith('gemini')) candidateKey = geminiKeys[candidateId];
+    else if (candidateId === 'groq') candidateKey = groqKey;
+    else if (candidateId === 'xai-grok') candidateKey = xaiKey;
+
+    const trimmedKey = (candidateKey || '').trim();
+    if (trimmedKey && attemptedKeyStrings.has(trimmedKey)) {
+      // Skip redundant attempt on identical API key if it already failed all healthy models
+      continue;
+    }
+    if (trimmedKey) {
+      attemptedKeyStrings.add(trimmedKey);
+    }
+
     const startTime = Date.now();
     isFallback = i > 0;
     try {
