@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
         const fallbackPlan = generateAlgorithmicDayPlan(context);
         result = {
           ok: true,
-          provider: 'Template AI Engine (Add GEMINI_API_KEY_1 or XAI_API_KEY in .env.local for live LLM)',
+          provider: 'Template AI Engine (Add GEMINI_API_KEY_1 or GROQ_API_KEY_1 in .env.local for live LLM)',
           model: 'rule-based-hierarchy-scheduler',
           latencyMs: 15,
           rationale: fallbackPlan.rationale,

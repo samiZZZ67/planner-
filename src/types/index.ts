@@ -198,9 +198,9 @@ export interface MonthlyPlan {
 }
 
 export interface AIProviderInfo {
-  id: string; // 'gemini-1' | 'gemini-2' | 'gemini-3' | 'xai-grok'
+  id: string; // 'gemini-1' | 'gemini-2' | 'gemini-3' | 'groq-1' | 'groq-2' | 'groq-3'
   name: string;
-  provider: 'gemini' | 'xai';
+  provider: 'gemini' | 'groq';
   configured: boolean;
   model: string;
   availableModels: string[];

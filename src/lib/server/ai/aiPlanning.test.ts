@@ -212,7 +212,7 @@ describe('AI Planning & Hierarchy Test Suite', () => {
     it('should return safe provider status without exposing API keys', () => {
       const status = getAIProvidersStatus();
       expect(status).toHaveProperty('providers');
-      expect(status.providers).toHaveLength(5); // Gemini 1, Gemini 2, Gemini 3, Groq, xAI Grok
+      expect(status.providers).toHaveLength(6); // Groq 1, Groq 2, Groq 3, Gemini 1, Gemini 2, Gemini 3
 
       for (const p of status.providers) {
         expect(p).toHaveProperty('configured');
@@ -225,9 +225,12 @@ describe('AI Planning & Hierarchy Test Suite', () => {
 
     it('should throw NO_CONFIGURED_KEYS when no API keys are present in environment', async () => {
       const originalG1 = process.env.GEMINI_API_KEY_1;
+      const originalG2 = process.env.GEMINI_API_KEY_2;
+      const originalG3 = process.env.GEMINI_API_KEY_3;
       const originalG = process.env.GEMINI_API_KEY;
-      const originalX = process.env.XAI_API_KEY;
-      const originalGk = process.env.GROK_API_KEY;
+      const originalGroq1 = process.env.GROQ_API_KEY_1;
+      const originalGroq2 = process.env.GROQ_API_KEY_2;
+      const originalGroq3 = process.env.GROQ_API_KEY_3;
       const originalGroq = process.env.GROQ_API_KEY;
 
       try {
@@ -235,16 +238,20 @@ describe('AI Planning & Hierarchy Test Suite', () => {
         delete process.env.GEMINI_API_KEY_2;
         delete process.env.GEMINI_API_KEY_3;
         delete process.env.GEMINI_API_KEY;
-        delete process.env.XAI_API_KEY;
-        delete process.env.GROK_API_KEY;
+        delete process.env.GROQ_API_KEY_1;
+        delete process.env.GROQ_API_KEY_2;
+        delete process.env.GROQ_API_KEY_3;
         delete process.env.GROQ_API_KEY;
 
         await expect(executeAIRequestWithFallback('Hello')).rejects.toThrow('NO_CONFIGURED_KEYS');
       } finally {
         if (originalG1) process.env.GEMINI_API_KEY_1 = originalG1;
+        if (originalG2) process.env.GEMINI_API_KEY_2 = originalG2;
+        if (originalG3) process.env.GEMINI_API_KEY_3 = originalG3;
         if (originalG) process.env.GEMINI_API_KEY = originalG;
-        if (originalX) process.env.XAI_API_KEY = originalX;
-        if (originalGk) process.env.GROK_API_KEY = originalGk;
+        if (originalGroq1) process.env.GROQ_API_KEY_1 = originalGroq1;
+        if (originalGroq2) process.env.GROQ_API_KEY_2 = originalGroq2;
+        if (originalGroq3) process.env.GROQ_API_KEY_3 = originalGroq3;
         if (originalGroq) process.env.GROQ_API_KEY = originalGroq;
       }
     });
@@ -255,13 +262,14 @@ describe('AI Planning & Hierarchy Test Suite', () => {
       expect(isValidApiKey('short')).toBe(false);
       expect(isValidApiKey('your-google-gemini-api-key-1')).toBe(false);
       expect(isValidApiKey('your-groq-api-key')).toBe(false);
-      expect(isValidApiKey('your-xai-grok-api-key')).toBe(false);
+      expect(isValidApiKey('your-groq-api-key-1')).toBe(false);
+      expect(isValidApiKey('your-groq-api-key-2')).toBe(false);
+      expect(isValidApiKey('your-groq-api-key-3')).toBe(false);
       expect(isValidApiKey('placeholder_key_here')).toBe(false);
 
       // Valid realistic keys
       expect(isValidApiKey('AIzaSyD-dummyValidLengthGeminiKey123456')).toBe(true);
-      expect(isValidApiKey('gsk_validLengthGroqKeyABC1234567890')).toBe(true);
-      expect(isValidApiKey('xai-validGrokKey1234567890ABCDEF')).toBe(true);
+      expect(isValidApiKey('gsk_umuDfLmXzAV39a0bpMPZW1234567890')).toBe(true);
     });
 
     it('should respect GEMINI_MODEL environment variable and support verified models', () => {
@@ -291,22 +299,26 @@ describe('AI Planning & Hierarchy Test Suite', () => {
 
     it('should treat placeholder keys as unconfigured without making failed network calls', async () => {
       const originalG1 = process.env.GEMINI_API_KEY_1;
+      const originalGroq1 = process.env.GROQ_API_KEY_1;
       const originalGroq = process.env.GROQ_API_KEY;
 
       try {
         process.env.GEMINI_API_KEY_1 = 'your-google-gemini-api-key-1';
+        process.env.GROQ_API_KEY_1 = 'your-groq-api-key-1';
         process.env.GROQ_API_KEY = 'your-groq-api-key';
         delete process.env.GEMINI_API_KEY_2;
         delete process.env.GEMINI_API_KEY_3;
         delete process.env.GEMINI_API_KEY;
-        delete process.env.XAI_API_KEY;
-        delete process.env.GROK_API_KEY;
+        delete process.env.GROQ_API_KEY_2;
+        delete process.env.GROQ_API_KEY_3;
 
         // Must reject placeholders and throw NO_CONFIGURED_KEYS instead of calling Google/Groq with invalid credentials
         await expect(executeAIRequestWithFallback('Hello')).rejects.toThrow('NO_CONFIGURED_KEYS');
       } finally {
         if (originalG1) process.env.GEMINI_API_KEY_1 = originalG1;
         else delete process.env.GEMINI_API_KEY_1;
+        if (originalGroq1) process.env.GROQ_API_KEY_1 = originalGroq1;
+        else delete process.env.GROQ_API_KEY_1;
         if (originalGroq) process.env.GROQ_API_KEY = originalGroq;
         else delete process.env.GROQ_API_KEY;
       }

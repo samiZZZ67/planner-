@@ -343,8 +343,8 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
 
   const [activeProvider, setActiveProvider] = useState('auto');
   const [fallbackEnabled, setFallbackEnabled] = useState(true);
-  const [gemini1Model, setGemini1Model] = useState('gemini-3.5-flash');
-  const [xaiModel, setXaiModel] = useState('grok-2-latest');
+  const [geminiModel, setGeminiModel] = useState('gemini-3.5-flash');
+  const [groqModel, setGroqModel] = useState('llama-3.3-70b-versatile');
 
   const loadConfig = async () => {
     try {
@@ -356,9 +356,9 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
         setActiveProvider(data.activeProviderId || 'auto');
         setFallbackEnabled(Boolean(data.fallbackEnabled));
         const g1 = data.providers?.find((p: any) => p.id === 'gemini-1');
-        if (g1) setGemini1Model(g1.model || 'gemini-3.5-flash');
-        const xk = data.providers?.find((p: any) => p.id === 'xai-grok');
-        if (xk) setXaiModel(xk.model || 'grok-2-latest');
+        if (g1) setGeminiModel(g1.model || 'gemini-3.5-flash');
+        const grq = data.providers?.find((p: any) => p.id === 'groq-1');
+        if (grq) setGroqModel(grq.model || 'llama-3.3-70b-versatile');
       }
     } catch {
       // Offline fallback
@@ -381,10 +381,12 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
           activeProviderId: activeProvider,
           fallbackEnabled,
           modelOverrides: {
-            'gemini-1': gemini1Model,
-            'gemini-2': gemini1Model,
-            'gemini-3': gemini1Model,
-            'xai-grok': xaiModel,
+            'gemini-1': geminiModel,
+            'gemini-2': geminiModel,
+            'gemini-3': geminiModel,
+            'groq-1': groqModel,
+            'groq-2': groqModel,
+            'groq-3': groqModel,
           },
         }),
       });
@@ -428,7 +430,7 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
       </div>
 
       <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-        Configure Google Gemini (up to 3 keys) and xAI Grok. Keys are stored safely in server environment variables (<code style={{ color: 'var(--accent-color)' }}>.env.local</code>) and are never exposed to the client.
+        Configure Groq Cloud (up to 3 keys) and Google Gemini (up to 3 keys). Groq provides instant, ultra-fast inference to eliminate limits and delays. Keys are stored safely in server environment variables (<code style={{ color: 'var(--accent-color)' }}>.env.local</code>) and are never exposed to the client.
       </p>
 
       {/* Provider Slots Grid */}
@@ -464,12 +466,28 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
               </span>
             </div>
 
+            {p.id === 'groq-1' && (
+              <div style={{ marginTop: 4 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Model:</label>
+                <select
+                  value={groqModel}
+                  onChange={e => setGroqModel(e.target.value)}
+                  className="v-input"
+                  style={{ fontSize: 12, minHeight: 32, padding: '4px 8px' }}
+                >
+                  <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Frontier 70B - Ultra Fast)</option>
+                  <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Instant Speed)</option>
+                  <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
+                </select>
+              </div>
+            )}
+
             {p.id === 'gemini-1' && (
               <div style={{ marginTop: 4 }}>
                 <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Model:</label>
                 <select
-                  value={gemini1Model}
-                  onChange={e => setGemini1Model(e.target.value)}
+                  value={geminiModel}
+                  onChange={e => setGeminiModel(e.target.value)}
                   className="v-input"
                   style={{ fontSize: 12, minHeight: 32, padding: '4px 8px' }}
                 >
@@ -479,22 +497,6 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
                   <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Ultra-Lightweight)</option>
                   <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                   <option value="gemini-1.5-flash">gemini-1.5-flash (Legacy)</option>
-                </select>
-              </div>
-            )}
-
-            {p.id === 'xai-grok' && (
-              <div style={{ marginTop: 4 }}>
-                <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Model:</label>
-                <select
-                  value={xaiModel}
-                  onChange={e => setXaiModel(e.target.value)}
-                  className="v-input"
-                  style={{ fontSize: 12, minHeight: 32, padding: '4px 8px' }}
-                >
-                  <option value="grok-2-latest">grok-2-latest (Frontier)</option>
-                  <option value="grok-2-mini">grok-2-mini (Fast)</option>
-                  <option value="grok-beta">grok-beta</option>
                 </select>
               </div>
             )}
@@ -520,11 +522,13 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
             className="v-input"
             style={{ fontSize: 13 }}
           >
-            <option value="auto">Auto (Smart Fallback across all configured keys)</option>
+            <option value="auto">Auto (Smart Fallback across Groq & Gemini keys)</option>
+            <option value="groq-1">Groq Cloud (Key 1 - Ultra Fast)</option>
+            <option value="groq-2">Groq Cloud (Key 2)</option>
+            <option value="groq-3">Groq Cloud (Key 3)</option>
             <option value="gemini-1">Google Gemini (Key 1)</option>
             <option value="gemini-2">Google Gemini (Key 2)</option>
             <option value="gemini-3">Google Gemini (Key 3)</option>
-            <option value="xai-grok">xAI Grok</option>
           </select>
         </div>
 
