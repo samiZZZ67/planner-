@@ -17,6 +17,8 @@ export interface Section {
   serverSeq?: number;
 }
 
+export type TaskStatus = 'not_started' | 'in_progress' | 'completed';
+
 export interface Task {
   id: string;
   date: string; // YYYY-MM-DD
@@ -46,6 +48,14 @@ export interface Task {
   isSample: boolean;
   synced?: number;
   serverSeq?: number;
+  // New scheduling fields
+  startTime?: string;       // e.g. "14:00" (24h format)
+  endTime?: string;         // e.g. "17:00"
+  scheduledMinutes?: number; // auto-calculated from startTime/endTime
+  actualMinutes?: number;   // actual time spent
+  status?: TaskStatus;      // not_started | in_progress | completed
+  deadline?: string;        // YYYY-MM-DD
+  result?: string;          // outcome/result notes
 }
 
 export interface TimeLog {

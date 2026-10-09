@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import { CheckSquare, BarChart3, Settings, Play, Pause, Square } from 'lucide-react';
+import { ListChecks, BarChart3, Settings, Play, Pause, Square, Plus, StickyNote, Tag } from 'lucide-react';
 import { useTimer } from '@/lib/timer/useTimer';
 
-export type TabType = 'todo' | 'analytics' | 'settings';
+export type TabType = 'add_task' | 'note' | 'todo' | 'category' | 'analytics' | 'settings';
 
 interface PhoneTabBarProps {
   currentTab: TabType;
@@ -23,9 +23,10 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
   } = useTimer();
 
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
-    { id: 'todo', label: 'Todo', icon: <CheckSquare size={19} /> },
-    { id: 'analytics', label: 'Analytics', icon: <BarChart3 size={19} /> },
-    { id: 'settings', label: 'Settings', icon: <Settings size={19} /> },
+    { id: 'todo', label: 'To-Do', icon: <ListChecks size={19} /> },
+    { id: 'add_task', label: 'Add Task', icon: <Plus size={19} /> },
+    { id: 'note', label: 'Note', icon: <StickyNote size={19} /> },
+    { id: 'category', label: 'Category', icon: <Tag size={19} /> },
   ];
 
   return (
@@ -130,15 +131,15 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
       )}
 
       {/* Floating Bottom Capsule Dock */}
-      <div style={{ width: '100%', maxWidth: 360, padding: '0 16px 8px', pointerEvents: 'auto' }}>
+      <div style={{ width: '100%', maxWidth: 400, padding: '0 16px 8px', pointerEvents: 'auto' }}>
         <nav
           className="v-dock"
           style={{
-            height: 56,
+            height: 60,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-around',
-            padding: '0 12px',
+            padding: '0 8px',
           }}
           aria-label="Phone Navigation Tab Bar"
         >
@@ -149,18 +150,27 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
                 key={tab.id}
                 type="button"
                 onClick={() => onSelectTab(tab.id)}
-                className={`v-circle-btn${isActive ? ' active' : ''}`}
                 style={{
-                  width: 44,
-                  height: 44,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 3,
+                  padding: '6px 10px',
+                  borderRadius: 14,
                   border: isActive ? '1.5px solid var(--accent-color)' : '1px solid transparent',
                   background: isActive ? 'var(--accent-glow)' : 'transparent',
                   color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  minWidth: 56,
                 }}
                 title={tab.label}
                 aria-label={tab.label}
               >
                 {tab.icon}
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.02em' }}>
+                  {tab.label}
+                </span>
               </button>
             );
           })}

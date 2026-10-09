@@ -11,7 +11,10 @@ import { PCSidebar } from '@/components/Navigation/PCSidebar';
 import { PhoneTabBar, type TabType } from '@/components/Navigation/PhoneTabBar';
 import { UpdateBanner } from '@/components/Navigation/UpdateBanner';
 
-import { TodoScreen } from '@/components/Todo/TodoScreen';
+import { AddTaskScreen } from '@/components/AddTask/AddTaskScreen';
+import { NoteScreen } from '@/components/Note/NoteScreen';
+import { TodoListScreen } from '@/components/TodoList/TodoListScreen';
+import { CategoryScreen } from '@/components/Category/CategoryScreen';
 import { AnalyticsScreen } from '@/components/Analytics/AnalyticsScreen';
 import { SettingsScreen } from '@/components/Settings/SettingsScreen';
 import { LoginModal } from '@/components/Modals/LoginModal';
@@ -23,10 +26,11 @@ export default function NightPlannerApp() {
   // Mount Guard for Offline Client SPA & Next 16 Safety
   const [isMounted, setIsMounted] = useState(false);
 
-  // Navigation: Only Todo, Analytics, Settings
+  // 4 Primary Views: add_task | note | todo | category (plus analytics | settings)
   const [currentTab, setCurrentTab] = useState<TabType>('todo');
   const [currentDate, setCurrentDate] = useState<string>('2026-01-01');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
@@ -83,11 +87,20 @@ export default function NightPlannerApp() {
 
       if (e.key === '1') {
         e.preventDefault();
-        setCurrentTab('todo');
+        setCurrentTab('add_task');
       } else if (e.key === '2') {
         e.preventDefault();
-        setCurrentTab('analytics');
+        setCurrentTab('note');
       } else if (e.key === '3') {
+        e.preventDefault();
+        setCurrentTab('todo');
+      } else if (e.key === '4') {
+        e.preventDefault();
+        setCurrentTab('category');
+      } else if (e.key === '5') {
+        e.preventDefault();
+        setCurrentTab('analytics');
+      } else if (e.key === '6') {
         e.preventDefault();
         setCurrentTab('settings');
       } else if (e.key === ' ' && activeTimer) {
@@ -163,41 +176,108 @@ export default function NightPlannerApp() {
             transition: 'max-width 0.25s ease',
           }}
         >
-          {/* Segmented Glass Tabs: Todo, Analytics, Settings */}
-          <div className="v-tabs" role="tablist">
+          {/* Segmented Glass Tabs: 4 Primary Buttons */}
+          <div className="v-tabs" role="tablist" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', gap: isPhone ? 16 : 28 }}>
+            <button
+              onClick={() => setCurrentTab('add_task')}
+              className={`v-tab-btn${currentTab === 'add_task' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={currentTab === 'add_task'}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Add Task
+            </button>
+            <button
+              onClick={() => setCurrentTab('note')}
+              className={`v-tab-btn${currentTab === 'note' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={currentTab === 'note'}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Note
+            </button>
             <button
               onClick={() => setCurrentTab('todo')}
               className={`v-tab-btn${currentTab === 'todo' ? ' active' : ''}`}
               role="tab"
               aria-selected={currentTab === 'todo'}
+              style={{ whiteSpace: 'nowrap' }}
             >
-              Todo
+              To-Do List
             </button>
             <button
-              onClick={() => setCurrentTab('analytics')}
-              className={`v-tab-btn${currentTab === 'analytics' ? ' active' : ''}`}
+              onClick={() => setCurrentTab('category')}
+              className={`v-tab-btn${currentTab === 'category' ? ' active' : ''}`}
               role="tab"
-              aria-selected={currentTab === 'analytics'}
+              aria-selected={currentTab === 'category'}
+              style={{ whiteSpace: 'nowrap' }}
             >
-              Analytics
+              Category
             </button>
-            <button
-              onClick={() => setCurrentTab('settings')}
-              className={`v-tab-btn${currentTab === 'settings' ? ' active' : ''}`}
-              role="tab"
-              aria-selected={currentTab === 'settings'}
-            >
-              Settings
-            </button>
+
+            {/* Preserved secondary tabs if active */}
+            {currentTab === 'analytics' && (
+              <button
+                onClick={() => setCurrentTab('analytics')}
+                className="v-tab-btn active"
+                role="tab"
+                aria-selected={true}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                Analytics
+              </button>
+            )}
+            {currentTab === 'settings' && (
+              <button
+                onClick={() => setCurrentTab('settings')}
+                className="v-tab-btn active"
+                role="tab"
+                aria-selected={true}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                Settings
+              </button>
+            )}
           </div>
 
-          {/* Active Screen Content (Spacious & Clean) */}
+          {/* Active Screen Content */}
           <div style={{ padding: isPhone ? '20px 16px' : '28px 32px' }}>
-            {currentTab === 'todo' && (
-              <TodoScreen
+            {currentTab === 'add_task' && (
+              <AddTaskScreen
                 currentDate={currentDate}
                 onChangeDate={setCurrentDate}
                 isPhone={isPhone}
+                onTaskAdded={() => setCurrentTab('todo')}
+              />
+            )}
+
+            {currentTab === 'note' && (
+              <NoteScreen
+                currentDate={currentDate}
+                onChangeDate={setCurrentDate}
+                isPhone={isPhone}
+              />
+            )}
+
+            {currentTab === 'todo' && (
+              <TodoListScreen
+                currentDate={currentDate}
+                onChangeDate={setCurrentDate}
+                isPhone={isPhone}
+                onOpenTaskInCategory={(taskId) => {
+                  setFocusTaskId(taskId);
+                  setCurrentTab('category');
+                }}
+                onNavigateToAddTask={() => setCurrentTab('add_task')}
+              />
+            )}
+
+            {currentTab === 'category' && (
+              <CategoryScreen
+                currentDate={currentDate}
+                isPhone={isPhone}
+                focusTaskId={focusTaskId}
+                onClearFocus={() => setFocusTaskId(null)}
               />
             )}
 

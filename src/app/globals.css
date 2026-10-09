@@ -14,6 +14,15 @@
 }
 
 @font-face {
+  font-family: 'Handle';
+  src: url('/fonts/handle/Handle.ttf') format('truetype'),
+       url('/fonts/handle/Handle.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: 'Bloody Hell';
   src: url('/fonts/Demon Slave.ttf') format('truetype'),
        url('/fonts/BloodyHell.woff2') format('woff2');
@@ -25,7 +34,8 @@
 :root {
   --font-app: 'Demon Slave', 'Bloody Hell', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-heading: 'Demon Slave', 'Bloody Hell', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-body: 'Demon Slave', 'Bloody Hell', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-body: 'Handle', 'Demon Slave', system-ui, -apple-system, sans-serif;
+  --font-handle: 'Handle', system-ui, -apple-system, sans-serif;
 
   /* Dark Obsidian Glass Tokens */
   --v-app-bg: #0d0d11;
@@ -341,10 +351,40 @@ html, body {
   letter-spacing: 0.03em;
 }
 
+/* Handle Font Class (descriptions, notes, long text) */
+.font-handle {
+  font-family: var(--font-handle) !important;
+}
+
 /* Timer Pulse Keyframe */
 @keyframes timerPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.6; transform: scale(0.92); }
+}
+
+/* Focus Budget Bar */
+.v-budget-bar {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--v-glass-border-subtle);
+  overflow: hidden;
+}
+.v-budget-bar-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.35s ease;
+}
+
+/* Status badge */
+.v-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid;
 }
 
 /* Custom Scrollbar */

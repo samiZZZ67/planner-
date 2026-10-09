@@ -55,6 +55,19 @@ export async function ensureSchema(sql: any): Promise<void> {
       server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
     );
 
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_time TEXT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS end_time TEXT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS scheduled_minutes INTEGER;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS actual_minutes INTEGER;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'not_started';
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deadline VARCHAR(10);
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS result TEXT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_bold BOOLEAN DEFAULT FALSE;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_underline BOOLEAN DEFAULT FALSE;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_strikethrough BOOLEAN DEFAULT FALSE;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS target_minutes INTEGER;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS expected_completion_time TEXT;
+
     CREATE TABLE IF NOT EXISTS time_logs (
       id VARCHAR(64) PRIMARY KEY,
       task_id VARCHAR(64) NOT NULL,
@@ -128,12 +141,24 @@ export async function syncBatch(
   for (const t of incoming.tasks) {
     const tagsJson = JSON.stringify(t.tags || []);
     await sql`
-      INSERT INTO tasks (id, date, section_id, title, description, strategy, done_means, estimated_minutes, priority, must_do, tags, icon, text_color, image, is_completed, completed_at, "order", created_at, updated_at, deleted, is_sample, server_seq)
+      INSERT INTO tasks (
+        id, date, section_id, title, description, strategy, done_means,
+        estimated_minutes, priority, must_do, tags, icon, text_color, image,
+        is_completed, completed_at, "order", created_at, updated_at, deleted, is_sample,
+        start_time, end_time, scheduled_minutes, actual_minutes, status, deadline, result,
+        is_bold, is_underline, is_strikethrough, target_minutes, expected_completion_time,
+        server_seq
+      )
       VALUES (
         ${t.id}, ${t.date}, ${t.sectionId}, ${t.title}, ${t.description || ''}, ${t.strategy || ''}, ${t.doneMeans || ''},
         ${t.estimatedMinutes || 0}, ${t.priority || 'Medium'}, ${t.mustDo || false}, ${tagsJson}::jsonb, ${t.icon || ''},
         ${t.textColor || ''}, ${t.image || null}, ${t.isCompleted || false}, ${t.completedAt ?? null},
-        ${t.order || 0}, ${t.createdAt}, ${t.updatedAt}, ${t.deleted}, ${t.isSample}, nextval('server_seq')
+        ${t.order || 0}, ${t.createdAt}, ${t.updatedAt}, ${t.deleted}, ${t.isSample},
+        ${t.startTime ?? null}, ${t.endTime ?? null}, ${t.scheduledMinutes ?? null}, ${t.actualMinutes ?? null},
+        ${t.status || 'not_started'}, ${t.deadline ?? null}, ${t.result ?? null},
+        ${t.isBold ?? false}, ${t.isUnderline ?? false}, ${t.isStrikethrough ?? false},
+        ${t.targetMinutes ?? null}, ${t.expectedCompletionTime ?? null},
+        nextval('server_seq')
       )
       ON CONFLICT (id) DO UPDATE SET
         date = EXCLUDED.date,
@@ -155,6 +180,18 @@ export async function syncBatch(
         updated_at = EXCLUDED.updated_at,
         deleted = EXCLUDED.deleted,
         is_sample = EXCLUDED.is_sample,
+        start_time = EXCLUDED.start_time,
+        end_time = EXCLUDED.end_time,
+        scheduled_minutes = EXCLUDED.scheduled_minutes,
+        actual_minutes = EXCLUDED.actual_minutes,
+        status = EXCLUDED.status,
+        deadline = EXCLUDED.deadline,
+        result = EXCLUDED.result,
+        is_bold = EXCLUDED.is_bold,
+        is_underline = EXCLUDED.is_underline,
+        is_strikethrough = EXCLUDED.is_strikethrough,
+        target_minutes = EXCLUDED.target_minutes,
+        expected_completion_time = EXCLUDED.expected_completion_time,
         server_seq = nextval('server_seq')
       WHERE EXCLUDED.updated_at >= tasks.updated_at
     `;
@@ -247,6 +284,18 @@ export async function syncBatch(
     deleted: Boolean(r.deleted),
     isSample: Boolean(r.is_sample),
     serverSeq: Number(r.server_seq),
+    startTime: r.start_time || undefined,
+    endTime: r.end_time || undefined,
+    scheduledMinutes: r.scheduled_minutes ? Number(r.scheduled_minutes) : undefined,
+    actualMinutes: r.actual_minutes ? Number(r.actual_minutes) : undefined,
+    status: r.status || 'not_started',
+    deadline: r.deadline || undefined,
+    result: r.result || undefined,
+    isBold: Boolean(r.is_bold),
+    isUnderline: Boolean(r.is_underline),
+    isStrikethrough: Boolean(r.is_strikethrough),
+    targetMinutes: r.target_minutes ? Number(r.target_minutes) : undefined,
+    expectedCompletionTime: r.expected_completion_time || undefined,
   }));
 
   const serverTimeLogs: TimeLog[] = (changedTimeLogs || []).map((r: any) => ({

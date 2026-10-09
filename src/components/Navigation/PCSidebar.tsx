@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { CheckSquare, BarChart3, Settings } from 'lucide-react';
+import { ListChecks, BarChart3, Settings, Plus, StickyNote, Tag } from 'lucide-react';
 import type { TabType } from './PhoneTabBar';
 
 interface PCSidebarProps {
@@ -10,6 +10,13 @@ interface PCSidebarProps {
 }
 
 export function PCSidebar({ currentTab, onSelectTab }: PCSidebarProps) {
+  const navItems: { id: TabType; icon: React.ReactNode; label: string; shortcut: string }[] = [
+    { id: 'add_task', icon: <Plus size={20} />, label: 'Add Task', shortcut: '1' },
+    { id: 'note', icon: <StickyNote size={20} />, label: 'Note', shortcut: '2' },
+    { id: 'todo', icon: <ListChecks size={20} />, label: 'To-Do List', shortcut: '3' },
+    { id: 'category', icon: <Tag size={20} />, label: 'Category', shortcut: '4' },
+  ];
+
   return (
     <aside
       className="v-dock"
@@ -51,33 +58,40 @@ export function PCSidebar({ currentTab, onSelectTab }: PCSidebarProps) {
 
       <div style={{ width: 32, height: 1, background: 'var(--v-glass-border-subtle)', margin: '2px 0' }} />
 
-      {/* Nav Icons Stack: Todo, Analytics, Settings */}
+      {/* Nav Icons Stack */}
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-        <button
-          type="button"
-          onClick={() => onSelectTab('todo')}
-          className={`v-circle-btn${currentTab === 'todo' ? ' active' : ''}`}
-          title="Todo (1)"
-          aria-label="Todo"
-        >
-          <CheckSquare size={20} />
-        </button>
+        {navItems.map(item => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSelectTab(item.id)}
+            className={`v-circle-btn${currentTab === item.id ? ' active' : ''}`}
+            title={`${item.label} (${item.shortcut})`}
+            aria-label={item.label}
+          >
+            {item.icon}
+          </button>
+        ))}
+      </nav>
 
+      <div style={{ width: 32, height: 1, background: 'var(--v-glass-border-subtle)', margin: '2px 0' }} />
+
+      {/* Analytics & Settings at bottom */}
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
         <button
           type="button"
           onClick={() => onSelectTab('analytics')}
           className={`v-circle-btn${currentTab === 'analytics' ? ' active' : ''}`}
-          title="Analytics (2)"
+          title="Analytics (5)"
           aria-label="Analytics"
         >
           <BarChart3 size={20} />
         </button>
-
         <button
           type="button"
           onClick={() => onSelectTab('settings')}
           className={`v-circle-btn${currentTab === 'settings' ? ' active' : ''}`}
-          title="Settings (3)"
+          title="Settings (6)"
           aria-label="Settings"
         >
           <Settings size={20} />
