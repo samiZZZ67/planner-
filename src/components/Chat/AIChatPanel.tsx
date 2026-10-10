@@ -8,6 +8,7 @@ import {
   Maximize2, Minimize2
 } from 'lucide-react';
 import type { Task, Section, WeeklyPlan, MonthlyPlan } from '@/types';
+import { apiFetch } from '@/lib/api/apiClient';
 
 interface AIChatPanelProps {
   isOpen: boolean;
@@ -90,7 +91,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
         planContext = await gatherPlanContext();
       }
 
-      const res = await fetch('/api/ai/chat', {
+      const res = await apiFetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

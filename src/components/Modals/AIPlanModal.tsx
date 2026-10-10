@@ -8,6 +8,7 @@ import {
   Calendar, Layers, Star, ExternalLink, ChevronRight, Edit2
 } from 'lucide-react';
 import type { Task, Section, WeeklyPlan, MonthlyPlan, ProposedTask, AIPlanGenerationResult } from '@/types';
+import { apiFetch } from '@/lib/api/apiClient';
 
 interface AIPlanModalProps {
   isOpen: boolean;
@@ -73,7 +74,7 @@ export function AIPlanModal({
       const existingDayTasks = await db.tasks.filter(t => t.date === targetDate && !t.deleted).toArray();
       const secs = await db.sections.filter(s => !s.deleted).toArray();
 
-      const res = await fetch('/api/ai/generate-day-plan', {
+      const res = await apiFetch('/api/ai/generate-day-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

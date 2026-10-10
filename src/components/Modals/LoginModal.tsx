@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Lock, Shield, Eye, EyeOff } from 'lucide-react';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { apiFetch } from '@/lib/api/apiClient';
 
 interface LoginModalProps {
   isOpen?: boolean;
@@ -21,9 +22,16 @@ export function LoginModal({ isOpen = true, onClose }: LoginModalProps) {
     e.preventDefault();
     setLoading(true); setError('');
     try {
-      const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+      const res = await apiFetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
       const data = await res.json();
       if (res.ok) {
+        if (data.token) {
+          localStorage.setItem('np_session_token', data.token);
+        }
         syncEngine.triggerSync();
         onClose();
       } else {

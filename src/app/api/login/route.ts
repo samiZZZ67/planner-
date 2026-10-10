@@ -42,13 +42,19 @@ export async function POST(req: NextRequest) {
     clearRateLimit(ip);
     const token = await createSessionToken();
 
-    const response = NextResponse.json({ ok: true, message: 'Logged in successfully.' });
+    const response = NextResponse.json({
+      ok: true,
+      token,
+      message: 'Logged in successfully.',
+    });
+
+    const isCrossDomain = Boolean(process.env.CLIENT_URL);
     response.cookies.set({
       name: SESSION_COOKIE_NAME,
       value: token,
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production' || isCrossDomain,
+      sameSite: isCrossDomain ? 'none' : 'lax',
       path: '/',
       maxAge: 90 * 24 * 60 * 60, // 90 days
     });

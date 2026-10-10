@@ -1,6 +1,8 @@
 import { db, getUnsyncedChanges, getLastServerSeq, setLastServerSeq, getLastSyncedTime, setLastSyncedTime } from '@/lib/db';
 import { resolveRecordConflict, calculateBackoffDelay } from './syncLogic';
 import type { SyncStatus, SyncPayload, SyncResponse } from '@/types';
+import { apiFetch } from '@/lib/api/apiClient';
+import { getSocket, notifySyncUpdate } from './socketClient';
 
 type SyncListener = (state: SyncEngineState) => void;
 
@@ -54,6 +56,17 @@ class SyncEngine {
     window.addEventListener('offline', () => {
       this.updateState({ status: 'offline' });
     });
+
+    // Real-time synchronization via Socket.IO across Phone and PC
+    const socket = getSocket();
+    if (socket) {
+      socket.on('sync:remote_update', () => {
+        // Another connected device updated tasks; sync immediately!
+        if (navigator.onLine && !this.isSyncing) {
+          this.triggerSync();
+        }
+      });
+    }
 
     // Sync on focus/visibility only if not currently waiting for 30s save window
     window.addEventListener('focus', () => {
@@ -235,7 +248,7 @@ class SyncEngine {
         monthlyPlans: unsynced.monthlyPlans,
       };
 
-      const response = await fetch('/api/sync', {
+      const response = await apiFetch('/api/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -338,6 +351,9 @@ class SyncEngine {
       await setLastServerSeq(result.currentServerSeq);
       const now = Date.now();
       await setLastSyncedTime(now);
+
+      // Broadcast update via WebSocket to other devices (Phone <-> PC)
+      notifySyncUpdate();
 
       this.retryCount = 0;
       this.firstUnsyncedTimestamp = null;

@@ -118,13 +118,34 @@ export async function createSessionToken(): Promise<string> {
 /**
  * Verify session cookie from Next.js headers/request
  */
-export async function verifySession(): Promise<boolean> {
+export async function verifySession(req?: Request | any): Promise<boolean> {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-    if (!sessionCookie) return false;
+    let token: string | null = null;
 
-    const rawPayload = await verify(sessionCookie, getSecretKey());
+    // 1. Check Authorization header or x-session-token (essential for cross-origin and mobile PWA)
+    if (req && typeof req.headers?.get === 'function') {
+      const authHeader = req.headers.get('authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7).trim();
+      }
+      if (!token) {
+        token = req.headers.get('x-session-token');
+      }
+    }
+
+    // 2. Check httpOnly cookie if no header token was provided
+    if (!token) {
+      try {
+        const cookieStore = await cookies();
+        token = cookieStore.get(SESSION_COOKIE_NAME)?.value || null;
+      } catch {
+        // cookies() can throw outside Next request context
+      }
+    }
+
+    if (!token) return false;
+
+    const rawPayload = await verify(token, getSecretKey());
     if (!rawPayload) return false;
 
     const data = JSON.parse(Buffer.from(rawPayload, 'base64url').toString('utf8'));

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { WeeklyPlan, Task, TimeLog, MonthlyPlan } from '@/types';
 import { countWords, getWeekBounds } from '@/lib/plan/weeklyPlanUtils';
+import { apiFetch } from '@/lib/api/apiClient';
 
 interface WeeklyPlanScreenProps {
   currentDate: string;
@@ -155,7 +156,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
         return;
       }
 
-      const res = await fetch('/api/ai/weekly-report', {
+      const res = await apiFetch('/api/ai/weekly-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

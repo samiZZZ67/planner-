@@ -2,12 +2,33 @@ import { neon } from '@neondatabase/serverless';
 import type { Section, Task, TimeLog, Day, WeeklyPlan, MonthlyPlan } from '@/types';
 
 export function getDb() {
-  const databaseUrl = process.env.DATABASE_URL;
+  let databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl || databaseUrl.includes('dummy')) {
     return null;
   }
+
+  // Ensure SSL is enforced for Postgres (Neon) connection
+  if (!databaseUrl.includes('sslmode=')) {
+    const sep = databaseUrl.includes('?') ? '&' : '?';
+    databaseUrl = `${databaseUrl}${sep}sslmode=require`;
+  }
+
   return neon(databaseUrl);
 }
+
+export async function checkDbConnection(): Promise<{ ok: boolean; message?: string }> {
+  try {
+    const sql = getDb();
+    if (!sql) {
+      return { ok: false, message: 'DATABASE_URL is not configured' };
+    }
+    const result = await sql`SELECT 1 as connected`;
+    return { ok: Array.isArray(result) && result.length > 0 };
+  } catch (err: any) {
+    return { ok: false, message: err.message || 'Database connection error' };
+  }
+}
+
 
 /**
  * Automatically creates tables and sequence if they do not exist

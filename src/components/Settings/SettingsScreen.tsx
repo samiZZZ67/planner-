@@ -6,6 +6,7 @@ import { syncEngine } from '@/lib/sync/syncEngine';
 import {
   Sun, Moon, Download, Upload, Shield, LogOut, Sparkles, Check, Bell, BellOff, Volume2
 } from 'lucide-react';
+import { apiFetch } from '@/lib/api/apiClient';
 import {
   getNotificationStatus,
   requestNotificationPermission,
@@ -349,7 +350,7 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
   const loadConfig = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/ai/config');
+      const res = await apiFetch('/api/ai/config');
       if (res.ok) {
         const data = await res.json();
         setConfig(data);
@@ -374,7 +375,7 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
   const handleSave = async () => {
     try {
       setSaving(true);
-      const res = await fetch('/api/ai/config', {
+      const res = await apiFetch('/api/ai/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

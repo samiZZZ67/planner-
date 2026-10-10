@@ -21,6 +21,7 @@ import { AnalyticsScreen } from '@/components/Analytics/AnalyticsScreen';
 import { SettingsScreen } from '@/components/Settings/SettingsScreen';
 import { LoginModal } from '@/components/Modals/LoginModal';
 import { AIChatPanel } from '@/components/Chat/AIChatPanel';
+import { apiFetch } from '@/lib/api/apiClient';
 
 export default function NightPlannerApp() {
   const { isPhone, isPC } = useDeviceType();
@@ -139,10 +140,17 @@ export default function NightPlannerApp() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/logout', { method: 'POST' });
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('np_session_token');
+      }
+      await apiFetch('/api/logout', { method: 'POST' });
       window.location.reload();
     } catch {
       // Offline fallback
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('np_session_token');
+      }
+      window.location.reload();
     }
   };
 

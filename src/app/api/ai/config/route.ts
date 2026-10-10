@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/server/auth';
 import { getAIProvidersStatus, saveStoredAIConfig } from '@/lib/server/ai/providers';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const isAuth = await verifySession();
+    const isAuth = await verifySession(req);
     if (!isAuth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const isAuth = await verifySession();
+    const isAuth = await verifySession(req);
     if (!isAuth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

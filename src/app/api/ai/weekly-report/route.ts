@@ -4,7 +4,7 @@ import { executeAIRequestWithFallback } from '@/lib/server/ai/providers';
 
 export async function POST(req: NextRequest) {
   try {
-    const isAuth = await verifySession();
+    const isAuth = await verifySession(req);
     if (!isAuth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

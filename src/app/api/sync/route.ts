@@ -6,7 +6,7 @@ import type { SyncPayload } from '@/types';
 
 export async function POST(req: NextRequest) {
   try {
-    const isAuthenticated = await verifySession();
+    const isAuthenticated = await verifySession(req);
     if (!isAuthenticated) {
       return NextResponse.json(
         { error: 'Session expired or not logged in', code: 'AUTH_REQUIRED' },

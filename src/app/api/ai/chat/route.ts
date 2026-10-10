@@ -9,7 +9,7 @@ interface ChatMessage {
 
 export async function POST(req: NextRequest) {
   try {
-    const isAuth = await verifySession();
+    const isAuth = await verifySession(req);
     if (!isAuth) {
       return NextResponse.json({ error: 'Unauthorized. Please log in with your app password to use the AI assistant.' }, { status: 401 });
     }
