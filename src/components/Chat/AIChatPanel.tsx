@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { db } from '@/lib/db';
+import { db, getActiveTimer } from '@/lib/db';
+import { syncEngine } from '@/lib/sync/syncEngine';
 import {
   Sparkles, X, Send, Bot, User, Trash2, ShieldCheck,
   CheckCircle2, AlertTriangle, ArrowRight, RefreshCw, Clock,
-  Maximize2, Minimize2
+  Maximize2, Minimize2, Check, CheckSquare, PlusCircle
 } from 'lucide-react';
 import type { Task, Section, WeeklyPlan, MonthlyPlan } from '@/types';
 import { apiFetch } from '@/lib/api/apiClient';
@@ -17,12 +18,61 @@ interface AIChatPanelProps {
   isPhone: boolean;
 }
 
+export interface ActionReceipt {
+  id: string;
+  type: string;
+  status: 'success' | 'pending' | 'cancelled' | 'error';
+  message: string;
+  action: {
+    id: string;
+    type: string;
+    params: any;
+    requiresConfirmation?: boolean;
+  };
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
   provider?: string;
+  actions?: ActionReceipt[];
+}
+
+function resolveDateString(dateInput: string | undefined, baseDate: string): string {
+  if (!dateInput) return baseDate;
+  const lower = dateInput.trim().toLowerCase();
+  if (lower === 'today') return baseDate;
+  if (lower === 'tomorrow') {
+    const [y, m, d] = baseDate.split('-').map(Number);
+    const dObj = new Date(Date.UTC(y, m - 1, d + 1));
+    return dObj.toISOString().split('T')[0];
+  }
+  if (lower === 'yesterday') {
+    const [y, m, d] = baseDate.split('-').map(Number);
+    const dObj = new Date(Date.UTC(y, m - 1, d - 1));
+    return dObj.toISOString().split('T')[0];
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(lower)) {
+    return lower;
+  }
+  return baseDate;
+}
+
+function findTaskByQuery(query: string, tasks: Task[]): Task | null {
+  if (!query) return null;
+  const q = query.trim().toLowerCase();
+  // 1. Direct ID match
+  const byId = tasks.find(t => t.id === query);
+  if (byId) return byId;
+  // 2. Exact title match
+  const byExactTitle = tasks.find(t => t.title.toLowerCase() === q);
+  if (byExactTitle) return byExactTitle;
+  // 3. Includes title match
+  const byIncludes = tasks.filter(t => t.title.toLowerCase().includes(q) || q.includes(t.title.toLowerCase()));
+  if (byIncludes.length > 0) return byIncludes[0];
+  return null;
 }
 
 export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPanelProps) {
@@ -31,7 +81,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
     {
       id: 'welcome',
       role: 'assistant',
-      content: `Hello! I'm your AI Assistant. You can ask me general questions, ask for explanations, brainstorm ideas, or click **"Review Today's Plan"** to get a scientifically grounded review of your focus budget, cognitive workload, and scheduling.`,
+      content: `Hello! I'm your NightPlanner AI Copilot with full access to manage your schedule.\n\nYou can ask me live questions like:\n- *"What is my current task?"*\n- *"How many tasks are left?"*\n- *"What did I complete today?"*\n- *"How is my progress?"*\n\nOr instruct me to manage tasks:\n- *"Add a new task called Study Python under Learning tomorrow for 2 hours"*\n- *"Mark my current task as completed"*\n- *"Move my Python task to tomorrow"*\n- *"Delete the task about video editing"*`,
       timestamp: Date.now(),
     },
   ]);
@@ -50,27 +100,348 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
     }
   }, [isOpen, messages]);
 
-  const gatherPlanContext = async () => {
+  const gatherFullContext = async () => {
     const monthId = currentDate.slice(0, 7);
-    const [tasks, dayRecord, monthlyPlan, allWeeks] = await Promise.all([
+    const [todayTasks, allTasks, sections, dayRecord, activeTimer, timeLogsToday, allWeeks, monthlyPlan] = await Promise.all([
       db.tasks.filter(t => t.date === currentDate && !t.deleted).toArray(),
+      db.tasks.filter(t => !t.deleted).toArray(),
+      db.sections.filter(s => !s.deleted).toArray(),
       db.days.get(currentDate),
-      db.monthlyPlans.get(monthId),
+      getActiveTimer(),
+      db.timeLogs.filter(tl => tl.date === currentDate && !tl.deleted).toArray(),
       db.weeklyPlans.filter(w => !w.deleted).toArray(),
+      db.monthlyPlans.get(monthId),
     ]);
 
     const weeklyPlan = allWeeks.find(w => currentDate >= w.startDate && currentDate <= w.endDate) || null;
 
     return {
-      date: currentDate,
+      currentDate,
       focusBudgetHours: dayRecord?.freeHours || 8,
-      tasks,
-      weeklyGoals: weeklyPlan?.goals || '',
-      monthlyGoals: monthlyPlan?.title || '',
+      todayTasks: todayTasks.map(t => {
+        const sec = sections.find(s => s.id === t.sectionId);
+        return {
+          id: t.id,
+          title: t.title,
+          sectionId: t.sectionId,
+          sectionName: sec?.name || 'General',
+          isCompleted: t.isCompleted,
+          status: t.status,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          scheduledMinutes: t.scheduledMinutes || t.estimatedMinutes || 60,
+          estimatedMinutes: t.estimatedMinutes,
+          priority: t.priority,
+          mustDo: t.mustDo,
+          deadline: t.deadline,
+          description: t.description,
+        };
+      }),
+      recentTasks: allTasks.slice(-50).map(t => {
+        const sec = sections.find(s => s.id === t.sectionId);
+        return {
+          id: t.id,
+          title: t.title,
+          date: t.date,
+          isCompleted: t.isCompleted,
+          sectionName: sec?.name || 'General',
+          priority: t.priority,
+          deadline: t.deadline,
+        };
+      }),
+      sections: sections.map(s => ({
+        id: s.id,
+        name: s.name,
+        color: s.color,
+        dailyTargetMinutes: s.dailyTargetMinutes,
+        targetType: s.targetType,
+      })),
+      dayRecord,
+      activeTimer,
+      timeLogsToday,
+      weeklyPlan: weeklyPlan ? {
+        startDate: weeklyPlan.startDate,
+        endDate: weeklyPlan.endDate,
+        goals: weeklyPlan.goals,
+        aastuCommitments: weeklyPlan.aastuCommitments,
+        deepWorkTargets: weeklyPlan.deepWorkTargets,
+      } : null,
+      monthlyPlan: monthlyPlan ? {
+        month: monthlyPlan.month,
+        title: monthlyPlan.title,
+        academicPriorities: monthlyPlan.academicPriorities,
+        editingTargets: monthlyPlan.editingTargets,
+      } : null,
     };
   };
 
-  const handleSendMessage = async (textToSend?: string, isPlanReview = false) => {
+  /**
+   * Execute action against Dexie IndexedDB and notify syncEngine
+   */
+  const executeLocalAction = async (action: any): Promise<ActionReceipt> => {
+    try {
+      const [allTasks, sections] = await Promise.all([
+        db.tasks.toArray(),
+        db.sections.filter(s => !s.deleted).toArray(),
+      ]);
+
+      if (action.type === 'create_task') {
+        const params = action.params || {};
+        const targetDate = resolveDateString(params.date, currentDate);
+        const sec = sections.find(s =>
+          s.id === params.section ||
+          s.name.toLowerCase() === (params.section || '').toLowerCase()
+        ) || sections[0];
+
+        const duration = Number(params.scheduledMinutes) || 60;
+        const now = Date.now();
+        const newTask: Task = {
+          id: crypto.randomUUID(),
+          date: targetDate,
+          sectionId: sec?.id || 'default-sec-1',
+          title: params.title || 'New Task',
+          description: params.description || '',
+          strategy: '',
+          doneMeans: '',
+          estimatedMinutes: duration,
+          scheduledMinutes: duration,
+          priority: params.priority || 'Medium',
+          mustDo: params.mustDo || false,
+          startTime: params.startTime,
+          endTime: params.endTime,
+          deadline: params.deadline || targetDate,
+          tags: [],
+          icon: '🎯',
+          isCompleted: false,
+          completedAt: null,
+          order: 99,
+          createdAt: now,
+          updatedAt: now,
+          deleted: false,
+          isSample: false,
+          synced: 0,
+          status: 'not_started',
+        };
+
+        await db.tasks.put(newTask);
+        syncEngine.notifyLocalMutation();
+
+        return {
+          id: action.id,
+          type: 'create_task',
+          status: 'success',
+          message: `Created task "${newTask.title}" in ${sec?.name || 'Tasks'} (${targetDate}, ${duration}m)`,
+          action,
+        };
+      }
+
+      if (action.type === 'update_task') {
+        const params = action.params || {};
+        const query = params.taskIdentifier || '';
+        const targetTask = findTaskByQuery(query, allTasks.filter(t => !t.deleted));
+
+        if (!targetTask) {
+          return {
+            id: action.id,
+            type: 'update_task',
+            status: 'error',
+            message: `Could not find task matching "${query}".`,
+            action,
+          };
+        }
+
+        const updates = params.updates || {};
+        if (updates.isCompleted !== undefined) {
+          targetTask.isCompleted = Boolean(updates.isCompleted);
+          targetTask.completedAt = updates.isCompleted ? Date.now() : null;
+          targetTask.status = updates.isCompleted ? 'completed' : 'not_started';
+        }
+        if (updates.title) targetTask.title = updates.title;
+        if (updates.date) targetTask.date = resolveDateString(updates.date, currentDate);
+        if (updates.deadline) targetTask.deadline = resolveDateString(updates.deadline, currentDate);
+        if (updates.priority) targetTask.priority = updates.priority;
+        if (updates.scheduledMinutes) {
+          targetTask.scheduledMinutes = Number(updates.scheduledMinutes);
+          targetTask.estimatedMinutes = Number(updates.scheduledMinutes);
+        }
+        if (updates.section) {
+          const s = sections.find(sec =>
+            sec.id === updates.section ||
+            sec.name.toLowerCase() === updates.section.toLowerCase()
+          );
+          if (s) targetTask.sectionId = s.id;
+        }
+
+        targetTask.updatedAt = Date.now();
+        targetTask.synced = 0;
+        await db.tasks.put(targetTask);
+        syncEngine.notifyLocalMutation();
+
+        const changes = Object.keys(updates).join(', ');
+        return {
+          id: action.id,
+          type: 'update_task',
+          status: 'success',
+          message: `Updated task "${targetTask.title}" (${changes || 'applied updates'})`,
+          action,
+        };
+      }
+
+      if (action.type === 'delete_task') {
+        // If confirmation required, return pending state
+        if (action.requiresConfirmation) {
+          return {
+            id: action.id,
+            type: 'delete_task',
+            status: 'pending',
+            message: `Are you sure you want to permanently delete task "${action.params?.taskTitle || action.params?.taskIdentifier}"?`,
+            action,
+          };
+        }
+
+        const query = action.params?.taskIdentifier || action.params?.taskTitle || '';
+        const targetTask = findTaskByQuery(query, allTasks.filter(t => !t.deleted));
+
+        if (!targetTask) {
+          return {
+            id: action.id,
+            type: 'delete_task',
+            status: 'error',
+            message: `Task "${query}" not found to delete.`,
+            action,
+          };
+        }
+
+        targetTask.deleted = true;
+        targetTask.updatedAt = Date.now();
+        targetTask.synced = 0;
+        await db.tasks.put(targetTask);
+        syncEngine.notifyLocalMutation();
+
+        return {
+          id: action.id,
+          type: 'delete_task',
+          status: 'success',
+          message: `Deleted task "${targetTask.title}"`,
+          action,
+        };
+      }
+
+      if (action.type === 'create_section') {
+        const params = action.params || {};
+        const newSec: Section = {
+          id: `sec-${crypto.randomUUID().slice(0, 8)}`,
+          name: params.name || 'New Category',
+          color: params.color || '#3b82f6',
+          icon: params.icon || '📌',
+          order: sections.length,
+          dailyTargetMinutes: params.dailyTargetMinutes || null,
+          targetType: 'at least',
+          updatedAt: Date.now(),
+          deleted: false,
+          isSample: false,
+          synced: 0,
+        };
+
+        await db.sections.put(newSec);
+        syncEngine.notifyLocalMutation();
+
+        return {
+          id: action.id,
+          type: 'create_section',
+          status: 'success',
+          message: `Created new category "${newSec.name}"`,
+          action,
+        };
+      }
+
+      if (action.type === 'manage_plan') {
+        const params = action.params || {};
+        if (params.planType === 'day') {
+          const date = resolveDateString(params.date, currentDate);
+          const day = (await db.days.get(date)) || {
+            id: date,
+            date,
+            freeHours: 8,
+            review: { worked: '', blocked: '', change: '' },
+            updatedAt: Date.now(),
+            deleted: false,
+            isSample: false,
+            synced: 0,
+          };
+          if (params.updates?.freeHours) {
+            day.freeHours = Number(params.updates.freeHours);
+          }
+          day.updatedAt = Date.now();
+          day.synced = 0;
+          await db.days.put(day);
+          syncEngine.notifyLocalMutation();
+
+          return {
+            id: action.id,
+            type: 'manage_plan',
+            status: 'success',
+            message: `Updated focus budget to ${day.freeHours} hours for ${date}`,
+            action,
+          };
+        }
+      }
+
+      return {
+        id: action.id,
+        type: action.type,
+        status: 'error',
+        message: `Unsupported action type: ${action.type}`,
+        action,
+      };
+    } catch (err: any) {
+      return {
+        id: action.id,
+        type: action.type,
+        status: 'error',
+        message: `Action execution failed: ${err.message}`,
+        action,
+      };
+    }
+  };
+
+  const handleConfirmDelete = async (actionReceipt: ActionReceipt) => {
+    try {
+      const allTasks = await db.tasks.toArray();
+      const query = actionReceipt.action.params?.taskIdentifier || actionReceipt.action.params?.taskTitle || '';
+      const targetTask = findTaskByQuery(query, allTasks.filter(t => !t.deleted));
+
+      if (!targetTask) {
+        updateActionReceipt(actionReceipt.id, 'error', `Could not find task "${query}" to delete.`);
+        return;
+      }
+
+      targetTask.deleted = true;
+      targetTask.updatedAt = Date.now();
+      targetTask.synced = 0;
+      await db.tasks.put(targetTask);
+      syncEngine.notifyLocalMutation();
+
+      updateActionReceipt(actionReceipt.id, 'success', `Deleted task "${targetTask.title}".`);
+    } catch (err: any) {
+      updateActionReceipt(actionReceipt.id, 'error', `Failed to delete: ${err.message}`);
+    }
+  };
+
+  const handleCancelDelete = (actionReceipt: ActionReceipt) => {
+    const title = actionReceipt.action.params?.taskTitle || actionReceipt.action.params?.taskIdentifier || 'task';
+    updateActionReceipt(actionReceipt.id, 'cancelled', `Cancelled deletion of "${title}".`);
+  };
+
+  const updateActionReceipt = (actionId: string, status: ActionReceipt['status'], message: string) => {
+    setMessages(prev => prev.map(msg => {
+      if (!msg.actions) return msg;
+      const updatedActions = msg.actions.map(a => a.id === actionId ? { ...a, status, message } : a);
+      return { ...msg, actions: updatedActions };
+    }));
+  };
+
+  const handleSendMessage = async (textToSend?: string) => {
     const content = (textToSend || input).trim();
     if (!content || loading) return;
 
@@ -86,18 +457,14 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
     setLoading(true);
 
     try {
-      let planContext = null;
-      if (isPlanReview || content.toLowerCase().includes('plan') || content.toLowerCase().includes('schedule')) {
-        planContext = await gatherPlanContext();
-      }
+      const fullContext = await gatherFullContext();
 
       const res = await apiFetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })),
-          action: isPlanReview ? 'review_plan' : 'chat',
-          currentPlanContext: planContext,
+          context: fullContext,
         }),
       });
 
@@ -121,12 +488,22 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
 
       if (data?.provider) setActiveProviderName(data.provider);
 
+      // Execute any returned actions locally on Dexie
+      const rawActions = data?.actions || [];
+      const actionReceipts: ActionReceipt[] = [];
+
+      for (const act of rawActions) {
+        const receipt = await executeLocalAction(act);
+        actionReceipts.push(receipt);
+      }
+
       const assistantMsg: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
         content: data?.message?.content || 'No response received from assistant.',
         timestamp: Date.now(),
         provider: data?.provider,
+        actions: actionReceipts.length > 0 ? actionReceipts : undefined,
       };
 
       setMessages(prev => [...prev, assistantMsg]);
@@ -141,10 +518,6 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleReviewCurrentPlan = () => {
-    handleSendMessage('Please review my daily plan for today. Provide a scientifically grounded evaluation of my focus time budget, cognitive workload, break buffers, and scheduling priorities.', true);
   };
 
   if (!isOpen) return null;
@@ -168,7 +541,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
         className="v-card"
         onClick={e => e.stopPropagation()}
         style={{
-          width: isMaximized ? '100vw' : isPhone ? '100%' : '480px',
+          width: isMaximized ? '100vw' : isPhone ? '100%' : '520px',
           maxWidth: '100vw',
           height: '100vh',
           display: 'flex',
@@ -206,10 +579,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
               style={{
-                width: 34,
-                height: 34,
+                width: 36,
+                height: 36,
                 borderRadius: '50%',
-                background: 'var(--v-glass-bg-subtle)',
+                background: 'var(--accent-glow)',
                 border: '1.5px solid var(--accent-color)',
                 display: 'flex',
                 alignItems: 'center',
@@ -221,10 +594,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
             </div>
             <div>
               <div className="font-bloody" style={{ fontSize: 16, fontWeight: 700 }}>
-                AI Assistant & Plan Review
+                NightPlanner AI Copilot
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                Powered by {activeProviderName}
+                Authorized Website Access · {activeProviderName}
               </div>
             </div>
           </div>
@@ -276,10 +649,34 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
         >
           <button
             type="button"
-            onClick={handleReviewCurrentPlan}
+            onClick={() => handleSendMessage('What is my current task?')}
+            className="v-pill-btn"
+            style={{ padding: '4px 11px', fontSize: 11, whiteSpace: 'nowrap', gap: 4 }}
+          >
+            🎯 Current Task
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSendMessage('How many tasks are left today?')}
+            className="v-pill-btn"
+            style={{ padding: '4px 11px', fontSize: 11, whiteSpace: 'nowrap', gap: 4 }}
+          >
+            📋 Tasks Left
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSendMessage('What did I complete today?')}
+            className="v-pill-btn"
+            style={{ padding: '4px 11px', fontSize: 11, whiteSpace: 'nowrap', gap: 4 }}
+          >
+            ✅ Completed Today
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSendMessage('How is my progress today?')}
             className="v-pill-btn"
             style={{
-              padding: '4px 12px',
+              padding: '4px 11px',
               fontSize: 11,
               whiteSpace: 'nowrap',
               borderColor: 'var(--accent-color)',
@@ -287,23 +684,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
               gap: 4,
             }}
           >
-            <Sparkles size={11} color="var(--accent-color)" /> Review Today's Plan
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSendMessage('What are effective cognitive rest techniques between intense deep work sessions?')}
-            className="v-pill-btn"
-            style={{ padding: '4px 12px', fontSize: 11, whiteSpace: 'nowrap', gap: 4 }}
-          >
-            <Clock size={11} /> Cognitive Rest
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSendMessage('How can I optimize my study plan for AASTU coursework while balancing video editing?')}
-            className="v-pill-btn"
-            style={{ padding: '4px 12px', fontSize: 11, whiteSpace: 'nowrap', gap: 4 }}
-          >
-            🎯 AASTU & Creative Balance
+            <Sparkles size={11} color="var(--accent-color)" /> My Progress
           </button>
         </div>
 
@@ -325,12 +706,12 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                gap: 4,
+                gap: 6,
               }}
             >
               <div
                 style={{
-                  maxWidth: '88%',
+                  maxWidth: '92%',
                   padding: '10px 14px',
                   borderRadius: msg.role === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
                   background: msg.role === 'user'
@@ -343,9 +724,121 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                 }}
-                className={msg.role === 'assistant' ? 'font-system' : 'font-system'}
+                className="font-system"
               >
                 {msg.content}
+
+                {/* ── Action Receipts & Destructive Confirmations ── */}
+                {msg.actions && msg.actions.length > 0 && (
+                  <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {msg.actions.map(receipt => (
+                      <div key={receipt.id}>
+                        {/* Pending Destructive Confirmation Card */}
+                        {receipt.status === 'pending' ? (
+                          <div
+                            style={{
+                              padding: '10px 14px',
+                              borderRadius: 10,
+                              background: 'rgba(239, 68, 68, 0.12)',
+                              border: '1.5px solid rgba(239, 68, 68, 0.5)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 8,
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#ef4444' }}>
+                              <AlertTriangle size={14} />
+                              Confirm Deletion Required
+                            </div>
+                            <div style={{ fontSize: 12.5, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                              {receipt.message}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmDelete(receipt)}
+                                className="v-pill-btn"
+                                style={{
+                                  padding: '5px 14px',
+                                  fontSize: 11.5,
+                                  fontWeight: 600,
+                                  background: '#ef4444',
+                                  borderColor: '#ef4444',
+                                  color: '#ffffff',
+                                }}
+                              >
+                                Confirm Delete
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelDelete(receipt)}
+                                className="v-pill-btn"
+                                style={{
+                                  padding: '5px 12px',
+                                  fontSize: 11.5,
+                                  background: 'var(--v-glass-bg-subtle)',
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : receipt.status === 'success' ? (
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              background: 'rgba(34, 197, 94, 0.1)',
+                              border: '1px solid rgba(34, 197, 94, 0.4)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              fontSize: 12,
+                              color: '#22c55e',
+                            }}
+                          >
+                            <CheckCircle2 size={14} style={{ flexShrink: 0 }} />
+                            <span style={{ fontWeight: 600 }}>{receipt.message}</span>
+                          </div>
+                        ) : receipt.status === 'cancelled' ? (
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              background: 'var(--v-glass-bg-subtle)',
+                              border: '1px solid var(--v-glass-border-subtle)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              fontSize: 12,
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            <X size={14} style={{ flexShrink: 0 }} />
+                            <span>{receipt.message}</span>
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              fontSize: 12,
+                              color: '#ef4444',
+                            }}
+                          >
+                            <AlertTriangle size={14} style={{ flexShrink: 0 }} />
+                            <span>{receipt.message}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {msg.provider && (
@@ -368,7 +861,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                   animation: 'spin 0.8s linear infinite',
                 }}
               />
-              <span className="font-system">Thinking & analyzing plan…</span>
+              <span className="font-system">Thinking & executing planner actions…</span>
             </div>
           )}
 
@@ -393,7 +886,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Ask a question or request plan review..."
+            placeholder="Ask questions or say 'Add gym for 1 hour under Health'..."
             disabled={loading}
             className="v-input font-system"
             style={{ fontSize: 13, flex: 1, padding: '10px 14px' }}

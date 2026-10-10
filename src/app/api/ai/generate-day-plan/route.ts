@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
       existingDayTasks = [],
       sections = [],
       preferredProvider,
+      interviewAnswers = [],
     } = body;
 
     if (!targetDate) {
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
       previousDayTasks: Array.isArray(previousDayTasks) ? previousDayTasks : [],
       existingDayTasks: Array.isArray(existingDayTasks) ? existingDayTasks : [],
       sections: Array.isArray(sections) ? sections : [],
+      interviewAnswers: Array.isArray(interviewAnswers) ? interviewAnswers : [],
     };
 
     const systemInstruction = constructDayPlanSystemInstruction();

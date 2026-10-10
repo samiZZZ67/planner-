@@ -1,5 +1,10 @@
 import type { Task, Section, WeeklyPlan, MonthlyPlan, ProposedTask } from '@/types';
 
+export interface PlanInterviewAnswer {
+  question: string;
+  answer: string;
+}
+
 export interface PlanGenerationContext {
   targetDate: string;
   focusBudgetHours: number;
@@ -8,6 +13,7 @@ export interface PlanGenerationContext {
   previousDayTasks: Task[];
   existingDayTasks: Task[];
   sections: Section[];
+  interviewAnswers?: PlanInterviewAnswer[];
 }
 
 export function constructDayPlanSystemInstruction(): string {
@@ -18,10 +24,11 @@ Monthly goals → Weekly commitments → Daily schedules → Actual results → 
 Rules:
 1. STRICT FOCUS-TIME BUDGET: The total duration of all proposed tasks must NOT exceed the specified focus budget.
 2. NO TIME OVERLAPS: Each task must have a distinct "startTime" (e.g. "09:00") and "endTime" (e.g. "11:30") in 24-hour HH:MM format. Tasks must not overlap each other or any existing fixed commitments.
-3. CONTEXT INTEGRATION:
+3. CONTEXT INTEGRATION & INTERVIEW ALIGNMENT:
+   - Deeply integrate the user's planning interview answers (top goal, priority result, realistic capacity, and obstacle plans).
    - Prioritize AASTU academic classes, assignments, and approaching deadlines.
    - Respect deep-work and video-editing targets defined in the weekly and monthly plans.
-   - Address unfinished/missed tasks from previous days if critical, or reschedule them reasonably.
+   - Address unfinished/missed tasks from previous days according to user's interview preference.
 4. REALISTIC PACING: Leave realistic buffers between intense deep work blocks.
 5. JSON OUTPUT ONLY: You must respond ONLY with a valid JSON object matching the requested schema.`;
 }
@@ -70,6 +77,10 @@ export function constructDayPlanUserPrompt(context: PlanGenerationContext): stri
       })),
     },
 
+    userInterviewAnswers: context.interviewAnswers && context.interviewAnswers.length > 0
+      ? context.interviewAnswers
+      : "No pre-planning interview answers provided.",
+
     alreadyScheduledForTargetDate: existingDayTasks.map(t => ({
       title: t.title,
       startTime: t.startTime,
@@ -84,7 +95,7 @@ export function constructDayPlanUserPrompt(context: PlanGenerationContext): stri
     })),
 
     requiredJsonSchema: {
-      rationale: "string explaining why these tasks and time slots were chosen given the weekly & monthly goals",
+      rationale: "string explaining why these tasks and time slots were chosen given the weekly & monthly goals and user interview answers",
       recommendations: ["list of strategic advice, e.g. when to take breaks, study strategies"],
       conflicts: ["list of identified conflicts or tight deadlines if any"],
       proposedTasks: [
@@ -115,7 +126,7 @@ export function generateAlgorithmicDayPlan(context: PlanGenerationContext): {
   conflicts: string[];
   proposedTasks: ProposedTask[];
 } {
-  const { targetDate, focusBudgetHours, monthlyPlan, weeklyPlan, previousDayTasks, sections } = context;
+  const { targetDate, focusBudgetHours, monthlyPlan, weeklyPlan, previousDayTasks, sections, interviewAnswers } = context;
   const budgetMinutes = Math.min(24 * 60, focusBudgetHours * 60);
 
   const deepWorkSec = sections.find(s => s.name.toLowerCase().includes('deep') || s.name.toLowerCase().includes('work')) || sections[0];
@@ -126,9 +137,15 @@ export function generateAlgorithmicDayPlan(context: PlanGenerationContext): {
   let currentStartMinutes = 9 * 60; // Start at 9:00 AM
   let allocatedMinutes = 0;
 
-  // 1. Incomplete task carryover from previous day if critical
+  // Check interview answers for carryover preference
+  const carryoverAnswer = interviewAnswers?.find(a =>
+    a.question.toLowerCase().includes('unfinished') || a.question.toLowerCase().includes('yesterday') || a.question.toLowerCase().includes('carryover')
+  );
+  const skipCarryover = carryoverAnswer && (carryoverAnswer.answer.toLowerCase().includes('drop') || carryoverAnswer.answer.toLowerCase().includes('reschedule'));
+
+  // 1. Incomplete task carryover from previous day if critical and not skipped by user interview
   const carryover = previousDayTasks.find(t => !t.isCompleted && (t.priority === 'High' || t.mustDo));
-  if (carryover && allocatedMinutes + 60 <= budgetMinutes) {
+  if (!skipCarryover && carryover && allocatedMinutes + 60 <= budgetMinutes) {
     const startH = Math.floor(currentStartMinutes / 60);
     const startM = currentStartMinutes % 60;
     const endMinutes = currentStartMinutes + 60;
@@ -207,14 +224,20 @@ export function generateAlgorithmicDayPlan(context: PlanGenerationContext): {
     allocatedMinutes += deepDuration;
   }
 
-  return {
-    rationale: `Schedule designed to fit your ${focusBudgetHours}h daily focus budget. Prioritizes AASTU commitments and deep-work targets drawn from your active weekly plan.`,
-    recommendations: [
-      'Begin the morning with your primary academic block while cognitive energy is peak.',
-      'Take 15-30 minute active rest buffers between intense blocks.',
-      'Log actual durations to help tomorrow’s AI schedule adapt to your real working speed.',
-    ],
-    conflicts: allocatedMinutes > budgetMinutes ? ['Proposed tasks exceed focus budget by ' + (allocatedMinutes - budgetMinutes) + ' min.'] : [],
-    proposedTasks: tasks,
-  };
+    let customRationale = `Schedule designed to fit your ${focusBudgetHours}h daily focus budget. Prioritizes AASTU commitments and deep-work targets drawn from your active weekly plan.`;
+    if (interviewAnswers && interviewAnswers.length > 0) {
+      const answersSnippet = interviewAnswers.map(a => a.answer).join(' · ');
+      customRationale += ` Aligned with your interview answers: "${answersSnippet}".`;
+    }
+
+    return {
+      rationale: customRationale,
+      recommendations: [
+        'Begin the morning with your primary academic block while cognitive energy is peak.',
+        'Take 15-30 minute active rest buffers between intense blocks.',
+        'Log actual durations to help tomorrow’s AI schedule adapt to your real working speed.',
+      ],
+      conflicts: allocatedMinutes > budgetMinutes ? ['Proposed tasks exceed focus budget by ' + (allocatedMinutes - budgetMinutes) + ' min.'] : [],
+      proposedTasks: tasks,
+    };
 }

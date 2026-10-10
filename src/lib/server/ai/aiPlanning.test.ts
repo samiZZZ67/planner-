@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { countWords } from '../../plan/weeklyPlanUtils';
 import { validateAndCleanAIPlan } from './validator';
 import { generateAlgorithmicDayPlan } from './prompts';
+import { generateAlgorithmicPlanInterview } from './interview';
+import { handleFallbackNaturalLanguage } from './copilot';
 import { getAIProvidersStatus, executeAIRequestWithFallback, isValidApiKey } from './providers';
 import type { Section, Task, WeeklyPlan, MonthlyPlan } from '../../../types';
 
@@ -361,4 +363,274 @@ describe('AI Planning & Hierarchy Test Suite', () => {
       expect(['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b']).toContain(healedRes.model);
     }, 30000);
   });
+
+  describe('5. Smart Planning Interview Generation & Integration', () => {
+    const dummySections: Section[] = [
+      { id: 'sec-1', name: 'Deep Work', color: '#f59e0b', icon: '⚡', order: 0, targetType: 'at least', updatedAt: 0, deleted: false, isSample: false },
+      { id: 'sec-2', name: 'Learning', color: '#3b82f6', icon: '📚', order: 1, targetType: 'at least', updatedAt: 0, deleted: false, isSample: false },
+    ];
+
+    it('should generate adaptive questions tailored to yesterday unfinished tasks', () => {
+      const prevTasks: Task[] = [
+        {
+          id: 'prev-1',
+          date: '2026-10-09',
+          sectionId: 'sec-1',
+          title: 'Complete Lab Report Draft',
+          description: '',
+          strategy: '',
+          doneMeans: '',
+          estimatedMinutes: 60,
+          priority: 'High',
+          mustDo: true,
+          tags: [],
+          icon: '🎯',
+          isCompleted: false,
+          order: 0,
+          createdAt: 0,
+          updatedAt: 0,
+          deleted: false,
+          isSample: false,
+        },
+      ];
+
+      const interview = generateAlgorithmicPlanInterview({
+        targetDate: '2026-10-10',
+        focusBudgetHours: 7,
+        previousDayTasks: prevTasks,
+        existingDayTasks: [],
+        sections: dummySections,
+      });
+
+      expect(interview.ok).toBe(true);
+      expect(interview.questions.length).toBeGreaterThanOrEqual(2);
+      const carryoverQ = interview.questions.find(q => q.category === 'carryover');
+      expect(carryoverQ).toBeDefined();
+      expect(carryoverQ?.question).toContain('Complete Lab Report Draft');
+      expect(carryoverQ?.options.some(o => o.includes('Complete Lab Report Draft'))).toBe(true);
+    });
+
+    it('should generate adaptive questions aligned with weekly goals and commitments', () => {
+      const weeklyPlan: WeeklyPlan = {
+        id: 'week-1',
+        startDate: '2026-10-05',
+        endDate: '2026-10-11',
+        monthId: '2026-10',
+        prompt: '100 words prompt...',
+        wordCount: 100,
+        goals: 'Pass Computer Architecture Midterm and Finalize Video',
+        aastuCommitments: 'Architecture Midterm Review',
+        deepWorkTargets: 'Tutorial Video 4',
+        constraints: 'Gym at 5pm',
+        outcomes: 'Submit review',
+        status: 'active',
+        createdAt: 0,
+        updatedAt: 0,
+        deleted: false,
+      };
+
+      const interview = generateAlgorithmicPlanInterview({
+        targetDate: '2026-10-10',
+        focusBudgetHours: 6,
+        weeklyPlan,
+        previousDayTasks: [],
+        existingDayTasks: [],
+        sections: dummySections,
+      });
+
+      expect(interview.ok).toBe(true);
+      const goalQ = interview.questions.find(q => q.category === 'goal');
+      expect(goalQ).toBeDefined();
+      expect(goalQ?.question).toContain('Architecture Midterm');
+    });
+
+    it('should incorporate interview answers into generated schedule rationale and carryover choices', () => {
+      const prevTasks: Task[] = [
+        {
+          id: 'prev-1',
+          date: '2026-10-09',
+          sectionId: 'sec-1',
+          title: 'Unfinished Task X',
+          description: '',
+          strategy: '',
+          doneMeans: '',
+          estimatedMinutes: 60,
+          priority: 'High',
+          mustDo: true,
+          tags: [],
+          icon: '🎯',
+          isCompleted: false,
+          order: 0,
+          createdAt: 0,
+          updatedAt: 0,
+          deleted: false,
+          isSample: false,
+        },
+      ];
+
+      // Case A: User answered to drop/reschedule carryover
+      const planWithDrop = generateAlgorithmicDayPlan({
+        targetDate: '2026-10-10',
+        focusBudgetHours: 6,
+        previousDayTasks: prevTasks,
+        existingDayTasks: [],
+        sections: dummySections,
+        interviewAnswers: [
+          { question: 'How to handle unfinished tasks?', answer: 'Drop it for today' },
+          { question: 'What is your primary goal?', answer: 'Focus only on new architecture homework' },
+        ],
+      });
+
+      expect(planWithDrop.proposedTasks.some(t => t.title.includes('Unfinished Task X'))).toBe(false);
+      expect(planWithDrop.rationale).toContain('Aligned with your interview answers');
+
+      // Case B: User answered to prioritize carryover
+      const planWithPrioritize = generateAlgorithmicDayPlan({
+        targetDate: '2026-10-10',
+        focusBudgetHours: 6,
+        previousDayTasks: prevTasks,
+        existingDayTasks: [],
+        sections: dummySections,
+        interviewAnswers: [
+          { question: 'How to handle unfinished tasks?', answer: 'Prioritize Unfinished Task X first' },
+        ],
+      });
+
+      expect(planWithPrioritize.proposedTasks.some(t => t.title.includes('Unfinished Task X'))).toBe(true);
+    });
+  });
+
+  describe('6. Live Website Copilot & Natural Language Actions Protocol', () => {
+    const mockContext = {
+      currentDate: '2026-10-10',
+      focusBudgetHours: 8,
+      activeTimer: {
+        taskId: 'task-active',
+        taskTitle: 'Computer Architecture Reading',
+        isRunning: true,
+        accumulatedMs: 45 * 60 * 1000,
+      },
+      todayTasks: [
+        {
+          id: 'task-active',
+          title: 'Computer Architecture Reading',
+          sectionId: 'sec-learn',
+          sectionName: 'Learning',
+          isCompleted: false,
+          status: 'in_progress',
+          scheduledMinutes: 90,
+          priority: 'High',
+          mustDo: true,
+        },
+        {
+          id: 'task-2',
+          title: 'Premiere Pro Video Cut',
+          sectionId: 'sec-deep',
+          sectionName: 'Deep Work',
+          isCompleted: false,
+          status: 'not_started',
+          scheduledMinutes: 120,
+          priority: 'Medium',
+          mustDo: false,
+        },
+        {
+          id: 'task-3',
+          title: 'Morning Email Sweep',
+          sectionId: 'sec-other',
+          sectionName: 'Other',
+          isCompleted: true,
+          status: 'completed',
+          scheduledMinutes: 30,
+          priority: 'Low',
+          mustDo: false,
+        },
+      ],
+      sections: [
+        { id: 'sec-deep', name: 'Deep Work', color: '#f59e0b', order: 0 },
+        { id: 'sec-learn', name: 'Learning', color: '#3b82f6', order: 1 },
+        { id: 'sec-health', name: 'Sport', color: '#10b981', order: 2 },
+      ],
+      timeLogsToday: [
+        { taskId: 'task-3', minutes: 30 },
+      ],
+    };
+
+    it('should accurately answer current task queries from live active timer', () => {
+      const res = handleFallbackNaturalLanguage('What is my current task?', mockContext);
+      expect(res.content).toContain('Computer Architecture Reading');
+      expect(res.content).toContain('45m');
+      expect(res.actions).toHaveLength(0);
+    });
+
+    it('should accurately count and list unfinished tasks left today', () => {
+      const res = handleFallbackNaturalLanguage('How many tasks are left today?', mockContext);
+      expect(res.content).toContain('2 tasks left');
+      expect(res.content).toContain('Computer Architecture Reading');
+      expect(res.content).toContain('Premiere Pro Video Cut');
+    });
+
+    it('should accurately report completed tasks today', () => {
+      const res = handleFallbackNaturalLanguage('What did I complete today?', mockContext);
+      expect(res.content).toContain('Morning Email Sweep');
+      expect(res.content).toContain('1 task');
+    });
+
+    it('should accurately calculate and report progress metrics', () => {
+      const res = handleFallbackNaturalLanguage('How is my progress today?', mockContext);
+      // 1 of 3 completed = 33%
+      expect(res.content).toContain('1 / 3 tasks');
+      expect(res.content).toContain('33%');
+      expect(res.content).toContain('30 minutes');
+    });
+
+    it('should parse natural language task creation command into create_task action', () => {
+      const res = handleFallbackNaturalLanguage(
+        'Add a new task called Study Python under Learning for two hours tomorrow',
+        mockContext
+      );
+
+      expect(res.actions).toHaveLength(1);
+      const action = res.actions[0];
+      expect(action.type).toBe('create_task');
+      expect(action.params.title).toBe('Study Python');
+      expect(action.params.section).toBe('Learning');
+      expect(action.params.scheduledMinutes).toBe(120);
+      expect(action.params.date).toBe('2026-10-11');
+    });
+
+    it('should parse task completion command into update_task action', () => {
+      const res = handleFallbackNaturalLanguage('Mark Computer Architecture Reading as completed', mockContext);
+      expect(res.actions).toHaveLength(1);
+      const action = res.actions[0];
+      expect(action.type).toBe('update_task');
+      expect(action.params.taskIdentifier).toContain('Computer Architecture Reading');
+      expect(action.params.updates.isCompleted).toBe(true);
+    });
+
+    it('should parse destructive deletion command with requiresConfirmation: true', () => {
+      const res = handleFallbackNaturalLanguage('Delete the task about video editing', mockContext);
+      expect(res.actions).toHaveLength(1);
+      const action = res.actions[0];
+      expect(action.type).toBe('delete_task');
+      expect(action.requiresConfirmation).toBe(true);
+      expect(action.params.taskIdentifier).toContain('video editing');
+    });
+
+    it('should parse task rescheduling / move command to tomorrow', () => {
+      const res = handleFallbackNaturalLanguage('Move Premiere Pro Video Cut to tomorrow', mockContext);
+      expect(res.actions).toHaveLength(1);
+      const action = res.actions[0];
+      expect(action.type).toBe('update_task');
+      expect(action.params.updates.date).toBe('2026-10-11');
+    });
+
+    it('should parse focus budget adjustment command', () => {
+      const res = handleFallbackNaturalLanguage('Change my deep work duration to 4 hours', mockContext);
+      expect(res.actions).toHaveLength(1);
+      const action = res.actions[0];
+      expect(action.type).toBe('manage_plan');
+      expect(action.params.updates.freeHours).toBe(4);
+    });
+  });
 });
+
