@@ -1,5 +1,5 @@
 {
-  "lastServerSeq": 29,
+  "lastServerSeq": 35,
   "sections": {
     "default-sec-1": {
       "name": "Entertainment",
@@ -327,6 +327,62 @@
       "synced": 1,
       "status": "not_started",
       "serverSeq": 29
+    },
+    "8499d354-242a-4778-9458-f21fc9b93b45": {
+      "id": "8499d354-242a-4778-9458-f21fc9b93b45",
+      "date": "2026-10-10",
+      "sectionId": "default-sec-2",
+      "title": "Test Execution Task 1791656554119",
+      "description": "Comprehensive test task",
+      "strategy": "",
+      "doneMeans": "",
+      "estimatedMinutes": 90,
+      "scheduledMinutes": 90,
+      "priority": "High",
+      "mustDo": true,
+      "tags": [],
+      "icon": "🎯",
+      "textColor": "",
+      "image": null,
+      "isCompleted": false,
+      "completedAt": null,
+      "order": 5,
+      "createdAt": 1791656554120,
+      "updatedAt": 1791656554131,
+      "deleted": true,
+      "isSample": false,
+      "synced": 1,
+      "startTime": "08:00",
+      "endTime": "09:30",
+      "status": "not_started",
+      "serverSeq": 31
+    },
+    "13fedc90-1552-4060-adec-9ff30ad29c05": {
+      "id": "13fedc90-1552-4060-adec-9ff30ad29c05",
+      "date": "2026-10-10",
+      "sectionId": "default-sec-2",
+      "title": "Idempotent Test Task 1791656554133",
+      "description": "",
+      "strategy": "",
+      "doneMeans": "",
+      "estimatedMinutes": 60,
+      "scheduledMinutes": 60,
+      "priority": "Medium",
+      "mustDo": false,
+      "tags": [],
+      "icon": "🎯",
+      "textColor": "",
+      "image": null,
+      "isCompleted": false,
+      "completedAt": null,
+      "order": 5,
+      "createdAt": 1791656554134,
+      "updatedAt": 1791656554136,
+      "deleted": true,
+      "isSample": false,
+      "synced": 1,
+      "status": "not_started",
+      "serverSeq": 33
     }
   },
   "timeLogs": {},
@@ -348,5 +404,22 @@
     }
   },
   "weeklyPlans": {},
-  "monthlyPlans": {}
+  "monthlyPlans": {},
+  "files": {
+    "file-test-1791656554359": {
+      "id": "file-test-1791656554359",
+      "publicId": "nightplanner/test_1791656554359",
+      "secureUrl": "https://res.cloudinary.com/demo/image/upload/v12345/nightplanner/test_1791656554359.png",
+      "originalFilename": "project_spec.pdf",
+      "resourceType": "raw",
+      "format": "pdf",
+      "fileSize": 524288,
+      "userId": "user_alice",
+      "createdAt": 1791656554359,
+      "updatedAt": 1791656554375,
+      "deleted": true,
+      "mimeType": "application/pdf",
+      "serverSeq": 35
+    }
+  }
 }

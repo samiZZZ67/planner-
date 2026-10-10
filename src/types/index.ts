@@ -277,3 +277,25 @@ export interface SyncResponse {
   };
   error?: string;
 }
+
+export type CloudinaryResourceType = 'image' | 'video' | 'raw';
+
+export interface UploadedFile {
+  id: string; // Database primary key (UUID)
+  publicId: string; // Cloudinary public_id
+  secureUrl: string; // HTTPS Cloudinary URL
+  originalFilename: string; // Original uploaded file name
+  resourceType: CloudinaryResourceType; // 'image' | 'video' | 'raw'
+  format: string; // File extension/format (e.g., 'png', 'pdf', 'mp4')
+  fileSize: number; // File size in bytes
+  userId: string; // Owner user ID
+  createdAt: number; // Unix timestamp in ms
+  updatedAt: number; // Unix timestamp in ms
+  deleted: boolean; // Soft delete flag
+  mimeType?: string; // MIME type
+  width?: number; // Image/video width
+  height?: number; // Image/video height
+  duration?: number; // Video/audio duration in seconds
+  tags?: string[];
+}
+

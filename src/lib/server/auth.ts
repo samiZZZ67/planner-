@@ -106,19 +106,27 @@ export function clearRateLimit(ip: string): void {
 /**
  * Create 90-day signed session token
  */
-export async function createSessionToken(): Promise<string> {
+export async function createSessionToken(userId: string = 'owner'): Promise<string> {
   const payload = JSON.stringify({
     authenticated: true,
+    userId,
     issuedAt: Date.now(),
     expiresAt: Date.now() + 90 * 24 * 60 * 60 * 1000, // 90 days
   });
   return await sign(Buffer.from(payload).toString('base64url'), getSecretKey());
 }
 
+export interface SessionUser {
+  authenticated: boolean;
+  userId: string;
+  issuedAt: number;
+  expiresAt: number;
+}
+
 /**
- * Verify session cookie from Next.js headers/request
+ * Retrieve verified session user from Next.js headers/request
  */
-export async function verifySession(req?: Request | any): Promise<boolean> {
+export async function getSessionUser(req?: Request | any): Promise<SessionUser | null> {
   try {
     let token: string | null = null;
 
@@ -143,19 +151,33 @@ export async function verifySession(req?: Request | any): Promise<boolean> {
       }
     }
 
-    if (!token) return false;
+    if (!token) return null;
 
     const rawPayload = await verify(token, getSecretKey());
-    if (!rawPayload) return false;
+    if (!rawPayload) return null;
 
     const data = JSON.parse(Buffer.from(rawPayload, 'base64url').toString('utf8'));
     if (!data.authenticated || Date.now() > data.expiresAt) {
-      return false;
+      return null;
     }
-    return true;
+    return {
+      authenticated: true,
+      userId: data.userId || 'owner',
+      issuedAt: data.issuedAt,
+      expiresAt: data.expiresAt,
+    };
   } catch {
-    return false;
+    return null;
   }
 }
 
+/**
+ * Verify session cookie from Next.js headers/request
+ */
+export async function verifySession(req?: Request | any): Promise<boolean> {
+  const user = await getSessionUser(req);
+  return Boolean(user && user.authenticated);
+}
+
 export { SESSION_COOKIE_NAME };
+

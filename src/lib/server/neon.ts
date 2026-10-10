@@ -160,6 +160,31 @@ export async function ensureSchema(sql: any): Promise<void> {
       )
     `;
 
+    // Cloudinary files table for persistent file metadata
+    await sql`
+      CREATE TABLE IF NOT EXISTS files (
+        id VARCHAR(64) PRIMARY KEY,
+        public_id TEXT NOT NULL,
+        secure_url TEXT NOT NULL,
+        original_filename TEXT NOT NULL,
+        resource_type VARCHAR(20) NOT NULL,
+        format VARCHAR(20) DEFAULT '',
+        file_size BIGINT NOT NULL,
+        user_id VARCHAR(64) NOT NULL DEFAULT 'owner',
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL,
+        deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        mime_type VARCHAR(100),
+        width INTEGER,
+        height INTEGER,
+        duration NUMERIC(10,2),
+        tags JSONB DEFAULT '[]'::jsonb,
+        server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_files_public_id ON files(public_id)`;
+
     // Ensure all tables have required columns if they were created with earlier schemas
     await sql`ALTER TABLE sections ADD COLUMN IF NOT EXISTS daily_target_minutes INTEGER`;
     await sql`ALTER TABLE sections ADD COLUMN IF NOT EXISTS target_type VARCHAR(20) DEFAULT 'at least'`;

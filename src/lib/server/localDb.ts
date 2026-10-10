@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type { Section, Task, TimeLog, Day, WeeklyPlan, MonthlyPlan } from '@/types';
+import type { Section, Task, TimeLog, Day, WeeklyPlan, MonthlyPlan, UploadedFile } from '@/types';
 
 interface ServerDbData {
   lastServerSeq: number;
@@ -10,6 +10,7 @@ interface ServerDbData {
   days: Record<string, Day & { serverSeq: number }>;
   weeklyPlans: Record<string, WeeklyPlan & { serverSeq: number }>;
   monthlyPlans: Record<string, MonthlyPlan & { serverSeq: number }>;
+  files?: Record<string, UploadedFile & { serverSeq: number }>;
 }
 
 const DATA_DIR = path.join(process.cwd(), '.data');
@@ -25,6 +26,7 @@ function ensureDataFile(): ServerDbData {
       const parsed = JSON.parse(raw);
       if (!parsed.weeklyPlans) parsed.weeklyPlans = {};
       if (!parsed.monthlyPlans) parsed.monthlyPlans = {};
+      if (!parsed.files) parsed.files = {};
       return parsed;
     }
   } catch {
@@ -39,6 +41,7 @@ function ensureDataFile(): ServerDbData {
     days: {},
     weeklyPlans: {},
     monthlyPlans: {},
+    files: {},
   };
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), 'utf-8');
@@ -236,4 +239,78 @@ export function deleteLocalTask(taskId: string): boolean {
   saveDb(db);
   return true;
 }
+
+/**
+ * Retrieve uploaded files from local DB (filtered by userId and resourceType)
+ */
+export function getLocalFiles(filter?: { userId?: string; resourceType?: string }): UploadedFile[] {
+  const db = getDb();
+  if (!db.files) return [];
+  let list = Object.values(db.files).filter(f => !f.deleted);
+  if (filter?.userId && filter.userId !== 'owner') {
+    list = list.filter(f => f.userId === filter.userId);
+  }
+  if (filter?.resourceType) {
+    list = list.filter(f => f.resourceType === filter.resourceType);
+  }
+  return list.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/**
+ * Retrieve a single file by internal ID
+ */
+export function getLocalFileById(fileId: string): UploadedFile | null {
+  const db = getDb();
+  if (!db.files) return null;
+  const file = db.files[fileId];
+  if (!file || file.deleted) return null;
+  return file;
+}
+
+/**
+ * Retrieve a single file by Cloudinary publicId
+ */
+export function getLocalFileByPublicId(publicId: string): UploadedFile | null {
+  const db = getDb();
+  if (!db.files) return null;
+  const file = Object.values(db.files).find(f => f.publicId === publicId && !f.deleted);
+  return file || null;
+}
+
+/**
+ * Save or update file metadata in local DB
+ */
+export function saveLocalFile(file: UploadedFile): UploadedFile & { serverSeq: number } {
+  const db = getDb();
+  if (!db.files) db.files = {};
+  db.lastServerSeq += 1;
+  const saved = {
+    ...file,
+    serverSeq: db.lastServerSeq,
+    updatedAt: file.updatedAt || Date.now(),
+  };
+  db.files[file.id] = saved;
+  saveDb(db);
+  return saved;
+}
+
+/**
+ * Soft delete file metadata in local DB
+ */
+export function deleteLocalFile(fileId: string): boolean {
+  const db = getDb();
+  if (!db.files) return false;
+  const existing = db.files[fileId];
+  if (!existing) return false;
+  db.lastServerSeq += 1;
+  db.files[fileId] = {
+    ...existing,
+    deleted: true,
+    updatedAt: Date.now(),
+    serverSeq: db.lastServerSeq,
+  };
+  saveDb(db);
+  return true;
+}
+
 
