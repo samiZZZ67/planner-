@@ -44,6 +44,33 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }
   };
 
   const SyncBadge = () => {
+    // 1. If auth is required or error is auth-related, show Login button
+    if (
+      sync.status === 'auth_required' ||
+      (sync.errorMessage && (sync.errorMessage.toLowerCase().includes('login') || sync.errorMessage.toLowerCase().includes('auth')))
+    ) {
+      return (
+        <button
+          onClick={onOpenLogin}
+          className="v-pill-btn animate-pulse"
+          style={{
+            padding: '6px 14px',
+            fontSize: 11,
+            minHeight: 34,
+            borderColor: '#a855f7',
+            background: 'rgba(168, 85, 247, 0.15)',
+            color: '#c084fc',
+            gap: 6,
+            fontWeight: 700,
+          }}
+          title="Login to enable cloud sync across devices"
+        >
+          <Lock size={13} />
+          <span>Login to Sync</span>
+        </button>
+      );
+    }
+
     if (sync.warningIfStale || sync.errorMessage) {
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -81,17 +108,6 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }
             <RefreshCw size={12} className="animate-spin" />
             <span>Saving...</span>
           </div>
-        );
-      case 'auth_required':
-        return (
-          <button
-            onClick={onOpenLogin}
-            className="v-pill-btn"
-            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, gap: 4 }}
-          >
-            <Lock size={12} />
-            <span>Login to Sync</span>
-          </button>
         );
       case 'changes_waiting':
         return (
@@ -238,9 +254,18 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }
         </div>
       )}
 
-      {/* Right Controls: Sync & Theme Switch */}
+      {/* Right Controls: Sync & Theme Switch & Cloud Login */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <SyncBadge />
+        <button
+          onClick={onOpenLogin}
+          className="v-circle-btn"
+          style={{ width: 38, height: 38 }}
+          aria-label="Cloud Login"
+          title="Sign in to Cloud Sync"
+        >
+          <Lock size={15} style={{ color: 'var(--text-secondary)' }} />
+        </button>
         <button
           onClick={onToggleTheme}
           className="v-circle-btn"

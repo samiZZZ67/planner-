@@ -257,7 +257,7 @@ class SyncEngine {
       if (response.status === 401) {
         this.updateState({
           status: 'auth_required',
-          errorMessage: 'Login required to sync',
+          errorMessage: null,
         });
         this.isSyncing = false;
         return;
