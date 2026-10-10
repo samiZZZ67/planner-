@@ -5,7 +5,8 @@ import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
 import {
   CalendarDays, CheckCircle2, Plus, Trash2, Save,
-  ChevronLeft, ChevronRight, Target, BookOpen, Video, Clock, History, Check
+  ChevronLeft, ChevronRight, Target, BookOpen, Video, Clock, History, Check,
+  Edit2, X
 } from 'lucide-react';
 import type { MonthlyPlan, MonthlyGoalItem, WeeklyPlan, Task } from '@/types';
 
@@ -26,6 +27,227 @@ function formatMonthLabel(monthStr: string): string {
   } catch {
     return monthStr;
   }
+}
+
+function EditablePriorityCard({
+  title,
+  icon,
+  accentColor,
+  value,
+  onChange,
+  onSaveDirect,
+  placeholder,
+  addPlaceholder,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  accentColor: string;
+  value: string;
+  onChange: (v: string) => void;
+  onSaveDirect: () => void;
+  placeholder: string;
+  addPlaceholder: string;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [newItem, setNewItem] = useState('');
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editItemText, setEditItemText] = useState('');
+
+  const items = useMemo(() => {
+    return value ? value.split('\n').map(s => s.trim()).filter(Boolean) : [];
+  }, [value]);
+
+  const handleAdd = () => {
+    if (!newItem.trim()) return;
+    const next = [...items, newItem.trim()];
+    onChange(next.join('\n'));
+    setNewItem('');
+  };
+
+  const handleStartEdit = (idx: number, currentText: string) => {
+    setEditingIndex(idx);
+    setEditItemText(currentText);
+  };
+
+  const handleSaveEdit = (idx: number) => {
+    if (!editItemText.trim()) return;
+    const next = [...items];
+    next[idx] = editItemText.trim();
+    onChange(next.join('\n'));
+    setEditingIndex(null);
+  };
+
+  const handleDelete = (idx: number, itemText: string) => {
+    const confirmed = window.confirm(`Are you sure you want to delete this priority item?\n\n"${itemText}"`);
+    if (!confirmed) return;
+    const next = items.filter((_, i) => i !== idx);
+    onChange(next.join('\n'));
+  };
+
+  return (
+    <div
+      className="v-card"
+      style={{
+        padding: '16px 18px',
+        border: `1.5px solid ${isEditing ? accentColor : 'var(--v-glass-border-subtle)'}`,
+        background: 'var(--v-glass-bg-card)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+      }}
+    >
+      {/* Header with Title and Edit Button */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {icon} <span>{title}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (isEditing) {
+              onSaveDirect();
+            }
+            setIsEditing(prev => !prev);
+          }}
+          className={`v-pill-btn${isEditing ? ' v-pill-btn-primary' : ''}`}
+          style={{ padding: '3px 10px', fontSize: 11, minHeight: 28, gap: 4 }}
+          title={isEditing ? 'Save and close edit mode' : 'Edit priorities'}
+        >
+          {isEditing ? <Check size={12} /> : <Edit2 size={12} />}
+          <span>{isEditing ? 'Done' : 'Edit'}</span>
+        </button>
+      </div>
+
+      {/* Content */}
+      {isEditing ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* Add item row */}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              type="text"
+              value={newItem}
+              onChange={e => setNewItem(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
+              placeholder={addPlaceholder}
+              className="v-input font-system"
+              style={{ fontSize: 13, flex: 1, padding: '6px 12px', minHeight: 34 }}
+            />
+            <button
+              type="button"
+              onClick={handleAdd}
+              className="v-pill-btn v-pill-btn-primary"
+              style={{ padding: '0 12px', fontSize: 12, minHeight: 34 }}
+            >
+              <Plus size={12} /> Add
+            </button>
+          </div>
+
+          {/* List of editable items */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {items.map((item, idx) => (
+              <div
+                key={idx}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 10px',
+                  borderRadius: 10,
+                  background: 'var(--v-glass-bg-subtle)',
+                  border: '1px solid var(--v-glass-border-subtle)',
+                }}
+              >
+                {editingIndex === idx ? (
+                  <>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editItemText}
+                      onChange={e => setEditItemText(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleSaveEdit(idx); if (e.key === 'Escape') setEditingIndex(null); }}
+                      className="v-input font-system"
+                      style={{ fontSize: 12, flex: 1, padding: '4px 8px', minHeight: 30 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleSaveEdit(idx)}
+                      className="v-circle-btn"
+                      style={{ width: 26, height: 26, color: '#22c55e' }}
+                      title="Save item"
+                    >
+                      <Check size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingIndex(null)}
+                      className="v-circle-btn"
+                      style={{ width: 26, height: 26 }}
+                      title="Cancel"
+                    >
+                      <X size={12} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: accentColor, flexShrink: 0 }} />
+                    <span className="font-system" style={{ fontSize: 13, flex: 1, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                      {item}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleStartEdit(idx, item)}
+                      className="v-circle-btn"
+                      style={{ width: 26, height: 26 }}
+                      title="Edit this priority"
+                    >
+                      <Edit2 size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(idx, item)}
+                      className="v-circle-btn"
+                      style={{ width: 26, height: 26, color: '#f87171' }}
+                      title="Delete this priority (requires confirmation)"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* Read-only view with bullets */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 48 }}>
+          {items.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', padding: '8px 0' }}>
+              {placeholder} (Click <strong>Edit</strong> to add items)
+            </div>
+          ) : (
+            items.map((item, idx) => (
+              <div
+                key={idx}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  padding: '6px 8px',
+                  borderRadius: 8,
+                  background: 'var(--v-glass-bg-subtle)',
+                }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: accentColor, marginTop: 6, flexShrink: 0 }} />
+                <span className="font-system" style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, wordBreak: 'break-word' }}>
+                  {item}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenProps) {
@@ -155,6 +377,30 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
     loadMonthData();
   };
 
+  const handleSaveDirect = async (overrideAcad?: string, overrideEdit?: string) => {
+    const acad = overrideAcad !== undefined ? overrideAcad : academicPriorities;
+    const edit = overrideEdit !== undefined ? overrideEdit : editingTargets;
+    const now = Date.now();
+    const plan: MonthlyPlan = {
+      id: selectedMonth,
+      month: selectedMonth,
+      title: title.trim() || `${formatMonthLabel(selectedMonth)} Plan`,
+      prompt: prompt.trim(),
+      academicPriorities: acad.trim(),
+      editingTargets: edit.trim(),
+      commitments: commitments.trim(),
+      goals,
+      completionPercentage,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+      deleted: false,
+      synced: 0,
+    };
+    await db.monthlyPlans.put(plan);
+    syncEngine.notifyLocalMutation();
+  };
+
   const completedTasksCount = monthTasks.filter(t => t.isCompleted).length;
 
   return (
@@ -249,40 +495,40 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
 • Overarching goals and academic themes.
 • Key deliverables and personal growth commitments.
 • Major milestones to achieve before month's end..."
-              className="v-input font-handle"
+              className="v-input font-system"
               style={{ fontSize: 14, lineHeight: 1.6 }}
             />
           </div>
 
-          {/* Academic & Editing Columns */}
+          {/* Academic & Editing Columns — Dedicated Editable Priority Sections */}
           <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : 'repeat(2, 1fr)', gap: 14 }}>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <BookOpen size={13} color="#38bdf8" /> Academic Priorities & Coursework (AASTU)
-              </label>
-              <textarea
-                value={academicPriorities}
-                onChange={e => setAcademicPriorities(e.target.value)}
-                rows={3}
-                placeholder="Major exams, lab projects, syllabus milestones..."
-                className="v-input font-handle"
-                style={{ fontSize: 13, lineHeight: 1.5 }}
-              />
-            </div>
+            <EditablePriorityCard
+              title="Academic Priorities & Coursework (AASTU)"
+              icon={<BookOpen size={14} color="#38bdf8" />}
+              accentColor="#38bdf8"
+              value={academicPriorities}
+              onChange={val => {
+                setAcademicPriorities(val);
+                handleSaveDirect(val, editingTargets);
+              }}
+              onSaveDirect={() => handleSaveDirect(academicPriorities, editingTargets)}
+              placeholder="No academic priorities added yet."
+              addPlaceholder="Add academic priority (e.g. Embedded Systems Project)..."
+            />
 
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <Video size={13} color="#a855f7" /> Video-Editing & Deep-Work Deliverables
-              </label>
-              <textarea
-                value={editingTargets}
-                onChange={e => setEditingTargets(e.target.value)}
-                rows={3}
-                placeholder="Deliverables, YouTube uploads, creative production quotas..."
-                className="v-input font-handle"
-                style={{ fontSize: 13, lineHeight: 1.5 }}
-              />
-            </div>
+            <EditablePriorityCard
+              title="Video-Editing & Deep-Work Deliverables"
+              icon={<Video size={14} color="#a855f7" />}
+              accentColor="#a855f7"
+              value={editingTargets}
+              onChange={val => {
+                setEditingTargets(val);
+                handleSaveDirect(academicPriorities, val);
+              }}
+              onSaveDirect={() => handleSaveDirect(academicPriorities, editingTargets)}
+              placeholder="No video-editing deliverables added yet."
+              addPlaceholder="Add deliverable (e.g. Export 4K Documentary Cut)..."
+            />
           </div>
 
           <div>
@@ -294,7 +540,7 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
               onChange={e => setCommitments(e.target.value)}
               rows={2}
               placeholder="Critical submission dates, events, health/fitness commitments..."
-              className="v-input font-handle"
+              className="v-input font-system"
               style={{ fontSize: 13, lineHeight: 1.5 }}
             />
           </div>

@@ -81,6 +81,12 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
 
+  // Inline Add Task inside Category
+  const [addingTaskSectionId, setAddingTaskSectionId] = useState<string | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskMinutes, setNewTaskMinutes] = useState('30');
+  const [newTaskPriority, setNewTaskPriority] = useState<PriorityLevel>('Medium');
+
   // New section form
   const [showNewSection, setShowNewSection] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
@@ -184,6 +190,7 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
   };
 
   const deleteTask = async (taskId: string) => {
+    setAllTasks(prev => prev.filter(t => t.id !== taskId));
     await db.tasks.update(taskId, { deleted: true, updatedAt: Date.now(), synced: 0 });
     syncEngine.notifyLocalMutation();
     load();
@@ -191,6 +198,14 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
 
   const toggleComplete = async (task: Task) => {
     const next = !task.isCompleted;
+    // Immediate optimistic state update
+    setAllTasks(prev => prev.map(t => t.id === task.id ? {
+      ...t,
+      isCompleted: next,
+      completedAt: next ? Date.now() : null,
+      status: next ? 'completed' : 'not_started',
+    } : t));
+
     await db.tasks.update(task.id, {
       isCompleted: next,
       completedAt: next ? Date.now() : null,
@@ -199,7 +214,42 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
       synced: 0,
     });
     syncEngine.notifyLocalMutation();
-    load();
+  };
+
+  const handleCreateTaskInCategory = async (sectionId: string) => {
+    if (!newTaskTitle.trim()) return;
+    const now = Date.now();
+    const mins = parseInt(newTaskMinutes) || 30;
+    const newTask: Task = {
+      id: crypto.randomUUID(),
+      title: newTaskTitle.trim(),
+      description: '',
+      strategy: '',
+      doneMeans: '',
+      sectionId,
+      date: currentDate,
+      priority: newTaskPriority,
+      status: 'not_started',
+      isCompleted: false,
+      mustDo: false,
+      tags: [],
+      icon: '✓',
+      estimatedMinutes: mins,
+      scheduledMinutes: mins,
+      order: (tasksBySection[sectionId] || []).length,
+      createdAt: now,
+      updatedAt: now,
+      deleted: false,
+      isSample: false,
+      synced: 0,
+    };
+
+    setAllTasks(prev => [...prev, newTask]);
+    await db.tasks.put(newTask);
+    syncEngine.notifyLocalMutation();
+    setNewTaskTitle('');
+    setNewTaskMinutes('30');
+    setAddingTaskSectionId(null);
   };
 
   const addSection = async () => {
@@ -328,6 +378,12 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
         const tasks = tasksBySection[sec.id] || [];
         const isOpen = expandedSections.has(sec.id);
         const completedCount = tasks.filter(t => t.isCompleted).length;
+        const remainingCount = tasks.length - completedCount;
+        const remainingMinutes = tasks
+          .filter(t => !t.isCompleted)
+          .reduce((sum, t) => sum + (t.scheduledMinutes || t.estimatedMinutes || 0), 0);
+        const remHrs = Math.floor(remainingMinutes / 60);
+        const remMins = remainingMinutes % 60;
 
         return (
           <div key={sec.id} className="v-card" style={{ overflow: 'hidden' }}>
@@ -339,7 +395,7 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
                 gap: 12,
                 padding: '16px 20px',
                 cursor: 'pointer',
-                borderBottom: isOpen && tasks.length > 0 ? '1.5px solid var(--v-glass-border-subtle)' : 'none',
+                borderBottom: isOpen && (tasks.length > 0 || addingTaskSectionId === sec.id) ? '1.5px solid var(--v-glass-border-subtle)' : 'none',
               }}
               onClick={() => toggleSection(sec.id)}
             >
@@ -363,11 +419,30 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
                   {sec.name}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {completedCount}/{tasks.length} tasks completed
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span>{completedCount}/{tasks.length} completed</span>
+                  <span>•</span>
+                  <span>{remainingCount} remaining</span>
+                  <span>•</span>
+                  <span style={{ color: remainingMinutes > 0 ? 'var(--accent-color)' : '#22c55e', fontWeight: 600 }}>
+                    {remHrs > 0 ? `${remHrs}h ` : ''}{remMins}m focus left
+                  </span>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation();
+                    setAddingTaskSectionId(sec.id);
+                    if (!isOpen) toggleSection(sec.id);
+                  }}
+                  className="v-pill-btn"
+                  style={{ padding: '4px 10px', fontSize: 11, minHeight: 30, gap: 4 }}
+                  title="Add task directly in this category"
+                >
+                  <Plus size={12} /> Add Task
+                </button>
                 <button
                   type="button"
                   onClick={e => { e.stopPropagation(); deleteSection(sec.id); }}
@@ -383,10 +458,90 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
 
             {/* Tasks List */}
             {isOpen && (
-              <div style={{ padding: tasks.length === 0 ? '16px 20px' : '0' }}>
-                {tasks.length === 0 ? (
+              <div style={{ padding: tasks.length === 0 && addingTaskSectionId !== sec.id ? '16px 20px' : '0' }}>
+                {/* Inline Add Task Creator inside category */}
+                {addingTaskSectionId === sec.id && (
+                  <div
+                    style={{
+                      padding: '14px 20px',
+                      background: 'var(--v-glass-bg-subtle)',
+                      borderBottom: '1.5px solid var(--v-glass-border-subtle)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-color)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Plus size={13} /> Add Task to {sec.name}
+                    </div>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newTaskTitle}
+                      onChange={e => setNewTaskTitle(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleCreateTaskInCategory(sec.id);
+                        if (e.key === 'Escape') setAddingTaskSectionId(null);
+                      }}
+                      placeholder="Task title (e.g. Complete lab assignment)..."
+                      className="v-input font-system"
+                      style={{ fontSize: 13 }}
+                    />
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Focus time:</span>
+                        <input
+                          type="number"
+                          value={newTaskMinutes}
+                          onChange={e => setNewTaskMinutes(e.target.value)}
+                          min="5"
+                          step="5"
+                          placeholder="30"
+                          className="v-input"
+                          style={{ width: 68, padding: '4px 8px', minHeight: 32, fontSize: 12, textAlign: 'center' }}
+                        />
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>min</span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Priority:</span>
+                        <select
+                          value={newTaskPriority}
+                          onChange={e => setNewTaskPriority(e.target.value as PriorityLevel)}
+                          className="v-input"
+                          style={{ width: 100, padding: '4px 8px', minHeight: 32, fontSize: 12 }}
+                        >
+                          <option value="Low">Low</option>
+                          <option value="Medium">Medium</option>
+                          <option value="High">High</option>
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleCreateTaskInCategory(sec.id)}
+                          className="v-pill-btn v-pill-btn-primary"
+                          style={{ padding: '4px 14px', fontSize: 12, minHeight: 32 }}
+                        >
+                          Save Task
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAddingTaskSectionId(null)}
+                          className="v-pill-btn"
+                          style={{ padding: '4px 12px', fontSize: 12, minHeight: 32 }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {tasks.length === 0 && addingTaskSectionId !== sec.id ? (
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>
-                    No tasks yet — add one from Add Task
+                    No tasks yet in {sec.name} — click <strong>+ Add Task</strong> above to add one directly.
                   </div>
                 ) : (
                   tasks.map((task, idx) => {
@@ -555,20 +710,20 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
                                 </div>
                                 <div>
                                   <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: 4 }}>DESCRIPTION</label>
-                                  <textarea value={editState.description} onChange={e => setEditState(prev => prev ? { ...prev, description: e.target.value } : null)} className="v-input font-handle" rows={2} style={{ resize: 'vertical', fontSize: 13 }} />
+                                  <textarea value={editState.description} onChange={e => setEditState(prev => prev ? { ...prev, description: e.target.value } : null)} className="v-input font-system" rows={2} style={{ resize: 'vertical', fontSize: 13 }} />
                                 </div>
                                 <div>
                                   <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: 4 }}>STRATEGY</label>
-                                  <textarea value={editState.strategy} onChange={e => setEditState(prev => prev ? { ...prev, strategy: e.target.value } : null)} className="v-input font-handle" rows={2} style={{ resize: 'vertical', fontSize: 13 }} />
+                                  <textarea value={editState.strategy} onChange={e => setEditState(prev => prev ? { ...prev, strategy: e.target.value } : null)} className="v-input font-system" rows={2} style={{ resize: 'vertical', fontSize: 13 }} />
                                 </div>
                                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                                   <div style={{ flex: 1, minWidth: 160 }}>
                                     <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: 4 }}>DONE MEANS</label>
-                                    <input type="text" value={editState.doneMeans} onChange={e => setEditState(prev => prev ? { ...prev, doneMeans: e.target.value } : null)} className="v-input font-handle" style={{ fontSize: 13 }} />
+                                    <input type="text" value={editState.doneMeans} onChange={e => setEditState(prev => prev ? { ...prev, doneMeans: e.target.value } : null)} className="v-input font-system" style={{ fontSize: 13 }} />
                                   </div>
                                   <div style={{ flex: 1, minWidth: 160 }}>
                                     <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: 4 }}>RESULT</label>
-                                    <input type="text" value={editState.result} onChange={e => setEditState(prev => prev ? { ...prev, result: e.target.value } : null)} className="v-input font-handle" style={{ fontSize: 13 }} />
+                                    <input type="text" value={editState.result} onChange={e => setEditState(prev => prev ? { ...prev, result: e.target.value } : null)} className="v-input font-system" style={{ fontSize: 13 }} />
                                   </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: 10 }}>
@@ -588,7 +743,7 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
                                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                                       <FileText size={10} /> DESCRIPTION
                                     </div>
-                                    <p className="font-handle" style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                                    <p className="font-system" style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
                                       {task.description}
                                     </p>
                                   </div>
@@ -598,7 +753,7 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
                                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                                       <Layers size={10} /> STRATEGY
                                     </div>
-                                    <p className="font-handle" style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                                    <p className="font-system" style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
                                       {task.strategy}
                                     </p>
                                   </div>
@@ -606,7 +761,7 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
                                 {task.result && (
                                   <div>
                                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RESULT</div>
-                                    <p className="font-handle" style={{ fontSize: 13, color: '#22c55e', margin: 0 }}>{task.result}</p>
+                                    <p className="font-system" style={{ fontSize: 13, color: '#22c55e', margin: 0 }}>{task.result}</p>
                                   </div>
                                 )}
                                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>

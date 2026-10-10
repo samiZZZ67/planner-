@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
 import { useTimer } from '@/lib/timer/useTimer';
@@ -45,6 +45,7 @@ export function TodoListScreen({
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   const [dayFreeHours, setDayFreeHours] = useState<number>(8);
   const [editingBudget, setEditingBudget] = useState(false);
+  const editingBudgetRef = useRef(false);
   const [budgetInput, setBudgetInput] = useState('8');
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
 
@@ -80,7 +81,9 @@ export function TodoListScreen({
     setTimeLogs(lList);
     const fh = dayRecord?.freeHours ?? 8;
     setDayFreeHours(fh);
-    setBudgetInput(String(fh));
+    if (!editingBudgetRef.current) {
+      setBudgetInput(String(fh));
+    }
   };
 
   useEffect(() => {
@@ -125,7 +128,7 @@ export function TodoListScreen({
 
   const handleSaveBudget = async () => {
     const hrs = parseFloat(budgetInput);
-    if (isNaN(hrs) || hrs <= 0 || hrs > 24) return;
+    if (isNaN(hrs) || hrs <= 0) return;
     const now = Date.now();
     await db.days.put({
       id: currentDate,
@@ -139,6 +142,7 @@ export function TodoListScreen({
     });
     setDayFreeHours(hrs);
     setEditingBudget(false);
+    editingBudgetRef.current = false;
     syncEngine.notifyLocalMutation();
   };
 
@@ -277,11 +281,19 @@ export function TodoListScreen({
                 type="number"
                 value={budgetInput}
                 onChange={e => setBudgetInput(e.target.value)}
-                min="0.5"
-                max="24"
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleSaveBudget();
+                  if (e.key === 'Escape') {
+                    setEditingBudget(false);
+                    editingBudgetRef.current = false;
+                    setBudgetInput(String(dayFreeHours));
+                  }
+                }}
+                min="0.1"
                 step="0.5"
+                placeholder="Hours"
                 style={{
-                  width: 58,
+                  width: 68,
                   padding: '4px 8px',
                   borderRadius: 8,
                   border: '1.5px solid var(--accent-color)',
@@ -302,7 +314,11 @@ export function TodoListScreen({
               </button>
               <button
                 type="button"
-                onClick={() => setEditingBudget(false)}
+                onClick={() => {
+                  setEditingBudget(false);
+                  editingBudgetRef.current = false;
+                  setBudgetInput(String(dayFreeHours));
+                }}
                 className="v-circle-btn"
                 style={{ width: 28, height: 28 }}
               >
@@ -312,7 +328,11 @@ export function TodoListScreen({
           ) : (
             <button
               type="button"
-              onClick={() => setEditingBudget(true)}
+              onClick={() => {
+                setEditingBudget(true);
+                editingBudgetRef.current = true;
+                setBudgetInput(String(dayFreeHours));
+              }}
               style={{
                 background: 'none',
                 border: 'none',

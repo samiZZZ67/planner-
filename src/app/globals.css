@@ -34,8 +34,9 @@
 :root {
   --font-app: 'Demon Slave', 'Bloody Hell', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-heading: 'Demon Slave', 'Bloody Hell', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-body: 'Handle', 'Demon Slave', system-ui, -apple-system, sans-serif;
-  --font-handle: 'Handle', system-ui, -apple-system, sans-serif;
+  --font-system: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-handle: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
   /* Dark Obsidian Glass Tokens */
   --v-app-bg: #0d0d11;
@@ -88,10 +89,8 @@
   --accent-glow: rgba(2, 132, 199, 0.25);
 }
 
-*, *::before, *::after,
-html, body, button, input, textarea, select, span, p, h1, h2, h3, h4, h5, h6, a, label, strong, b, em, u, s, i, li, ul, ol, td, th {
+*, *::before, *::after {
   box-sizing: border-box;
-  font-family: 'Demon Slave', 'Bloody Hell', system-ui, -apple-system, sans-serif !important;
 }
 
 html, body {
@@ -99,10 +98,22 @@ html, body {
   padding: 0;
   min-height: 100%;
   overflow-x: hidden;
-  font-family: 'Demon Slave', 'Bloody Hell', system-ui, -apple-system, sans-serif !important;
+  font-family: 'Demon Slave', 'Bloody Hell', system-ui, -apple-system, sans-serif;
   color: var(--text-primary);
   background-color: var(--v-app-bg);
   transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Detailed writing, notes, descriptions, strategies, inputs & textareas use native system font */
+textarea,
+input,
+select,
+.v-input,
+.font-system,
+.font-handle,
+.note-content,
+.rich-text-editor {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
 
 /* Spatial Room Backdrop */

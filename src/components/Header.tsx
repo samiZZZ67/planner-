@@ -5,7 +5,7 @@ import { useSync } from '@/lib/sync/useSync';
 import { useTimer } from '@/lib/timer/useTimer';
 import {
   WifiOff, RefreshCw, CheckCircle2, Clock, AlertTriangle,
-  Moon, Sun, Lock, Play, Pause, Square
+  Moon, Sun, Lock, Play, Pause, Square, Save
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -33,33 +33,53 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const formatSeconds = (sec?: number) => {
+    if (!sec || sec <= 0) return '0s';
+    const mins = Math.floor(sec / 60);
+    const remaining = sec % 60;
+    if (mins > 0) {
+      return `${mins}m ${remaining}s`;
+    }
+    return `${remaining}s`;
+  };
+
   const SyncBadge = () => {
-    if (sync.warningIfStale) {
+    if (sync.warningIfStale || sync.errorMessage) {
       return (
-        <button
-          onClick={() => sync.triggerSync()}
-          className="v-pill-btn animate-pulse"
-          style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, borderColor: '#f87171', color: '#f87171' }}
-          title="Changes stale — click to retry"
-        >
-          <AlertTriangle size={12} />
-          <span>{sync.unsyncedCount} stale</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            onClick={() => sync.triggerSync()}
+            className="v-pill-btn animate-pulse"
+            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, borderColor: '#f87171', color: '#f87171', gap: 4 }}
+            title={sync.errorMessage || "Save error — click to retry"}
+          >
+            <AlertTriangle size={12} />
+            <span>Error saving (Retry)</span>
+          </button>
+          <button
+            onClick={() => sync.triggerSync()}
+            className="v-pill-btn v-pill-btn-primary"
+            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, gap: 4 }}
+          >
+            <Save size={12} />
+            <span>Save Now</span>
+          </button>
+        </div>
       );
     }
     switch (sync.status) {
       case 'offline':
         return (
-          <div className="v-pill-btn" style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: '#f59e0b' }}>
+          <div className="v-pill-btn" style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: '#f59e0b', gap: 4 }}>
             <WifiOff size={12} />
-            <span>Offline</span>
+            <span>Offline (unsaved locally)</span>
           </div>
         );
       case 'syncing':
         return (
-          <div className="v-pill-btn" style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: 'var(--accent-color)' }}>
+          <div className="v-pill-btn" style={{ padding: '6px 14px', fontSize: 11, minHeight: 34, color: 'var(--accent-color)', gap: 5 }}>
             <RefreshCw size={12} className="animate-spin" />
-            <span>Syncing</span>
+            <span>Saving...</span>
           </div>
         );
       case 'auth_required':
@@ -67,7 +87,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }
           <button
             onClick={onOpenLogin}
             className="v-pill-btn"
-            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34 }}
+            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, gap: 4 }}
           >
             <Lock size={12} />
             <span>Login to Sync</span>
@@ -75,26 +95,34 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }
         );
       case 'changes_waiting':
         return (
-          <button
-            onClick={() => sync.triggerSync()}
-            className="v-pill-btn"
-            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.4)' }}
-            title="Waiting 30 seconds before saving to server. Click to save now."
-          >
-            <Clock size={12} />
-            <span>
-              {sync.secondsUntilSync && sync.secondsUntilSync > 0
-                ? `Saving in ${sync.secondsUntilSync}s`
-                : `${sync.unsyncedCount} saving in 30s`}
-            </span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div
+              className="v-pill-btn"
+              style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.4)', gap: 4 }}
+              title="Automatic save in 2 minutes"
+            >
+              <Clock size={12} />
+              <span>
+                Unsaved changes ({formatSeconds(sync.secondsUntilSync)})
+              </span>
+            </div>
+            <button
+              onClick={() => sync.triggerSync()}
+              className="v-pill-btn v-pill-btn-primary"
+              style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, gap: 4, fontWeight: 700 }}
+              title="Save immediately without waiting"
+            >
+              <Save size={12} />
+              <span>Save Now</span>
+            </button>
+          </div>
         );
       default:
         return (
           <div
             className="v-pill-btn"
-            style={{ padding: '6px 14px', fontSize: 11, minHeight: 34 }}
-            title={sync.lastSyncedAt ? `Last sync: ${formatTime(sync.lastSyncedAt)}` : 'Synced with Cloud'}
+            style={{ padding: '6px 14px', fontSize: 11, minHeight: 34, gap: 5 }}
+            title={sync.lastSyncedAt ? `Last saved: ${formatTime(sync.lastSyncedAt)}` : 'Saved locally & synced'}
           >
             <CheckCircle2 size={12} style={{ color: '#22c55e' }} />
             <span>Saved</span>

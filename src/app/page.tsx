@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { seedDefaultSectionsIfEmpty, requestPersistentStorage } from '@/lib/db';
 import { registerServiceWorker } from '@/lib/pwa/registerSw';
 import { useDeviceType } from '@/lib/hooks/useDeviceType';
@@ -38,9 +38,76 @@ export default function NightPlannerApp() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
 
+  // Draggable Moon Button State
+  const [btnPos, setBtnPos] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragInfoRef = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
+
+  const clampPosition = (x: number, y: number) => {
+    const btnSize = 48;
+    const margin = 12;
+    const maxX = typeof window !== 'undefined' ? window.innerWidth - btnSize - margin : 500;
+    const maxY = typeof window !== 'undefined' ? window.innerHeight - btnSize - margin : 500;
+    return {
+      x: Math.max(margin, Math.min(maxX, x)),
+      y: Math.max(margin, Math.min(maxY, y)),
+    };
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+
+    const currentPos = btnPos || clampPosition(
+      window.innerWidth - (isPhone ? 64 : 76),
+      window.innerHeight - (isPhone ? 132 : 76)
+    );
+
+    dragInfoRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: currentPos.x,
+      origY: currentPos.y,
+      moved: false,
+    };
+
+    const handlePointerMove = (moveEvt: PointerEvent) => {
+      if (!dragInfoRef.current) return;
+      const dx = moveEvt.clientX - dragInfoRef.current.startX;
+      const dy = moveEvt.clientY - dragInfoRef.current.startY;
+      if (Math.hypot(dx, dy) > 4) {
+        dragInfoRef.current.moved = true;
+        setIsDragging(true);
+        const newPos = clampPosition(
+          dragInfoRef.current.origX + dx,
+          dragInfoRef.current.origY + dy
+        );
+        setBtnPos(newPos);
+      }
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      setIsDragging(false);
+
+      if (dragInfoRef.current && !dragInfoRef.current.moved) {
+        setIsAIChatOpen(true);
+      }
+      dragInfoRef.current = null;
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
+
   // Lifecycle Initialization
   useEffect(() => {
     setIsMounted(true);
+
+    const onResize = () => {
+      setBtnPos(prev => prev ? clampPosition(prev.x, prev.y) : null);
+    };
+    window.addEventListener('resize', onResize);
 
     // Default planning date to today in local timezone
     const today = new Date().toLocaleDateString('en-CA');
@@ -59,6 +126,8 @@ export default function NightPlannerApp() {
     const savedTheme = (localStorage.getItem('np_theme') as 'dark' | 'light') || 'dark';
     setTheme(savedTheme);
     document.documentElement.setAttribute('data-theme', savedTheme);
+
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   const toggleTheme = () => {
@@ -358,17 +427,18 @@ export default function NightPlannerApp() {
         onClose={() => setIsLoginModalOpen(false)}
       />
 
-      {/* ── 7. Floating Moon Button for AI Assistant ── */}
+      {/* ── 7. Floating Draggable Moon Button for AI Assistant ── */}
       {!isAIChatOpen && (
         <button
-          onClick={() => setIsAIChatOpen(true)}
+          onPointerDown={handlePointerDown}
           className="v-pill-btn"
-          aria-label="Open AI Assistant"
-          title="Open AI Chat Assistant"
+          aria-label="Open AI Assistant (Draggable)"
+          title="Drag with mouse or touch to reposition • Click to open AI Assistant"
           style={{
             position: 'fixed',
-            bottom: isPhone ? 84 : 28,
-            right: isPhone ? 16 : 28,
+            ...(btnPos
+              ? { left: btnPos.x, top: btnPos.y, right: 'auto', bottom: 'auto' }
+              : { right: isPhone ? 16 : 28, bottom: isPhone ? 84 : 28 }),
             zIndex: 45,
             width: 48,
             height: 48,
@@ -380,14 +450,20 @@ export default function NightPlannerApp() {
             fontSize: 22,
             background: 'var(--v-glass-bg)',
             border: '1.5px solid var(--v-glass-border)',
-            boxShadow: 'var(--v-shadow-btn), 0 0 20px rgba(168, 85, 247, 0.3)',
-            cursor: 'pointer',
-            transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease',
+            boxShadow: isDragging
+              ? '0 12px 28px rgba(0, 0, 0, 0.6), 0 0 25px rgba(168, 85, 247, 0.5)'
+              : 'var(--v-shadow-btn), 0 0 20px rgba(168, 85, 247, 0.3)',
+            cursor: isDragging ? 'grabbing' : 'grab',
+            touchAction: 'none',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease',
+            transform: isDragging ? 'scale(1.12)' : undefined,
           }}
-          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.08)')}
-          onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+          onMouseEnter={e => { if (!isDragging) e.currentTarget.style.transform = 'scale(1.08)'; }}
+          onMouseLeave={e => { if (!isDragging) e.currentTarget.style.transform = 'scale(1)'; }}
         >
-          <span>🌙</span>
+          <span style={{ pointerEvents: 'none' }}>🌙</span>
         </button>
       )}
 

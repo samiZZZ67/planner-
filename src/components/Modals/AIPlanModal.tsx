@@ -320,7 +320,7 @@ export function AIPlanModal({
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-color)', letterSpacing: '0.04em', marginBottom: 4 }}>
                   STRATEGIC RATIONALE
                 </div>
-                <div className="font-handle" style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                <div className="font-system" style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
                   {planResult.rationale}
                 </div>
               </div>

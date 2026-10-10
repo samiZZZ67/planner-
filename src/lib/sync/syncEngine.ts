@@ -168,11 +168,11 @@ class SyncEngine {
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     if (this.countdownInterval) clearInterval(this.countdownInterval);
 
-    // Requirement: When saving, wait exactly 30 seconds before saving to server
-    this.syncCountdown = 30;
+    // Requirement: When saving, wait 2 minutes (120s) after last edit before saving to server
+    this.syncCountdown = 120;
     this.updateState({
       status: 'changes_waiting',
-      secondsUntilSync: 30,
+      secondsUntilSync: 120,
     });
 
     this.countdownInterval = setInterval(() => {
@@ -194,14 +194,14 @@ class SyncEngine {
       this.debounceTimer = null;
       this.updateState({ secondsUntilSync: 0 });
       this.triggerSync();
-    }, 30000);
+    }, 120000);
   }
 
   public async triggerSync(): Promise<void> {
     if (this.isSyncing) return;
     if (typeof window === 'undefined') return;
 
-    // Clear 30s wait timers if triggerSync is called
+    // Clear 2-minute wait timers when triggerSync is called
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;

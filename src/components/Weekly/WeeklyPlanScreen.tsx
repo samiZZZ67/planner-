@@ -340,7 +340,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
 • Deep-work and video-editing targets (milestones, exports, render schedules).
 • Important priorities, fixed constraints, energy levels.
 • Total available focus time and non-negotiables before the week ends..."
-              className="v-input font-handle"
+              className="v-input font-system"
               style={{
                 fontSize: 14,
                 lineHeight: 1.6,
@@ -352,36 +352,6 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
 
           {/* Structured Category Breakdown Inputs */}
           <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : 'repeat(2, 1fr)', gap: 14 }}>
-            {/* AASTU Academic Commitments */}
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <BookOpen size={13} color="#38bdf8" /> AASTU Academic Classes & Deadlines
-              </label>
-              <textarea
-                value={aastuCommitments}
-                onChange={e => setAastuCommitments(e.target.value)}
-                rows={3}
-                placeholder="Classes, lab reports, assignments, midterm reviews..."
-                className="v-input font-handle"
-                style={{ fontSize: 13, lineHeight: 1.5 }}
-              />
-            </div>
-
-            {/* Deep Work & Video Editing Targets */}
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <Video size={13} color="#a855f7" /> Deep-Work & Video-Editing Targets
-              </label>
-              <textarea
-                value={deepWorkTargets}
-                onChange={e => setDeepWorkTargets(e.target.value)}
-                rows={3}
-                placeholder="Video editing projects, coding sprints, deep focus goals..."
-                className="v-input font-handle"
-                style={{ fontSize: 13, lineHeight: 1.5 }}
-              />
-            </div>
-
             {/* Main Goals */}
             <div>
               <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
@@ -390,9 +360,9 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
               <textarea
                 value={goals}
                 onChange={e => setGoals(e.target.value)}
-                rows={3}
-                placeholder="Top 3 essential milestones for this week..."
-                className="v-input font-handle"
+                rows={4}
+                placeholder="Top essential milestones and focus outcomes for this week..."
+                className="v-input font-system"
                 style={{ fontSize: 13, lineHeight: 1.5 }}
               />
             </div>
@@ -405,9 +375,9 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
               <textarea
                 value={outcomes}
                 onChange={e => setOutcomes(e.target.value)}
-                rows={3}
-                placeholder="What MUST be accomplished by Sunday night? Hard constraints..."
-                className="v-input font-handle"
+                rows={4}
+                placeholder="What MUST be accomplished before Sunday night? Hard constraints & deadlines..."
+                className="v-input font-system"
                 style={{ fontSize: 13, lineHeight: 1.5 }}
               />
             </div>
@@ -480,7 +450,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
             </span>
           </div>
           <div
-            className="font-handle"
+            className="font-system"
             style={{
               fontSize: 14,
               lineHeight: 1.7,

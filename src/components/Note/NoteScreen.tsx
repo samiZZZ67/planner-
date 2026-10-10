@@ -1,28 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
 import {
-  StickyNote, Sparkles, Clock, ChevronLeft, ChevronRight,
-  Bold as BoldIcon, Underline as UnderlineIcon, Strikethrough as StrikethroughIcon,
-  Palette, Save, Check
+  StickyNote, Sparkles, Clock, Save, Check
 } from 'lucide-react';
-import type { Day, DayReview } from '@/types';
+import type { DayReview } from '@/types';
+import { VisualRichEditor } from './VisualRichEditor';
 
 interface NoteScreenProps {
   currentDate: string;
   onChangeDate: (date: string) => void;
   isPhone: boolean;
 }
-
-const COLOR_OPTIONS = [
-  { label: 'Red', value: '#ef4444' },
-  { label: 'Blue', value: '#38bdf8' },
-  { label: 'Green', value: '#22c55e' },
-  { label: 'Amber', value: '#f59e0b' },
-  { label: 'Default', value: '' },
-];
 
 export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenProps) {
   const [quickNote, setQuickNote] = useState('');
@@ -39,15 +30,6 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
 
   const [saved, setSaved] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
-
-  // Active focused input ref for formatting
-  const activeInputRef = useRef<HTMLTextAreaElement | null>(null);
-
-  const quickNoteRef = useRef<HTMLTextAreaElement | null>(null);
-  const obstaclesRef = useRef<HTMLTextAreaElement | null>(null);
-  const happenedRef = useRef<HTMLTextAreaElement | null>(null);
-  const solvedRef = useRef<HTMLTextAreaElement | null>(null);
-  const betterRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Subscribe to sync countdown
   useEffect(() => {
@@ -127,54 +109,6 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
     saveToDb(quickNote, next, false);
   };
 
-  const handleFormat = (type: 'bold' | 'underline' | 'strikethrough' | 'color', colorVal = '#ef4444') => {
-    const el = activeInputRef.current;
-    if (!el) return;
-
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const val = el.value;
-    const selected = val.substring(start, end) || 'text';
-
-    let prefix = '';
-    let suffix = '';
-
-    if (type === 'bold') {
-      prefix = '<b>';
-      suffix = '</b>';
-    } else if (type === 'underline') {
-      prefix = '<u>';
-      suffix = '</u>';
-    } else if (type === 'strikethrough') {
-      prefix = '<s>';
-      suffix = '</s>';
-    } else if (type === 'color') {
-      prefix = `<span style="color:${colorVal}">`;
-      suffix = '</span>';
-    }
-
-    const nextVal = val.substring(0, start) + prefix + selected + suffix + val.substring(end);
-    el.value = nextVal;
-
-    // Trigger state update
-    if (el === quickNoteRef.current) {
-      handleQuickNoteChange(nextVal);
-    } else if (el === obstaclesRef.current) {
-      handleReviewChange('obstacles', nextVal);
-    } else if (el === happenedRef.current) {
-      handleReviewChange('happened', nextVal);
-    } else if (el === solvedRef.current) {
-      handleReviewChange('solved', nextVal);
-    } else if (el === betterRef.current) {
-      handleReviewChange('betterTomorrow', nextVal);
-    }
-
-    setTimeout(() => {
-      el.focus();
-      el.setSelectionRange(start + prefix.length, start + prefix.length + selected.length);
-    }, 10);
-  };
-
   const shiftDate = (days: number) => {
     const [y, m, d] = currentDate.split('-').map(Number);
     const date = new Date(Date.UTC(y, m - 1, d));
@@ -191,6 +125,14 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
       return 'TODAY';
     }
   }, [currentDate]);
+
+  const formatCountdown = (sec: number | null) => {
+    if (sec === null || sec <= 0) return '0s';
+    const mins = Math.floor(sec / 60);
+    const rem = sec % 60;
+    if (mins > 0) return `${mins}m ${rem}s`;
+    return `${rem}s`;
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -224,7 +166,7 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
         </button>
       </div>
 
-      {/* ── Header with 30s countdown and tabs ── */}
+      {/* ── Action Bar with 2-minute Countdown and Tabs ── */}
       <div className="v-card" style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         {/* Sub-tabs */}
         <div style={{ display: 'flex', gap: 8 }}>
@@ -246,117 +188,43 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
           </button>
         </div>
 
-        {/* 30s Save Countdown & Manual Save Button */}
+        {/* 2-minute Save Countdown & Manual Save Button */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {countdown !== null && countdown > 0 ? (
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Clock size={12} /> Saving in {countdown}s
+            <span style={{ fontSize: 12, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Clock size={12} /> Unsaved changes ({formatCountdown(countdown)})
             </span>
           ) : saved ? (
-            <span style={{ fontSize: 12, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Check size={12} /> Saved locally
+            <span style={{ fontSize: 12, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Check size={12} /> Saved
             </span>
           ) : (
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Auto-saves in 30s</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Auto-saves 2m after edit</span>
           )}
 
           <button
             type="button"
             onClick={() => saveToDb(quickNote, review, true)}
-            className="v-pill-btn"
-            style={{ padding: '6px 12px', fontSize: 12, minHeight: 32, gap: 4 }}
-            title="Save immediately without waiting 30 seconds"
+            className="v-pill-btn v-pill-btn-primary"
+            style={{ padding: '6px 14px', fontSize: 12, minHeight: 32, gap: 5, fontWeight: 700 }}
+            title="Save immediately without waiting for the 2-minute timer"
           >
-            <Save size={12} /> Save now
+            <Save size={12} /> Save Now
           </button>
         </div>
-      </div>
-
-      {/* ── Formatting Toolbar ── */}
-      <div
-        className="v-card"
-        style={{
-          padding: '8px 14px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          flexWrap: 'wrap',
-          background: 'var(--v-glass-bg-subtle)',
-        }}
-      >
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginRight: 6 }}>FORMAT:</span>
-        <button
-          type="button"
-          onClick={() => handleFormat('bold')}
-          className="v-circle-btn"
-          style={{ width: 32, height: 32, fontWeight: 700 }}
-          title="Bold"
-        >
-          <BoldIcon size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => handleFormat('underline')}
-          className="v-circle-btn"
-          style={{ width: 32, height: 32 }}
-          title="Underline"
-        >
-          <UnderlineIcon size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => handleFormat('strikethrough')}
-          className="v-circle-btn"
-          style={{ width: 32, height: 32 }}
-          title="Strikethrough"
-        >
-          <StrikethroughIcon size={14} />
-        </button>
-
-        <div style={{ width: 1, height: 18, background: 'var(--v-glass-border)', margin: '0 4px' }} />
-
-        {COLOR_OPTIONS.map(opt => (
-          <button
-            key={opt.label}
-            type="button"
-            onClick={() => handleFormat('color', opt.value)}
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: '50%',
-              background: opt.value || 'var(--text-primary)',
-              border: '1.5px solid var(--v-glass-border)',
-              cursor: 'pointer',
-              flexShrink: 0,
-            }}
-            title={opt.label}
-          />
-        ))}
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
-          (Select text, then click formatting button)
-        </span>
       </div>
 
       {/* ── Tab Content: Quick Notes ── */}
       {activeTab === 'quick' && (
         <div className="v-card" style={{ padding: '20px' }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em', display: 'block', marginBottom: 10 }}>
-            QUICK NOTES & THOUGHTS
+          <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em', display: 'block', marginBottom: 12 }}>
+            QUICK NOTES & THOUGHTS (VISUAL RICH TEXT)
           </label>
-          <textarea
-            ref={quickNoteRef}
+          <VisualRichEditor
             value={quickNote}
-            onChange={e => handleQuickNoteChange(e.target.value)}
-            onFocus={() => { activeInputRef.current = quickNoteRef.current; }}
-            placeholder="Jot down anything — ideas, links, brainstorms, reminders... (Formatted with Handle font)"
-            rows={14}
-            className="v-input font-handle"
-            style={{
-              fontSize: 15,
-              lineHeight: 1.6,
-              resize: 'vertical',
-              padding: '16px',
-            }}
+            onChange={handleQuickNoteChange}
+            placeholder="Jot down anything — ideas, links, brainstorms, reminders... Format words with bold, colors, and highlights visually!"
+            minHeight={320}
           />
         </div>
       )}
@@ -366,69 +234,53 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Obstacles */}
           <div className="v-card" style={{ padding: '18px 20px' }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#f87171', display: 'block', marginBottom: 8 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: '#f87171', display: 'block', marginBottom: 10 }}>
               What obstacles did I face today?
             </label>
-            <textarea
-              ref={obstaclesRef}
+            <VisualRichEditor
               value={review.obstacles || ''}
-              onChange={e => handleReviewChange('obstacles', e.target.value)}
-              onFocus={() => { activeInputRef.current = obstaclesRef.current; }}
+              onChange={val => handleReviewChange('obstacles', val)}
               placeholder="Distractions, roadblocks, mental blocks, unforeseen delays..."
-              rows={3}
-              className="v-input font-handle"
-              style={{ fontSize: 14, lineHeight: 1.5, resize: 'vertical' }}
+              minHeight={100}
             />
           </div>
 
           {/* Happened */}
           <div className="v-card" style={{ padding: '18px 20px' }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#38bdf8', display: 'block', marginBottom: 8 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: '#38bdf8', display: 'block', marginBottom: 10 }}>
               What happened?
             </label>
-            <textarea
-              ref={happenedRef}
+            <VisualRichEditor
               value={review.happened || ''}
-              onChange={e => handleReviewChange('happened', e.target.value)}
-              onFocus={() => { activeInputRef.current = happenedRef.current; }}
+              onChange={val => handleReviewChange('happened', val)}
               placeholder="What took place during the day? Unexpected events, context changes..."
-              rows={3}
-              className="v-input font-handle"
-              style={{ fontSize: 14, lineHeight: 1.5, resize: 'vertical' }}
+              minHeight={100}
             />
           </div>
 
           {/* Solved */}
           <div className="v-card" style={{ padding: '18px 20px' }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#22c55e', display: 'block', marginBottom: 8 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: '#22c55e', display: 'block', marginBottom: 10 }}>
               How did I solve it?
             </label>
-            <textarea
-              ref={solvedRef}
+            <VisualRichEditor
               value={review.solved || ''}
-              onChange={e => handleReviewChange('solved', e.target.value)}
-              onFocus={() => { activeInputRef.current = solvedRef.current; }}
+              onChange={val => handleReviewChange('solved', val)}
               placeholder="What worked? How did you pivot, adapt, or overcome the issues?"
-              rows={3}
-              className="v-input font-handle"
-              style={{ fontSize: 14, lineHeight: 1.5, resize: 'vertical' }}
+              minHeight={100}
             />
           </div>
 
           {/* Better Tomorrow */}
           <div className="v-card" style={{ padding: '18px 20px' }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#f59e0b', display: 'block', marginBottom: 8 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: '#f59e0b', display: 'block', marginBottom: 10 }}>
               What could I do better tomorrow?
             </label>
-            <textarea
-              ref={betterRef}
+            <VisualRichEditor
               value={review.betterTomorrow || ''}
-              onChange={e => handleReviewChange('betterTomorrow', e.target.value)}
-              onFocus={() => { activeInputRef.current = betterRef.current; }}
+              onChange={val => handleReviewChange('betterTomorrow', val)}
               placeholder="What one adjustment will improve tomorrow's focus and outcome?"
-              rows={3}
-              className="v-input font-handle"
-              style={{ fontSize: 14, lineHeight: 1.5, resize: 'vertical' }}
+              minHeight={100}
             />
           </div>
         </div>

@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db } from '@/lib/db';
 import {
   Sparkles, X, Send, Bot, User, Trash2, ShieldCheck,
-  CheckCircle2, AlertTriangle, ArrowRight, RefreshCw, Clock
+  CheckCircle2, AlertTriangle, ArrowRight, RefreshCw, Clock,
+  Maximize2, Minimize2
 } from 'lucide-react';
 import type { Task, Section, WeeklyPlan, MonthlyPlan } from '@/types';
 
@@ -24,6 +25,7 @@ interface Message {
 }
 
 export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPanelProps) {
+  const [isMaximized, setIsMaximized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -165,18 +167,21 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
         className="v-card"
         onClick={e => e.stopPropagation()}
         style={{
-          width: isPhone ? '100%' : '440px',
-          maxWidth: '100%',
-          height: '100%',
+          width: isMaximized ? '100vw' : isPhone ? '100%' : '480px',
+          maxWidth: '100vw',
+          height: '100vh',
           display: 'flex',
           flexDirection: 'column',
-          borderRadius: isPhone ? '16px 16px 0 0' : '16px 0 0 16px',
+          borderRadius: isMaximized ? 0 : isPhone ? '16px 16px 0 0' : '16px 0 0 16px',
           padding: 0,
           background: 'var(--v-glass-bg)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           boxShadow: '-8px 0 32px rgba(0, 0, 0, 0.6)',
           borderRight: 'none',
+          borderTop: isMaximized ? 'none' : undefined,
+          borderBottom: isMaximized ? 'none' : undefined,
+          transition: 'width 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-radius 0.25s ease',
           animation: 'slideInRight 0.25s ease-out',
         }}
       >
@@ -224,6 +229,17 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* Expand / Minimize Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsMaximized(prev => !prev)}
+              className="v-circle-btn"
+              style={{ width: 30, height: 30 }}
+              title={isMaximized ? "Minimize to normal size" : "Expand to cover entire window"}
+              aria-label={isMaximized ? "Minimize to normal size" : "Expand to cover entire window"}
+            >
+              {isMaximized ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+            </button>
             <button
               type="button"
               onClick={() => setMessages([messages[0]])}
@@ -326,7 +342,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                 }}
-                className={msg.role === 'assistant' ? 'font-handle' : ''}
+                className={msg.role === 'assistant' ? 'font-system' : 'font-system'}
               >
                 {msg.content}
               </div>
@@ -351,7 +367,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                   animation: 'spin 0.8s linear infinite',
                 }}
               />
-              <span className="font-handle">Thinking & analyzing plan…</span>
+              <span className="font-system">Thinking & analyzing plan…</span>
             </div>
           )}
 
@@ -378,7 +394,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
             onChange={e => setInput(e.target.value)}
             placeholder="Ask a question or request plan review..."
             disabled={loading}
-            className="v-input font-handle"
+            className="v-input font-system"
             style={{ fontSize: 13, flex: 1, padding: '10px 14px' }}
           />
 
