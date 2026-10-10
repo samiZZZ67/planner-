@@ -351,14 +351,14 @@ describe('AI Planning & Hierarchy Test Suite', () => {
       // Test 1: Default verified model
       const res = await executeAIRequestWithFallback('Respond with ONLY: OK', undefined, undefined, { jsonMode: false });
       expect(res.text).toBeDefined();
-      expect(['gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest']).toContain(res.model);
+      expect(['gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b']).toContain(res.model);
 
       // Test 2: Auto-healing when gemini-2.5-flash is passed
       process.env.GEMINI_MODEL = 'gemini-2.5-flash';
       const healedRes = await executeAIRequestWithFallback('Respond with ONLY: OK', undefined, undefined, { jsonMode: false });
       expect(healedRes.text).toBeDefined();
       // Auto-healed to verified model!
-      expect(['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash']).toContain(healedRes.model);
+      expect(['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b']).toContain(healedRes.model);
     }, 30000);
   });
 });

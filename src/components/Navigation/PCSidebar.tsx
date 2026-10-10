@@ -55,14 +55,20 @@ export function PCSidebar({ currentTab, onSelectTab, onOpenAIChat }: PCSidebarPr
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: 22,
-          boxShadow: 'var(--v-shadow-btn)',
+          boxShadow: 'var(--v-shadow-btn), 0 0 16px rgba(168, 85, 247, 0.25)',
           cursor: 'pointer',
           transition: 'all 0.2s ease',
+          overflow: 'hidden',
+          padding: 3,
         }}
         title="Open AI Assistant & Plan Review"
         aria-label="Open AI Assistant"
       >
-        <span>🌙</span>
+        <img
+          src="/icons/icon-192.png"
+          alt="Night Planner"
+          style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+        />
       </div>
 
       <div style={{ width: 32, height: 1, background: 'var(--v-glass-border-subtle)', margin: '2px 0' }} />

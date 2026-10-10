@@ -5,6 +5,16 @@ export const metadata: Metadata = {
   title: 'Night Planner - Clear Intentional Daily Planning',
   description: 'Personal offline-first night planner with YouTube Studio style analytics and automatic cloud sync.',
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon.png', type: 'image/png' },
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -29,7 +39,9 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="dark" className="h-full">
       <head>
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body className="h-full overflow-x-hidden font-body antialiased selection:bg-purple-600 selection:text-white">
         {children}

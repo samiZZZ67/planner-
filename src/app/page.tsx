@@ -204,11 +204,15 @@ export default function NightPlannerApp() {
   if (!isMounted) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0d0d11] text-white">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 flex items-center justify-center shadow-2xl animate-pulse">
-            <span className="text-2xl">🌙</span>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-xl border-2 border-purple-500/40 flex items-center justify-center shadow-[0_0_35px_rgba(168,85,247,0.4)] animate-pulse overflow-hidden">
+            <img
+              src="/icons/icon-192.png"
+              alt="Night Planner"
+              className="w-full h-full object-cover"
+            />
           </div>
-          <span className="font-bloody text-lg tracking-wider">Night Planner</span>
+          <span className="font-bloody text-xl tracking-wider text-white/90">Night Planner</span>
         </div>
       </div>
     );
@@ -471,7 +475,11 @@ export default function NightPlannerApp() {
           onMouseEnter={e => { if (!isDragging) e.currentTarget.style.transform = 'scale(1.08)'; }}
           onMouseLeave={e => { if (!isDragging) e.currentTarget.style.transform = 'scale(1)'; }}
         >
-          <span style={{ pointerEvents: 'none' }}>🌙</span>
+          <img
+            src="/icons/icon-192.png"
+            alt="Night Planner"
+            style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', pointerEvents: 'none' }}
+          />
         </button>
       )}
 

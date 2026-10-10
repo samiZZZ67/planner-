@@ -1,11 +1,15 @@
-const CACHE_NAME = 'night-planner-v1.0.1';
+const CACHE_NAME = 'night-planner-v1.2.0';
 
 const PRECACHE_ASSETS = [
   '/',
   '/manifest.json',
+  '/favicon.ico',
+  '/favicon.png',
+  '/icons/icon.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/icon-maskable-512.png',
+  '/icons/apple-touch-icon.png',
   '/fonts/Demon Slave.ttf',
   '/fonts/BloodyHell.woff2',
 ];

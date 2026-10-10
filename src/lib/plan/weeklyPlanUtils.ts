@@ -37,3 +37,62 @@ export function getWeekBounds(dateStr: string): {
 
   return { startDate, endDate, weekLabel, weekId, monthId };
 }
+
+export interface WeekOption {
+  startDate: string;
+  endDate: string;
+  weekLabel: string;
+  weekId: string;
+  isCurrentWeek: boolean;
+  offset: number;
+}
+
+/**
+ * Returns array of 7 consecutive dates (YYYY-MM-DD) from Monday to Sunday for given Monday start date
+ */
+export function getDaysInWeek(mondayStartDate: string): string[] {
+  const [y, m, d] = mondayStartDate.split('-').map(Number);
+  const mon = new Date(Date.UTC(y, m - 1, d));
+  const days: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(mon);
+    dt.setUTCDate(mon.getUTCDate() + i);
+    days.push(dt.toISOString().split('T')[0]);
+  }
+  return days;
+}
+
+/**
+ * Generates all weeks with data from earliest recorded date up to current week
+ */
+export function getAvailableWeeks(recordedDates: string[]): WeekOption[] {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const currentBounds = getWeekBounds(todayStr);
+
+  const sortedDates = [...recordedDates].filter(Boolean).sort();
+  const earliestDateStr = sortedDates[0] || todayStr;
+  const earliestBounds = getWeekBounds(earliestDateStr);
+
+  const weeks: WeekOption[] = [];
+  const currMonday = new Date(currentBounds.startDate + 'T00:00:00Z');
+  const earliestMonday = new Date(earliestBounds.startDate + 'T00:00:00Z');
+
+  let offset = 0;
+  while (currMonday >= earliestMonday || offset === 0) {
+    const mondayStr = currMonday.toISOString().split('T')[0];
+    const bounds = getWeekBounds(mondayStr);
+    weeks.push({
+      startDate: bounds.startDate,
+      endDate: bounds.endDate,
+      weekLabel: bounds.weekLabel,
+      weekId: bounds.weekId,
+      isCurrentWeek: offset === 0,
+      offset,
+    });
+    currMonday.setUTCDate(currMonday.getUTCDate() - 7);
+    offset--;
+    if (offset < -104) break; // Maximum 2 years history
+  }
+
+  return weeks;
+}

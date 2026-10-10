@@ -5,7 +5,7 @@ import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
 import { useTimer } from '@/lib/timer/useTimer';
 import {
-  ListChecks, Check, Clock, Play, Pause, Square as StopIcon,
+  ListChecks, Check, CheckCircle2, Clock, Play, Pause, Square as StopIcon,
   Plus, Target, ChevronLeft, ChevronRight, X, ExternalLink, Sparkles
 } from 'lucide-react';
 import type { Task, Section, TimeLog } from '@/types';
@@ -125,6 +125,29 @@ export function TodoListScreen({
   }, [tasks, dayFreeHours]);
 
   const budgetBarColor = budget.percentage >= 100 ? '#ef4444' : budget.percentage >= 80 ? '#f59e0b' : '#22c55e';
+
+  // Daily Task Completion Progress
+  const taskProgress = useMemo(() => {
+    const activeTasks = tasks.filter(t => !t.deleted);
+    const total = activeTasks.length;
+    const completed = activeTasks.filter(t => t.isCompleted).length;
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return {
+      total,
+      completed,
+      percentage,
+      remaining: Math.max(0, total - completed),
+    };
+  }, [tasks]);
+
+  const taskProgressBarColor =
+    taskProgress.percentage === 100
+      ? '#22c55e'
+      : taskProgress.percentage >= 60
+      ? '#38bdf8'
+      : taskProgress.percentage > 0
+      ? '#a855f7'
+      : 'var(--text-muted)';
 
   const handleSaveBudget = async () => {
     const hrs = parseFloat(budgetInput);
@@ -362,6 +385,66 @@ export function TodoListScreen({
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             Remaining: <strong style={{ color: budget.remainingMinutes <= 0 ? '#ef4444' : '#22c55e' }}>
               {Math.max(0, Math.round(budget.remainingMinutes / 60 * 10) / 10)}h
+            </strong>
+          </span>
+        </div>
+      </div>
+
+      {/* ── 2b. Daily Task Completion Progress Bar (Smaller Companion Section) ── */}
+      <div
+        className="v-card"
+        style={{
+          padding: '12px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          marginTop: -6,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CheckCircle2 size={15} color={taskProgressBarColor} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Daily Task Completion
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: taskProgressBarColor, fontFamily: 'monospace' }}>
+              {taskProgress.percentage}%
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              ({taskProgress.completed}/{taskProgress.total} tasks)
+            </span>
+          </div>
+        </div>
+
+        {/* Smaller progress bar */}
+        <div
+          className="v-budget-bar"
+          style={{ height: 6, background: 'rgba(255, 255, 255, 0.06)' }}
+          title={`${taskProgress.completed} of ${taskProgress.total} tasks completed (${taskProgress.percentage}%)`}
+        >
+          <div
+            className="v-budget-bar-fill"
+            style={{
+              width: `${taskProgress.percentage}%`,
+              background: taskProgressBarColor,
+              boxShadow: taskProgress.percentage > 0 ? `0 0 10px ${taskProgressBarColor}66` : 'none',
+              transition: 'width 0.35s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s ease',
+            }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
+          <span>
+            Completed: <strong style={{ color: taskProgress.completed > 0 ? '#22c55e' : 'var(--text-muted)' }}>{taskProgress.completed}</strong>
+          </span>
+          <span>
+            Remaining: <strong style={{ color: taskProgress.remaining > 0 ? 'var(--text-secondary)' : '#22c55e' }}>{taskProgress.remaining}</strong>
+          </span>
+          <span>
+            Status: <strong style={{ color: taskProgressBarColor }}>
+              {taskProgress.total === 0 ? '0% (No tasks today)' : taskProgress.percentage === 100 ? 'All completed! 🎉' : `${taskProgress.percentage}% complete`}
             </strong>
           </span>
         </div>

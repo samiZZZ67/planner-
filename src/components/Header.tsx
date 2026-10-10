@@ -173,7 +173,26 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }
         title="Open AI Assistant & Plan Review"
         aria-label="Open AI Assistant"
       >
-        <span style={{ fontSize: 15 }}>🌙</span>
+        <div
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            border: '1px solid rgba(168, 85, 247, 0.4)',
+            boxShadow: '0 0 10px rgba(168, 85, 247, 0.3)',
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <img
+            src="/icons/icon-192.png"
+            alt="Night Planner"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        </div>
         <span className="font-bloody" style={{ fontSize: 17, fontWeight: 700, letterSpacing: '0.04em' }}>
           Night Planner
         </span>
