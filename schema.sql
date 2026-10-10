@@ -96,3 +96,48 @@ CREATE TABLE IF NOT EXISTS auth_rate_limit (
     last_attempt_at BIGINT NOT NULL,
     blocked_until BIGINT NOT NULL DEFAULT 0
 );
+
+-- 7. Weekly Plans Table
+CREATE TABLE IF NOT EXISTS weekly_plans (
+    id VARCHAR(64) PRIMARY KEY,
+    start_date VARCHAR(10) NOT NULL,
+    end_date VARCHAR(10) NOT NULL,
+    month_id VARCHAR(10) NOT NULL,
+    prompt TEXT NOT NULL,
+    word_count INTEGER NOT NULL DEFAULT 0,
+    goals TEXT DEFAULT '',
+    aastu_commitments TEXT DEFAULT '',
+    deep_work_targets TEXT DEFAULT '',
+    constraints TEXT DEFAULT '',
+    outcomes TEXT DEFAULT '',
+    ai_weekly_report TEXT,
+    status VARCHAR(20) DEFAULT 'active',
+    completion_percentage NUMERIC(5,2) DEFAULT 0,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+);
+
+CREATE INDEX IF NOT EXISTS idx_weekly_plans_server_seq ON weekly_plans (server_seq);
+
+-- 8. Monthly Plans Table
+CREATE TABLE IF NOT EXISTS monthly_plans (
+    id VARCHAR(64) PRIMARY KEY,
+    month VARCHAR(10) NOT NULL,
+    title TEXT NOT NULL,
+    prompt TEXT DEFAULT '',
+    academic_priorities TEXT DEFAULT '',
+    editing_targets TEXT DEFAULT '',
+    commitments TEXT DEFAULT '',
+    deliverables TEXT DEFAULT '',
+    goals JSONB DEFAULT '[]'::jsonb,
+    completion_percentage NUMERIC(5,2) DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'active',
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+);
+
+CREATE INDEX IF NOT EXISTS idx_monthly_plans_server_seq ON monthly_plans (server_seq);

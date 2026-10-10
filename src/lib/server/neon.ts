@@ -159,6 +159,26 @@ export async function ensureSchema(sql: any): Promise<void> {
         server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
       )
     `;
+
+    // Ensure all tables have required columns if they were created with earlier schemas
+    await sql`ALTER TABLE sections ADD COLUMN IF NOT EXISTS daily_target_minutes INTEGER`;
+    await sql`ALTER TABLE sections ADD COLUMN IF NOT EXISTS target_type VARCHAR(20) DEFAULT 'at least'`;
+    await sql`ALTER TABLE sections ADD COLUMN IF NOT EXISTS is_sample BOOLEAN DEFAULT FALSE`;
+
+    await sql`ALTER TABLE time_logs ADD COLUMN IF NOT EXISTS is_sample BOOLEAN DEFAULT FALSE`;
+
+    await sql`ALTER TABLE days ADD COLUMN IF NOT EXISTS free_hours NUMERIC(4,2) DEFAULT 8.0`;
+    await sql`ALTER TABLE days ADD COLUMN IF NOT EXISTS review JSONB DEFAULT '{"worked":"","blocked":"","change":""}'::jsonb`;
+    await sql`ALTER TABLE days ADD COLUMN IF NOT EXISTS is_sample BOOLEAN DEFAULT FALSE`;
+
+    await sql`ALTER TABLE weekly_plans ADD COLUMN IF NOT EXISTS ai_weekly_report TEXT`;
+    await sql`ALTER TABLE weekly_plans ADD COLUMN IF NOT EXISTS word_count INTEGER DEFAULT 0`;
+    await sql`ALTER TABLE weekly_plans ADD COLUMN IF NOT EXISTS completion_percentage NUMERIC(5,2) DEFAULT 0`;
+
+    await sql`ALTER TABLE monthly_plans ADD COLUMN IF NOT EXISTS commitments TEXT DEFAULT ''`;
+    await sql`ALTER TABLE monthly_plans ADD COLUMN IF NOT EXISTS deliverables TEXT DEFAULT ''`;
+    await sql`ALTER TABLE monthly_plans ADD COLUMN IF NOT EXISTS completion_percentage NUMERIC(5,2) DEFAULT 0`;
+
     schemaInitialized = true;
   } catch (err: any) {
     console.warn('ensureSchema warning:', err.message);
@@ -495,8 +515,8 @@ export async function syncBatch(
     prompt: r.prompt || '',
     academicPriorities: r.academic_priorities || '',
     editingTargets: r.editing_targets || '',
-    commitments: r.commitments || '',
-    goals: Array.isArray(r.goals) ? r.goals : (typeof r.goals === 'string' ? JSON.parse(r.goals) : []),
+    commitments: r.commitments || r.deliverables || '',
+    goals: Array.isArray(r.goals) ? r.goals : (typeof r.goals === 'string' && r.goals ? JSON.parse(r.goals) : []),
     completionPercentage: Number(r.completion_percentage || 0),
     status: r.status || 'active',
     createdAt: Number(r.created_at),
