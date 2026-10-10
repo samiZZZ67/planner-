@@ -30,127 +30,139 @@ export async function checkDbConnection(): Promise<{ ok: boolean; message?: stri
 }
 
 
+let schemaInitialized = false;
+
 /**
  * Automatically creates tables and sequence if they do not exist
  */
 export async function ensureSchema(sql: any): Promise<void> {
-  await sql`
-    CREATE SEQUENCE IF NOT EXISTS server_seq START WITH 1 INCREMENT BY 1;
+  if (schemaInitialized) return;
+  try {
+    await sql`CREATE SEQUENCE IF NOT EXISTS server_seq START WITH 1 INCREMENT BY 1`;
+    await sql`
+      CREATE TABLE IF NOT EXISTS sections (
+        id VARCHAR(64) PRIMARY KEY,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL,
+        icon TEXT NOT NULL,
+        "order" INTEGER NOT NULL DEFAULT 0,
+        daily_target_minutes INTEGER,
+        target_type VARCHAR(20) DEFAULT 'at least',
+        updated_at BIGINT NOT NULL,
+        deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        is_sample BOOLEAN NOT NULL DEFAULT FALSE,
+        server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id VARCHAR(64) PRIMARY KEY,
+        date VARCHAR(10) NOT NULL,
+        section_id VARCHAR(64) NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        strategy TEXT DEFAULT '',
+        done_means TEXT DEFAULT '',
+        estimated_minutes INTEGER NOT NULL DEFAULT 0,
+        priority VARCHAR(20) NOT NULL DEFAULT 'Medium',
+        must_do BOOLEAN NOT NULL DEFAULT FALSE,
+        tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+        icon TEXT DEFAULT '',
+        text_color TEXT DEFAULT '',
+        image TEXT,
+        is_completed BOOLEAN NOT NULL DEFAULT FALSE,
+        completed_at BIGINT,
+        "order" INTEGER NOT NULL DEFAULT 0,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL,
+        deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        is_sample BOOLEAN NOT NULL DEFAULT FALSE,
+        server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+      )
+    `;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_time TEXT`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS end_time TEXT`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS scheduled_minutes INTEGER`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS actual_minutes INTEGER`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'not_started'`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deadline VARCHAR(10)`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS result TEXT`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_bold BOOLEAN DEFAULT FALSE`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_underline BOOLEAN DEFAULT FALSE`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_strikethrough BOOLEAN DEFAULT FALSE`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS target_minutes INTEGER`;
+    await sql`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS expected_completion_time TEXT`;
 
-    CREATE TABLE IF NOT EXISTS sections (
-      id VARCHAR(64) PRIMARY KEY,
-      name TEXT NOT NULL,
-      color TEXT NOT NULL,
-      icon TEXT NOT NULL,
-      "order" INTEGER NOT NULL DEFAULT 0,
-      daily_target_minutes INTEGER,
-      target_type VARCHAR(20) DEFAULT 'at least',
-      updated_at BIGINT NOT NULL,
-      deleted BOOLEAN NOT NULL DEFAULT FALSE,
-      is_sample BOOLEAN NOT NULL DEFAULT FALSE,
-      server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
-    );
-
-    CREATE TABLE IF NOT EXISTS tasks (
-      id VARCHAR(64) PRIMARY KEY,
-      date VARCHAR(10) NOT NULL,
-      section_id VARCHAR(64) NOT NULL,
-      title TEXT NOT NULL,
-      description TEXT DEFAULT '',
-      strategy TEXT DEFAULT '',
-      done_means TEXT DEFAULT '',
-      estimated_minutes INTEGER NOT NULL DEFAULT 0,
-      priority VARCHAR(20) NOT NULL DEFAULT 'Medium',
-      must_do BOOLEAN NOT NULL DEFAULT FALSE,
-      tags JSONB NOT NULL DEFAULT '[]'::jsonb,
-      icon TEXT DEFAULT '',
-      text_color TEXT DEFAULT '',
-      image TEXT,
-      is_completed BOOLEAN NOT NULL DEFAULT FALSE,
-      completed_at BIGINT,
-      "order" INTEGER NOT NULL DEFAULT 0,
-      created_at BIGINT NOT NULL,
-      updated_at BIGINT NOT NULL,
-      deleted BOOLEAN NOT NULL DEFAULT FALSE,
-      is_sample BOOLEAN NOT NULL DEFAULT FALSE,
-      server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
-    );
-
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS start_time TEXT;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS end_time TEXT;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS scheduled_minutes INTEGER;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS actual_minutes INTEGER;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'not_started';
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deadline VARCHAR(10);
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS result TEXT;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_bold BOOLEAN DEFAULT FALSE;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_underline BOOLEAN DEFAULT FALSE;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_strikethrough BOOLEAN DEFAULT FALSE;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS target_minutes INTEGER;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS expected_completion_time TEXT;
-
-    CREATE TABLE IF NOT EXISTS time_logs (
-      id VARCHAR(64) PRIMARY KEY,
-      task_id VARCHAR(64) NOT NULL,
-      date VARCHAR(10) NOT NULL,
-      minutes INTEGER NOT NULL DEFAULT 0,
-      source VARCHAR(20) NOT NULL DEFAULT 'timer',
-      created_at BIGINT NOT NULL,
-      updated_at BIGINT NOT NULL,
-      deleted BOOLEAN NOT NULL DEFAULT FALSE,
-      is_sample BOOLEAN NOT NULL DEFAULT FALSE,
-      server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
-    );
-
-    CREATE TABLE IF NOT EXISTS days (
-      id VARCHAR(10) PRIMARY KEY,
-      date VARCHAR(10) NOT NULL,
-      free_hours NUMERIC(4,2) DEFAULT 8.0,
-      review JSONB DEFAULT '{"worked":"","blocked":"","change":""}'::jsonb,
-      updated_at BIGINT NOT NULL,
-      deleted BOOLEAN NOT NULL DEFAULT FALSE,
-      is_sample BOOLEAN NOT NULL DEFAULT FALSE,
-      server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
-    );
-
-    CREATE TABLE IF NOT EXISTS weekly_plans (
-      id VARCHAR(64) PRIMARY KEY,
-      start_date VARCHAR(10) NOT NULL,
-      end_date VARCHAR(10) NOT NULL,
-      month_id VARCHAR(10) NOT NULL,
-      prompt TEXT NOT NULL,
-      word_count INTEGER NOT NULL DEFAULT 0,
-      goals TEXT DEFAULT '',
-      aastu_commitments TEXT DEFAULT '',
-      deep_work_targets TEXT DEFAULT '',
-      constraints TEXT DEFAULT '',
-      outcomes TEXT DEFAULT '',
-      ai_weekly_report TEXT,
-      status VARCHAR(20) DEFAULT 'active',
-      completion_percentage NUMERIC(5,2) DEFAULT 0,
-      created_at BIGINT NOT NULL,
-      updated_at BIGINT NOT NULL,
-      deleted BOOLEAN NOT NULL DEFAULT FALSE,
-      server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
-    );
-
-    CREATE TABLE IF NOT EXISTS monthly_plans (
-      id VARCHAR(64) PRIMARY KEY,
-      month VARCHAR(10) NOT NULL,
-      title TEXT NOT NULL,
-      prompt TEXT DEFAULT '',
-      academic_priorities TEXT DEFAULT '',
-      editing_targets TEXT DEFAULT '',
-      commitments TEXT DEFAULT '',
-      goals JSONB DEFAULT '[]'::jsonb,
-      completion_percentage NUMERIC(5,2) DEFAULT 0,
-      status VARCHAR(20) DEFAULT 'active',
-      created_at BIGINT NOT NULL,
-      updated_at BIGINT NOT NULL,
-      deleted BOOLEAN NOT NULL DEFAULT FALSE,
-      server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
-    );
-  `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS time_logs (
+        id VARCHAR(64) PRIMARY KEY,
+        task_id VARCHAR(64) NOT NULL,
+        date VARCHAR(10) NOT NULL,
+        minutes INTEGER NOT NULL DEFAULT 0,
+        source VARCHAR(20) NOT NULL DEFAULT 'timer',
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL,
+        deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        is_sample BOOLEAN NOT NULL DEFAULT FALSE,
+        server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS days (
+        id VARCHAR(10) PRIMARY KEY,
+        date VARCHAR(10) NOT NULL,
+        free_hours NUMERIC(4,2) DEFAULT 8.0,
+        review JSONB DEFAULT '{"worked":"","blocked":"","change":""}'::jsonb,
+        updated_at BIGINT NOT NULL,
+        deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        is_sample BOOLEAN NOT NULL DEFAULT FALSE,
+        server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS weekly_plans (
+        id VARCHAR(64) PRIMARY KEY,
+        start_date VARCHAR(10) NOT NULL,
+        end_date VARCHAR(10) NOT NULL,
+        month_id VARCHAR(10) NOT NULL,
+        prompt TEXT NOT NULL,
+        word_count INTEGER NOT NULL DEFAULT 0,
+        goals TEXT DEFAULT '',
+        aastu_commitments TEXT DEFAULT '',
+        deep_work_targets TEXT DEFAULT '',
+        constraints TEXT DEFAULT '',
+        outcomes TEXT DEFAULT '',
+        ai_weekly_report TEXT,
+        status VARCHAR(20) DEFAULT 'active',
+        completion_percentage NUMERIC(5,2) DEFAULT 0,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL,
+        deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS monthly_plans (
+        id VARCHAR(64) PRIMARY KEY,
+        month VARCHAR(10) NOT NULL,
+        title TEXT NOT NULL,
+        prompt TEXT DEFAULT '',
+        academic_priorities TEXT DEFAULT '',
+        editing_targets TEXT DEFAULT '',
+        commitments TEXT DEFAULT '',
+        goals JSONB DEFAULT '[]'::jsonb,
+        completion_percentage NUMERIC(5,2) DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'active',
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL,
+        deleted BOOLEAN NOT NULL DEFAULT FALSE,
+        server_seq BIGINT NOT NULL DEFAULT nextval('server_seq')
+      )
+    `;
+    schemaInitialized = true;
+  } catch (err: any) {
+    console.warn('ensureSchema warning:', err.message);
+  }
 }
 
 /**
