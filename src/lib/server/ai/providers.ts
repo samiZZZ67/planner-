@@ -36,14 +36,22 @@ export const VERIFIED_GEMINI_MODELS = [
   'gemini-2.0-flash',
   'gemini-1.5-flash',
 ];
-export const VERIFIED_GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
+export const VERIFIED_GROQ_MODELS = [
+  'openai/gpt-oss-20b',
+  'openai/gpt-oss-120b',
+  'qwen/qwen3.8-27b',
+  'allam-2-7b',
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'mixtral-8x7b-32768',
+];
 
 export function getDefaultGeminiModel(): string {
   return (process.env.GEMINI_MODEL || '').trim() || 'gemini-3.5-flash';
 }
 
 export function getDefaultGroqModel(): string {
-  return (process.env.GROQ_MODEL || '').trim() || 'llama-3.3-70b-versatile';
+  return (process.env.GROQ_MODEL || '').trim() || 'openai/gpt-oss-20b';
 }
 
 export function getStoredAIConfig(): StoredAIConfig {

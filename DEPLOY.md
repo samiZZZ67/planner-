@@ -53,9 +53,9 @@ Add the following environment variables in your Render Web Service dashboard und
 | `GEMINI_API_KEY_1` | Optional | `AIzaSy...` | Primary Google Gemini API key for AI assistant & day planner. |
 | `GEMINI_API_KEY_2` | Optional | `AIzaSy...` | Secondary Gemini API key (automatic fallback). |
 | `GEMINI_API_KEY_3` | Optional | `AIzaSy...` | Tertiary Gemini API key. |
-| `GEMINI_MODEL` | Optional | `gemini-2.5-flash` | Gemini model name (`gemini-2.5-flash`, `gemini-2.0-flash`). |
+| `GEMINI_MODEL` | Optional | `gemini-3.5-flash` | Gemini model name (`gemini-3.5-flash`, `gemini-3.8-flash`). |
 | `GROQ_API_KEY_1` | Optional | `gsk_...` | Primary Groq API key for zero-latency AI fallback. |
-| `GROQ_MODEL` | Optional | `llama-3.3-70b-versatile` | Groq model name (`llama-3.3-70b-versatile`). |
+| `GROQ_MODEL` | Optional | `openai/gpt-oss-20b` | Groq model name (`openai/gpt-oss-20b`, `openai/gpt-oss-120b`). |
 
 ---
 

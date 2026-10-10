@@ -345,7 +345,7 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
   const [activeProvider, setActiveProvider] = useState('auto');
   const [fallbackEnabled, setFallbackEnabled] = useState(true);
   const [geminiModel, setGeminiModel] = useState('gemini-3.5-flash');
-  const [groqModel, setGroqModel] = useState('llama-3.3-70b-versatile');
+  const [groqModel, setGroqModel] = useState('openai/gpt-oss-20b');
 
   const loadConfig = async () => {
     try {
@@ -359,7 +359,7 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
         const g1 = data.providers?.find((p: any) => p.id === 'gemini-1');
         if (g1) setGeminiModel(g1.model || 'gemini-3.5-flash');
         const grq = data.providers?.find((p: any) => p.id === 'groq-1');
-        if (grq) setGroqModel(grq.model || 'llama-3.3-70b-versatile');
+        if (grq) setGroqModel(grq.model || 'openai/gpt-oss-20b');
       }
     } catch {
       // Offline fallback
@@ -476,8 +476,11 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
                   className="v-input"
                   style={{ fontSize: 12, minHeight: 32, padding: '4px 8px' }}
                 >
-                  <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Frontier 70B - Ultra Fast)</option>
-                  <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Instant Speed)</option>
+                  <option value="openai/gpt-oss-20b">openai/gpt-oss-20b (Active & Free - Ultra Fast)</option>
+                  <option value="openai/gpt-oss-120b">openai/gpt-oss-120b (Frontier 120B Reasoning)</option>
+                  <option value="qwen/qwen3.8-27b">qwen/qwen3.8-27b</option>
+                  <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
+                  <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
                   <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
                 </select>
               </div>
