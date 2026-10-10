@@ -182,3 +182,58 @@ export async function syncBatchLocal(incoming: {
     },
   };
 }
+
+/**
+ * Retrieve all sections stored in the local server DB
+ */
+export function getLocalSections(): Section[] {
+  const db = getDb();
+  return Object.values(db.sections).filter(s => !s.deleted);
+}
+
+/**
+ * Retrieve tasks stored in the local server DB
+ */
+export function getLocalTasks(date?: string): Task[] {
+  const db = getDb();
+  let list = Object.values(db.tasks).filter(t => !t.deleted);
+  if (date) {
+    list = list.filter(t => t.date === date);
+  }
+  return list;
+}
+
+/**
+ * Save or update a single task directly in the local server DB
+ */
+export function saveLocalTask(task: Task): Task & { serverSeq: number } {
+  const db = getDb();
+  db.lastServerSeq += 1;
+  const saved = {
+    ...task,
+    serverSeq: db.lastServerSeq,
+    updatedAt: task.updatedAt || Date.now(),
+  };
+  db.tasks[task.id] = saved;
+  saveDb(db);
+  return saved;
+}
+
+/**
+ * Delete a single task directly in the local server DB (soft delete)
+ */
+export function deleteLocalTask(taskId: string): boolean {
+  const db = getDb();
+  const existing = db.tasks[taskId];
+  if (!existing) return false;
+  db.lastServerSeq += 1;
+  db.tasks[taskId] = {
+    ...existing,
+    deleted: true,
+    updatedAt: Date.now(),
+    serverSeq: db.lastServerSeq,
+  };
+  saveDb(db);
+  return true;
+}
+

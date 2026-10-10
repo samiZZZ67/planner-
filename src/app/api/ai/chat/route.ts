@@ -1,13 +1,105 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/server/auth';
 import { executeAIRequestWithFallback } from '@/lib/server/ai/providers';
-import { handleFallbackNaturalLanguage, type AIChatAction } from '@/lib/server/ai/copilot';
+import {
+  extractActionsAndCleanText,
+  handleFallbackNaturalLanguage,
+  type AIChatAction,
+} from '@/lib/server/ai/copilot';
+import { createTaskInDb, updateTaskInDb } from '@/lib/server/tasks';
 
 export type { AIChatAction };
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
+}
+
+function resolveDateString(dateInput: string | undefined, baseDate: string): string {
+  if (!dateInput) return baseDate;
+  const lower = dateInput.trim().toLowerCase();
+  if (lower === 'today') return baseDate;
+  if (lower === 'tomorrow') {
+    const [y, m, d] = baseDate.split('-').map(Number);
+    const dObj = new Date(Date.UTC(y, m - 1, d + 1));
+    return dObj.toISOString().split('T')[0];
+  }
+  if (lower === 'yesterday') {
+    const [y, m, d] = baseDate.split('-').map(Number);
+    const dObj = new Date(Date.UTC(y, m - 1, d - 1));
+    return dObj.toISOString().split('T')[0];
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(lower)) {
+    return lower;
+  }
+  return baseDate;
+}
+
+/**
+ * Execute validated actions directly on the database before responding to client
+ * Prevents false claims and verifies database persistence.
+ */
+async function executeServerActions(
+  actions: AIChatAction[],
+  context: any
+): Promise<{ executedActions: AIChatAction[]; verifiedFeedback: string | null; errorFeedback: string | null }> {
+  let verifiedFeedback: string | null = null;
+  let errorFeedback: string | null = null;
+  const targetDate = context?.currentDate || new Date().toISOString().split('T')[0];
+
+  for (const act of actions) {
+    if (act.type === 'create_task') {
+      const p = act.params || {};
+      const createInput = {
+        title: p.title,
+        category: p.section || p.category,
+        sectionId: p.sectionId,
+        date: resolveDateString(p.date, targetDate),
+        startTime: p.startTime,
+        endTime: p.endTime,
+        scheduledMinutes: p.scheduledMinutes,
+        priority: p.priority || 'Medium',
+        deadline: p.deadline,
+        mustDo: Boolean(p.mustDo),
+        description: p.description,
+      };
+
+      console.log('[AI Chat Backend] Executing create_task on database:', createInput.title);
+      const res = await createTaskInDb(createInput);
+
+      if (res.ok && res.task) {
+        act.status = 'executed';
+        act.savedTask = res.task;
+        act.confirmation = `Created task "${res.task.title}" (ID: ${res.task.id}) in ${createInput.category || 'Tasks'}`;
+
+        if (res.duplicatePrevented) {
+          verifiedFeedback = `Task **"${res.task.title}"** already exists in your to-do list for ${res.task.date} (ID: \`${res.task.id}\`). Duplicate creation was safely prevented.`;
+        } else {
+          verifiedFeedback = `I have created and saved the task **"${res.task.title}"** to your database under **${createInput.category || 'Deep Work'}** for ${res.task.date}.\n- **Duration:** ${res.task.scheduledMinutes} minutes\n- **Start/End:** ${res.task.startTime || 'Unscheduled'} – ${res.task.endTime || 'Unscheduled'}\n- **Priority:** ${res.task.priority}\n- **Database ID:** \`${res.task.id}\``;
+        }
+      } else {
+        act.status = 'failed';
+        act.error = res.error;
+        errorFeedback = `❌ Failed to create task "${createInput.title}": ${res.error}. No task was added to your database.`;
+      }
+    } else if (act.type === 'update_task' && !act.requiresConfirmation) {
+      const res = await updateTaskInDb(act.params.taskIdentifier, act.params.updates || {}, act.params.date);
+      if (res.ok && res.task) {
+        act.status = 'executed';
+        act.savedTask = res.task;
+        verifiedFeedback = `Successfully updated task **"${res.task.title}"** (ID: \`${res.task.id}\`).`;
+      } else {
+        act.status = 'failed';
+        act.error = res.error;
+        errorFeedback = `❌ Could not update task: ${res.error}`;
+      }
+    } else if (act.type === 'delete_task') {
+      act.status = 'pending';
+      act.requiresConfirmation = true;
+    }
+  }
+
+  return { executedActions: actions, verifiedFeedback, errorFeedback };
 }
 
 export async function POST(req: NextRequest) {
@@ -23,7 +115,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const {
       messages = [] as ChatMessage[],
-      action = 'chat', // 'chat' | 'review_plan'
+      action = 'chat',
       currentPlanContext = null,
       context = null,
       preferredProvider,
@@ -37,7 +129,7 @@ export async function POST(req: NextRequest) {
     const latestUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
     // Build system instructions for Full Authorized Copilot
-    let systemInstruction = `You are NightPlanner's elite AI Assistant and Authorized Website Copilot.
+    const systemInstruction = `You are NightPlanner's elite AI Assistant and Authorized Website Copilot.
 You have FULL authorized access to view, analyze, and manage the user's planner data:
 - Tasks (titles, categories, times, priorities, statuses, deadlines, completion)
 - Categories / Sections
@@ -61,9 +153,11 @@ ACTIONS:
   {
     "action": "create_task",
     "params": {
-      "title": "Task title",
-      "section": "Category name",
+      "title": "Exact task title",
+      "section": "Category name (e.g. Deep Work, Learning, etc.)",
       "date": "YYYY-MM-DD or today or tomorrow",
+      "startTime": "HH:MM",
+      "endTime": "HH:MM",
       "scheduledMinutes": 60,
       "priority": "Low | Medium | High",
       "deadline": "YYYY-MM-DD",
@@ -91,31 +185,13 @@ ACTIONS:
       "taskTitle": "Exact task title",
       "requiresConfirmation": true
     }
-  },
-  {
-    "action": "create_section",
-    "params": {
-      "name": "Category name",
-      "color": "#3b82f6",
-      "icon": "📌",
-      "dailyTargetMinutes": 60
-    }
-  },
-  {
-    "action": "manage_plan",
-    "params": {
-      "planType": "day",
-      "date": "YYYY-MM-DD",
-      "updates": { "freeHours": 6 }
-    }
   }
 ]
 
 SAFETY & INTEGRITY RULES:
-- If a request is ambiguous (e.g. multiple tasks match or task not found), DO NOT emit actions. Instead, ask a concise clarifying question listing the options!
-- Destructive actions (like deleting a task) MUST have "requiresConfirmation": true so the user can verify before deleting.
-- In your conversational text, explain what you are doing (e.g., "I've added...", "I will update...", or "Please confirm deletion of...").
-- Keep responses friendly, sharp, concise, and executive.`;
+- The backend will immediately execute the ACTIONS block in the database upon receiving your response.
+- Do not invent fake task IDs.
+- For destructive deletions, set "requiresConfirmation": true.`;
 
     // Construct the prompt string with live context
     let conversationPrompt = '';
@@ -171,30 +247,21 @@ SAFETY & INTEGRITY RULES:
         { jsonMode: false }
       );
 
-      // Extract ACTIONS block if present
-      let rawText = response.text || '';
-      const actions: AIChatAction[] = [];
-      const actionsRegex = /ACTIONS:\s*(\[\s*\{[\s\S]*\}\s*\])/i;
-      const match = rawText.match(actionsRegex);
+      // Extract ACTIONS block using robust extractor
+      const { cleanText: extractedCleanText, actions: extractedActions } = extractActionsAndCleanText(response.text || '');
+      let finalContent = extractedCleanText;
 
-      if (match) {
-        try {
-          const parsed = JSON.parse(match[1]);
-          if (Array.isArray(parsed)) {
-            for (let i = 0; i < parsed.length; i++) {
-              const item = parsed[i];
-              actions.push({
-                id: `act_${Date.now()}_${i}`,
-                type: item.action,
-                params: item.params,
-                requiresConfirmation: item.params?.requiresConfirmation || item.action === 'delete_task' || item.action === 'delete_section',
-              });
-            }
-          }
-          // Remove ACTIONS block from visible response text
-          rawText = rawText.replace(actionsRegex, '').trim();
-        } catch (e) {
-          console.warn('Could not parse AI actions block:', e);
+      // Execute actions on the backend database
+      let finalActions = extractedActions;
+      if (extractedActions.length > 0) {
+        const { executedActions, verifiedFeedback, errorFeedback } = await executeServerActions(extractedActions, mergedContext);
+        finalActions = executedActions;
+
+        if (errorFeedback) {
+          // Requirement 3: Never report success if backend failed!
+          finalContent = errorFeedback;
+        } else if (verifiedFeedback) {
+          finalContent = verifiedFeedback;
         }
       }
 
@@ -202,9 +269,9 @@ SAFETY & INTEGRITY RULES:
         ok: true,
         message: {
           role: 'assistant',
-          content: rawText,
+          content: finalContent,
         },
-        actions,
+        actions: finalActions,
         provider: response.provider,
         model: response.model,
         tokensUsed: response.tokensUsed,
@@ -216,13 +283,27 @@ SAFETY & INTEGRITY RULES:
       // Fallback Engine: deterministic natural language processor
       const fallbackResult = handleFallbackNaturalLanguage(latestUserMessage, mergedContext);
 
+      // Execute fallback actions on the database as well!
+      let finalActions = fallbackResult.actions;
+      let finalContent = fallbackResult.content;
+
+      if (fallbackResult.actions.length > 0) {
+        const { executedActions, verifiedFeedback, errorFeedback } = await executeServerActions(fallbackResult.actions, mergedContext);
+        finalActions = executedActions;
+        if (errorFeedback) {
+          finalContent = errorFeedback;
+        } else if (verifiedFeedback) {
+          finalContent = verifiedFeedback;
+        }
+      }
+
       return NextResponse.json({
         ok: true,
         message: {
           role: 'assistant',
-          content: fallbackResult.content,
+          content: finalContent,
         },
-        actions: fallbackResult.actions,
+        actions: finalActions,
         provider: 'NightPlanner Copilot (Deterministic Rule Engine)',
         model: 'local-assistant',
       });

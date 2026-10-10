@@ -3,6 +3,90 @@ export interface AIChatAction {
   type: 'create_task' | 'update_task' | 'delete_task' | 'create_section' | 'update_section' | 'delete_section' | 'manage_plan';
   params: any;
   requiresConfirmation?: boolean;
+  status?: 'pending' | 'executed' | 'failed' | 'cancelled';
+  savedTask?: any;
+  confirmation?: string;
+  error?: string;
+}
+
+/**
+ * Robust extractor for AI-generated actions from LLM output (handles raw json, code fences, etc.)
+ * and strips the ACTIONS block from visible user chat text.
+ */
+export function extractActionsAndCleanText(rawText: string): { cleanText: string; actions: AIChatAction[] } {
+  if (!rawText) return { cleanText: '', actions: [] };
+
+  const actions: AIChatAction[] = [];
+  let cleanText = rawText;
+
+  // Patterns for ACTIONS block:
+  // 1. ACTIONS: ```json [...] ```
+  const codeBlockRegex = /ACTIONS:\s*```(?:json)?\s*([\s\S]*?)```/i;
+  // 2. ```(?:json)? ACTIONS: [...] ```
+  const wrappedCodeBlockRegex = /```(?:json)?\s*ACTIONS:\s*([\s\S]*?)```/i;
+  // 3. ACTIONS:\s*(\[\s*\{[\s\S]*?\}\s*\])
+  const plainArrayRegex = /ACTIONS:\s*(\[\s*\{[\s\S]*?\}\s*\])/i;
+  // 4. Fallback trailing ACTIONS:
+  const generalActionsRegex = /ACTIONS:\s*([\s\S]*)$/i;
+
+  let jsonStr = '';
+
+  const matchA = rawText.match(codeBlockRegex);
+  if (matchA) {
+    jsonStr = matchA[1].trim();
+    cleanText = rawText.replace(codeBlockRegex, '').trim();
+  } else {
+    const matchB = rawText.match(wrappedCodeBlockRegex);
+    if (matchB) {
+      jsonStr = matchB[1].trim();
+      cleanText = rawText.replace(wrappedCodeBlockRegex, '').trim();
+    } else {
+      const matchC = rawText.match(plainArrayRegex);
+      if (matchC) {
+        jsonStr = matchC[1].trim();
+        cleanText = rawText.replace(plainArrayRegex, '').trim();
+      } else {
+        const matchD = rawText.match(generalActionsRegex);
+        if (matchD) {
+          const candidate = matchD[1].replace(/```(?:json)?/g, '').replace(/```/g, '').trim();
+          const arrayMatch = candidate.match(/\[\s*\{[\s\S]*\}\s*\]/);
+          if (arrayMatch) {
+            jsonStr = arrayMatch[0];
+            cleanText = rawText.replace(generalActionsRegex, '').trim();
+          }
+        }
+      }
+    }
+  }
+
+  if (jsonStr) {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (Array.isArray(parsed)) {
+        for (let i = 0; i < parsed.length; i++) {
+          const item = parsed[i];
+          if (item && item.action) {
+            actions.push({
+              id: `act_${Date.now()}_${i}`,
+              type: item.action,
+              params: item.params || {},
+              requiresConfirmation:
+                item.params?.requiresConfirmation ||
+                item.action === 'delete_task' ||
+                item.action === 'delete_section',
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Copilot] Could not parse action JSON block:', e);
+    }
+  }
+
+  // Remove any remaining trailing ACTIONS: label
+  cleanText = cleanText.replace(/ACTIONS:\s*$/i, '').trim();
+
+  return { cleanText, actions };
 }
 
 /**

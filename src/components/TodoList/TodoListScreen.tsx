@@ -90,9 +90,16 @@ export function TodoListScreen({
     loadData();
     const interval = setInterval(loadData, 2500);
     const unsub = syncEngine.subscribe(() => loadData());
+    const handleTaskChange = () => {
+      loadData();
+    };
+    window.addEventListener('nightplanner:task-created', handleTaskChange);
+    window.addEventListener('nightplanner:task-updated', handleTaskChange);
     return () => {
       clearInterval(interval);
       unsub();
+      window.removeEventListener('nightplanner:task-created', handleTaskChange);
+      window.removeEventListener('nightplanner:task-updated', handleTaskChange);
     };
   }, [currentDate]);
 

@@ -186,6 +186,38 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
       ]);
 
       if (action.type === 'create_task') {
+        if (action.status === 'failed') {
+          return {
+            id: action.id,
+            type: 'create_task',
+            status: 'error',
+            message: action.error || 'Server failed to save task to database.',
+            action,
+          };
+        }
+
+        // When backend already inserted into DB with official ID:
+        if (action.savedTask) {
+          const saved: Task = action.savedTask;
+          await db.tasks.put({
+            ...saved,
+            synced: 1,
+          });
+          syncEngine.notifyLocalMutation();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('nightplanner:task-created', { detail: saved }));
+          }
+
+          const matchedSec = sections.find(s => s.id === saved.sectionId);
+          return {
+            id: action.id,
+            type: 'create_task',
+            status: 'success',
+            message: `Created task "${saved.title}" in ${matchedSec?.name || 'Tasks'} (${saved.date}, ${saved.scheduledMinutes || saved.estimatedMinutes || 60}m)`,
+            action,
+          };
+        }
+
         const params = action.params || {};
         const targetDate = resolveDateString(params.date, currentDate);
         const sec = sections.find(s =>
@@ -225,6 +257,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
 
         await db.tasks.put(newTask);
         syncEngine.notifyLocalMutation();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('nightplanner:task-created', { detail: newTask }));
+        }
 
         return {
           id: action.id,
@@ -236,6 +271,36 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
       }
 
       if (action.type === 'update_task') {
+        if (action.status === 'failed') {
+          return {
+            id: action.id,
+            type: 'update_task',
+            status: 'error',
+            message: action.error || 'Server failed to update task in database.',
+            action,
+          };
+        }
+
+        if (action.savedTask) {
+          const saved: Task = action.savedTask;
+          await db.tasks.put({
+            ...saved,
+            synced: 1,
+          });
+          syncEngine.notifyLocalMutation();
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('nightplanner:task-updated', { detail: saved }));
+          }
+
+          return {
+            id: action.id,
+            type: 'update_task',
+            status: 'success',
+            message: `Updated task "${saved.title}"`,
+            action,
+          };
+        }
+
         const params = action.params || {};
         const query = params.taskIdentifier || '';
         const targetTask = findTaskByQuery(query, allTasks.filter(t => !t.deleted));
