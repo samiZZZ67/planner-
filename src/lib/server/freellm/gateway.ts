@@ -57,6 +57,7 @@ export const POPULAR_FREE_MODELS = [
 export function getGatewayConfig(): FreeLLMGatewayConfig {
   let url =
     process.env.FREE_LLM_API_URL ||
+    process.env.FREELLM_API_URL ||
     process.env.FREE_LLM_GATEWAY_URL ||
     process.env.FREE_LLM_API_BASE_URL ||
     'http://localhost:3001';
@@ -66,10 +67,11 @@ export function getGatewayConfig(): FreeLLMGatewayConfig {
 
   const apiKey =
     process.env.FREE_LLM_API_KEY ||
+    process.env.FREELLM_API_KEY ||
     process.env.FREE_LLM_GATEWAY_KEY ||
     '';
 
-  const defaultModel = process.env.FREE_LLM_MODEL || 'auto';
+  const defaultModel = process.env.FREE_LLM_MODEL || process.env.FREELLM_MODEL || 'auto';
 
   return { baseUrl: url, apiKey, defaultModel };
 }

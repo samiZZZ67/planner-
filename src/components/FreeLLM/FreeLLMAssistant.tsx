@@ -8,13 +8,11 @@ import {
   X,
   Minimize2,
   Maximize2,
-  Settings,
   Trash2,
   Copy,
   Check,
   RefreshCw,
   Bot,
-  Zap,
   ChevronDown,
   Info,
 } from 'lucide-react';
@@ -29,21 +27,9 @@ export interface FreeLLMMessage {
   latencyMs?: number;
 }
 
-interface GatewaySettings {
-  gatewayUrl: string;
-  apiKey: string;
-  selectedModel: string;
-}
-
 const STORAGE_KEY_HISTORY = 'np_freellm_chat_history';
-const STORAGE_KEY_SETTINGS = 'np_freellm_settings';
+const STORAGE_KEY_MODEL = 'np_freellm_selected_model';
 const STORAGE_KEY_POS = 'np_freellm_moon_btn_pos';
-
-const DEFAULT_SETTINGS: GatewaySettings = {
-  gatewayUrl: '',
-  apiKey: '',
-  selectedModel: 'auto',
-};
 
 const STARTER_PROMPTS = [
   'Explain how the FreeLLMAPI router works',
@@ -78,9 +64,8 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // ── 4. Gateway Connection & Settings ──
-  const [settings, setSettings] = useState<GatewaySettings>(DEFAULT_SETTINGS);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // ── 4. Gateway Connection & Model ──
+  const [selectedModel, setSelectedModel] = useState<string>('auto');
   const [gatewayOnline, setGatewayOnline] = useState<boolean | null>(null);
   const [gatewayLatency, setGatewayLatency] = useState<number | null>(null);
   const [gatewayError, setGatewayError] = useState<string | null>(null);
@@ -114,11 +99,11 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
       }
     } catch {}
 
-    // 2. Settings
+    // 2. Selected Model
     try {
-      const savedSettings = localStorage.getItem(STORAGE_KEY_SETTINGS);
-      if (savedSettings) {
-        setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) });
+      const savedModel = localStorage.getItem(STORAGE_KEY_MODEL);
+      if (savedModel) {
+        setSelectedModel(savedModel);
       }
     } catch {}
 
@@ -159,46 +144,36 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     ]);
   };
 
-  // ── Check Gateway Status ──
-  const testGatewayConnection = useCallback(
-    async (customUrl?: string, customKey?: string) => {
-      setIsTestingGateway(true);
-      setGatewayError(null);
-      try {
-        const targetUrl = customUrl !== undefined ? customUrl : settings.gatewayUrl;
-        const targetKey = customKey !== undefined ? customKey : settings.apiKey;
+  // ── Check Gateway Status (Render Backend) ──
+  const testGatewayConnection = useCallback(async () => {
+    setIsTestingGateway(true);
+    setGatewayError(null);
+    try {
+      const res = await fetch('/api/ai/freellm/status');
+      const data = await res.json().catch(() => null);
 
-        const params = new URLSearchParams();
-        if (targetUrl) params.set('url', targetUrl);
-        if (targetKey) params.set('apiKey', targetKey);
-
-        const res = await fetch(`/api/ai/freellm/status?${params.toString()}`);
-        const data = await res.json().catch(() => null);
-
-        if (res.ok && data?.ok) {
-          setGatewayOnline(Boolean(data.online));
-          setGatewayLatency(data.latencyMs ?? null);
-          if (Array.isArray(data.models) && data.models.length > 0) {
-            setAvailableModels(data.models);
-          }
-          if (data.error && !data.online) {
-            setGatewayError(data.error);
-          } else {
-            setGatewayError(null);
-          }
-        } else {
-          setGatewayOnline(false);
-          setGatewayError(data?.error || `Gateway returned HTTP ${res.status}`);
+      if (res.ok && data?.ok) {
+        setGatewayOnline(Boolean(data.online));
+        setGatewayLatency(data.latencyMs ?? null);
+        if (Array.isArray(data.models) && data.models.length > 0) {
+          setAvailableModels(data.models);
         }
-      } catch (err: any) {
+        if (data.error && !data.online) {
+          setGatewayError(data.error);
+        } else {
+          setGatewayError(null);
+        }
+      } else {
         setGatewayOnline(false);
-        setGatewayError(err.message || 'Could not connect to gateway endpoint.');
-      } finally {
-        setIsTestingGateway(false);
+        setGatewayError(data?.error || `Gateway returned HTTP ${res.status}`);
       }
-    },
-    [settings.gatewayUrl, settings.apiKey]
-  );
+    } catch (err: any) {
+      setGatewayOnline(false);
+      setGatewayError(err.message || 'Could not connect to gateway endpoint.');
+    } finally {
+      setIsTestingGateway(false);
+    }
+  }, []);
 
   // Check gateway status when assistant is expanded
   useEffect(() => {
@@ -225,15 +200,12 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     });
   };
 
-  // Save settings to localStorage
-  const updateSettings = (newSettings: Partial<GatewaySettings>) => {
-    setSettings(prev => {
-      const next = { ...prev, ...newSettings };
-      try {
-        localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+  // Save model selection to localStorage
+  const handleModelChange = (model: string) => {
+    setSelectedModel(model);
+    try {
+      localStorage.setItem(STORAGE_KEY_MODEL, model);
+    } catch {}
   };
 
   // ── Drag Handlers for the Floating Moon Button ──
@@ -318,9 +290,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
           messages: updated
             .filter(m => m.id !== 'msg-greeting')
             .map(m => ({ role: m.role, content: m.content })),
-          model: settings.selectedModel || 'auto',
-          gatewayUrl: settings.gatewayUrl || undefined,
-          apiKey: settings.apiKey || undefined,
+          model: selectedModel || 'auto',
         }),
       });
 
@@ -338,7 +308,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         role: 'assistant',
         content: data.message?.content || 'No text content returned.',
         timestamp: Date.now(),
-        model: data.model || settings.selectedModel,
+        model: data.model || selectedModel,
         latencyMs: data.latencyMs,
       };
 
@@ -349,9 +319,9 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
       const errorMsg: FreeLLMMessage = {
         id: `err-${Date.now()}`,
         role: 'assistant',
-        content: `⚠️ **FreeLLMAPI Connection Notice:**\n${err.message || 'Failed to reach FreeLLMAPI gateway.'}\n\n*Check your gateway URL or network in the settings (⚙️ icon above).*`,
+        content: `⚠️ **FreeLLMAPI Connection Notice:**\n${err.message || 'Failed to reach FreeLLMAPI gateway on Render.'}`,
         timestamp: Date.now(),
-        model: settings.selectedModel,
+        model: selectedModel,
       };
       updateMessages(prev => [...prev, errorMsg]);
       setGatewayOnline(false);
@@ -570,26 +540,6 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
 
         {/* Window Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Settings Toggle */}
-          <button
-            onClick={() => setIsSettingsOpen(prev => !prev)}
-            aria-label="Gateway Settings"
-            title="Gateway Settings & Model Config"
-            style={{
-              background: isSettingsOpen ? 'rgba(168, 85, 247, 0.3)' : 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: 8,
-              padding: 6,
-              color: isSettingsOpen ? '#d8b4fe' : '#cbd5e1',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Settings style={{ width: 15, height: 15 }} />
-          </button>
-
           {/* Clear History */}
           <button
             onClick={handleClearHistory}
@@ -654,107 +604,6 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         </div>
       </header>
 
-      {/* ── Optional Gateway Settings Dropdown Panel ── */}
-      {isSettingsOpen && (
-        <div
-          style={{
-            padding: '14px 18px',
-            background: 'rgba(18, 14, 32, 0.95)',
-            borderBottom: '1px solid rgba(168, 85, 247, 0.25)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-            fontSize: 13,
-            animation: 'fadeIn 0.15s ease-out',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontWeight: 600, color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Zap style={{ width: 14, height: 14, color: '#38bdf8' }} />
-              Gateway Connection Configuration
-            </span>
-            <button
-              onClick={() => testGatewayConnection()}
-              disabled={isTestingGateway}
-              style={{
-                fontSize: 11,
-                padding: '4px 10px',
-                borderRadius: 6,
-                background: 'rgba(56, 189, 248, 0.15)',
-                border: '1px solid rgba(56, 189, 248, 0.3)',
-                color: '#38bdf8',
-                cursor: isTestingGateway ? 'default' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-              }}
-            >
-              <RefreshCw style={{ width: 12, height: 12, animation: isTestingGateway ? 'spin 1s linear infinite' : 'none' }} />
-              {isTestingGateway ? 'Testing...' : 'Test Status'}
-            </button>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
-              Gateway Endpoint URL (default: http://localhost:3001 or deployed host)
-            </label>
-            <input
-              type="text"
-              placeholder="http://localhost:3001 or https://my-gateway.render.com"
-              value={settings.gatewayUrl}
-              onChange={e => updateSettings({ gatewayUrl: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '7px 10px',
-                borderRadius: 8,
-                background: 'rgba(255, 255, 255, 0.06)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#ffffff',
-                fontSize: 12,
-                outline: 'none',
-              }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
-              Unified API Key (Optional if gateway has no auth requirement)
-            </label>
-            <input
-              type="password"
-              placeholder="Enter your unified gateway key if required"
-              value={settings.apiKey}
-              onChange={e => updateSettings({ apiKey: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '7px 10px',
-                borderRadius: 8,
-                background: 'rgba(255, 255, 255, 0.06)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#ffffff',
-                fontSize: 12,
-                outline: 'none',
-              }}
-            />
-          </div>
-
-          {gatewayError && (
-            <div
-              style={{
-                padding: '8px 10px',
-                borderRadius: 8,
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: '#fca5a5',
-                fontSize: 11,
-              }}
-            >
-              ⚠️ {gatewayError}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* ── Model Selector Bar ── */}
       <div
         style={{
@@ -773,8 +622,8 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         </span>
 
         <select
-          value={settings.selectedModel}
-          onChange={e => updateSettings({ selectedModel: e.target.value })}
+          value={selectedModel}
+          onChange={e => handleModelChange(e.target.value)}
           style={{
             background: 'rgba(255, 255, 255, 0.08)',
             border: '1px solid rgba(255, 255, 255, 0.15)',
