@@ -21,6 +21,7 @@ import { AnalyticsScreen } from '@/components/Analytics/AnalyticsScreen';
 import { SettingsScreen } from '@/components/Settings/SettingsScreen';
 import { LoginModal } from '@/components/Modals/LoginModal';
 import { AIChatPanel } from '@/components/Chat/AIChatPanel';
+import { FreeLLMAssistant } from '@/components/FreeLLM/FreeLLMAssistant';
 import { apiFetch } from '@/lib/api/apiClient';
 
 export default function NightPlannerApp() {
@@ -490,6 +491,9 @@ export default function NightPlannerApp() {
         currentDate={currentDate}
         isPhone={isPhone}
       />
+
+      {/* ── 9. Independent FreeLLMAPI Assistant (Movable, Expandable AI Moon Button) ── */}
+      <FreeLLMAssistant isPhone={isPhone} />
     </div>
   );
 }
