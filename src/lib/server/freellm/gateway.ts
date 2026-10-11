@@ -264,3 +264,128 @@ export async function sendChatCompletion(
     throw err;
   }
 }
+
+/**
+ * Executes chat completion with graceful fallback to Groq or Gemini if FreeLLM gateway fails or returns 401
+ */
+export async function sendChatCompletionWithFallback(
+  options: SendChatOptions
+): Promise<ChatCompletionResult & { providerUsed: string }> {
+  try {
+    const result = await sendChatCompletion(options);
+    return { ...result, providerUsed: 'FreeLLMAPI Gateway' };
+  } catch (gatewayErr: any) {
+    console.warn(`[FreeLLM Gateway] Request failed (${gatewayErr.message}). Attempting resilient fallback...`);
+
+    // 1. Try Groq (Llama 3.3 70B)
+    const groqKey =
+      process.env.GROQ_API_KEY_1 ||
+      process.env.GROQ_API_KEY_2 ||
+      process.env.GROQ_API_KEY_3 ||
+      process.env.GROQ_API_KEY;
+
+    if (groqKey && groqKey.trim().length > 10) {
+      try {
+        const startTime = Date.now();
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${groqKey.trim()}`,
+          },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: options.messages,
+            temperature: options.temperature ?? 0.7,
+          }),
+        });
+
+        if (groqRes.ok) {
+          const data = await groqRes.json();
+          const content = data.choices?.[0]?.message?.content || '';
+          if (content) {
+            return {
+              content,
+              model: 'llama-3.3-70b-versatile (Groq Resilient Fallback)',
+              latencyMs: Date.now() - startTime,
+              tokensUsed: {
+                promptTokens: data.usage?.prompt_tokens,
+                completionTokens: data.usage?.completion_tokens,
+                totalTokens: data.usage?.total_tokens,
+              },
+              providerUsed: 'Groq Cloud (Fallback)',
+            };
+          }
+        }
+      } catch (fallbackErr) {
+        console.warn('[FreeLLM Fallback] Groq attempt failed:', fallbackErr);
+      }
+    }
+
+    // 2. Try Google Gemini (Gemini 2.5 Flash)
+    const geminiKey =
+      process.env.GEMINI_API_KEY_1 ||
+      process.env.GEMINI_API_KEY_2 ||
+      process.env.GEMINI_API_KEY_3 ||
+      process.env.GEMINI_API_KEY;
+
+    if (geminiKey && geminiKey.trim().length > 10) {
+      try {
+        const startTime = Date.now();
+        const cleanKey = geminiKey.trim();
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(cleanKey)}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': cleanKey,
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    {
+                      text: options.messages
+                        .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+                        .join('\n\n'),
+                    },
+                  ],
+                },
+              ],
+              generationConfig: {
+                temperature: options.temperature ?? 0.7,
+                maxOutputTokens: 2500,
+              },
+            }),
+          }
+        );
+
+        if (geminiRes.ok) {
+          const data = await geminiRes.json();
+          const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (content) {
+            return {
+              content,
+              model: 'gemini-2.5-flash (Google Resilient Fallback)',
+              latencyMs: Date.now() - startTime,
+              tokensUsed: {
+                promptTokens: data.usageMetadata?.promptTokenCount,
+                completionTokens: data.usageMetadata?.candidatesTokenCount,
+                totalTokens: data.usageMetadata?.totalTokenCount,
+              },
+              providerUsed: 'Google Gemini (Fallback)',
+            };
+          }
+        }
+      } catch (geminiErr) {
+        console.warn('[FreeLLM Fallback] Gemini attempt failed:', geminiErr);
+      }
+    }
+
+    // If both fallbacks fail or unavailable, rethrow original gateway error
+    throw gatewayErr;
+  }
+}
+

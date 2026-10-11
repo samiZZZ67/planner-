@@ -13,10 +13,44 @@ import {
   Check,
   RefreshCw,
   Bot,
-  ChevronDown,
-  Info,
+  Paperclip,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  Play,
+  Square,
+  Download,
+  Eye,
+  FileText,
+  Music,
+  Headphones,
+  Radio,
+  Sparkle,
 } from 'lucide-react';
 import { POPULAR_FREE_MODELS } from '@/lib/server/freellm/gateway';
+
+export interface AttachmentItem {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  dataUrl?: string;
+  textContent?: string;
+  url?: string;
+}
+
+export interface GeneratedMedia {
+  type: 'image' | 'video';
+  url: string;
+  prompt: string;
+  model?: string;
+  width?: number;
+  height?: number;
+  duration?: number;
+}
 
 export interface FreeLLMMessage {
   id: string;
@@ -25,6 +59,8 @@ export interface FreeLLMMessage {
   timestamp: number;
   model?: string;
   latencyMs?: number;
+  attachments?: AttachmentItem[];
+  generatedMedia?: GeneratedMedia;
 }
 
 const STORAGE_KEY_HISTORY = 'np_freellm_chat_history';
@@ -32,17 +68,14 @@ const STORAGE_KEY_MODEL = 'np_freellm_selected_model';
 const STORAGE_KEY_POS = 'np_freellm_moon_btn_pos';
 
 const STARTER_PROMPTS = [
-  'Explain how the FreeLLMAPI router works',
-  'Write a TypeScript function with error handling',
-  'What are the best techniques for deep focus work?',
+  '🎨 Generate an image of a cybernetic lunar city',
+  '🎬 Create a video showing galaxy nebulas and stars',
+  '🎙️ Start voice conversation mode',
   'Compare Gemini 2.5 Flash vs Llama 3.3 70B',
 ];
 
 export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
-  // ── 1. Assistant Visibility & Expansion States ──
-  // 'collapsed': Only floating AI Moon button visible
-  // 'expanded': Floating chat window visible
-  // 'maximized': Full-height expanded workspace
+  // ── 1. Assistant Visibility & Window States ──
   const [windowState, setWindowState] = useState<'collapsed' | 'expanded' | 'maximized'>('collapsed');
 
   // ── 2. Draggable Position for AI Moon Button ──
@@ -64,7 +97,29 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // ── 4. Gateway Connection & Model ──
+  // ── 4. Multimodal Attachments ──
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ── 5. Voice Dictation & Text-to-Speech ──
+  const [isDictating, setIsDictating] = useState(false);
+  const [dictationInterim, setDictationInterim] = useState('');
+  const [isSpeakingMessageId, setIsSpeakingMessageId] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // ── 6. Real-Time Interactive Voice Mode ──
+  const [isVoiceModeActive, setIsVoiceModeActive] = useState(false);
+  const [voiceModeStatus, setVoiceModeStatus] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
+  const [isMicMuted, setIsMicMuted] = useState(false);
+  const [voiceSubtitle, setVoiceSubtitle] = useState<string>('Listening to your voice...');
+
+  // ── 7. Image Lightbox / Zoom Modal ──
+  const [zoomedImage, setZoomedImage] = useState<{ url: string; prompt: string } | null>(null);
+
+  // ── 8. Gateway Connection & Model ──
   const [selectedModel, setSelectedModel] = useState<string>('auto');
   const [gatewayOnline, setGatewayOnline] = useState<boolean | null>(null);
   const [gatewayLatency, setGatewayLatency] = useState<number | null>(null);
@@ -137,7 +192,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         id: 'msg-greeting',
         role: 'assistant',
         content:
-          '👋 Hello! I am your independent **FreeLLMAPI Assistant**.\n\nI connect directly to the **Free LLM API Gateway**, dynamically routing across **34+ free-tier AI providers** (Google Gemini, Groq, Cerebras, Mistral, and more) with automatic failover and zero quota walls.\n\nHow can I help you today?',
+          '👋 Hello! I am your multimodal **FreeLLM Moon Assistant**.\n\nNow equipped with full multimodal power:\n• 🎙️ **Voice dictation & real-time voice conversation**\n• 👁️ **Visual question answering & photo analysis**\n• 📄 **PDF, document, and source code understanding**\n• 🎨 **High-resolution image generation (Flux)**\n• 🎬 **Text & prompt video generation**\n• 🔊 **Voice response narration**\n\nHow can I help you today?',
         timestamp: Date.now(),
         model: 'auto',
       },
@@ -175,7 +230,6 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     }
   }, []);
 
-  // Check gateway status when assistant is expanded
   useEffect(() => {
     if (windowState !== 'collapsed') {
       testGatewayConnection();
@@ -200,7 +254,6 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     });
   };
 
-  // Save model selection to localStorage
   const handleModelChange = (model: string) => {
     setSelectedModel(model);
     try {
@@ -208,7 +261,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     } catch {}
   };
 
-  // ── Drag Handlers for the Floating Moon Button ──
+  // ── Drag Handlers for Floating AI Moon Button ──
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
 
@@ -250,7 +303,6 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
 
       if (dragInfoRef.current) {
         if (!dragInfoRef.current.moved) {
-          // It was a click -> Expand Assistant!
           setWindowState('expanded');
         } else if (btnPos) {
           try {
@@ -265,21 +317,235 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     window.addEventListener('pointerup', handlePointerUp);
   };
 
-  // ── Send Message to FreeLLMAPI Gateway ──
-  const handleSendMessage = async (customPrompt?: string) => {
+  // ── File Attachment Processing ──
+  const processFiles = async (files: FileList | File[]) => {
+    const newItems: AttachmentItem[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > 25 * 1024 * 1024) {
+        alert(`File "${file.name}" exceeds the 25MB limit.`);
+        continue;
+      }
+
+      const id = `att-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      const isText =
+        file.type.startsWith('text/') ||
+        /\.(txt|md|json|csv|js|ts|tsx|jsx|py|html|css|sql|sh)$/i.test(file.name);
+
+      if (isText) {
+        const text = await file.text();
+        newItems.push({
+          id,
+          name: file.name,
+          type: file.type || 'text/plain',
+          size: file.size,
+          textContent: text,
+        });
+      } else {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        newItems.push({
+          id,
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          size: file.size,
+          dataUrl,
+        });
+      }
+    }
+
+    setAttachments(prev => [...prev, ...newItems]);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processFiles(e.target.files);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  };
+
+  // ── Voice Dictation (Microphone) ──
+  const startDictation = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => {
+          setIsDictating(true);
+          setDictationInterim('');
+        };
+
+        recognition.onresult = (event: any) => {
+          let interim = '';
+          let final = '';
+
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              final += event.results[i][0].transcript;
+            } else {
+              interim += event.results[i][0].transcript;
+            }
+          }
+
+          if (final) {
+            setInput(prev => (prev ? `${prev} ${final}` : final).trim());
+          }
+          setDictationInterim(interim);
+        };
+
+        recognition.onerror = (event: any) => {
+          console.warn('[Speech Recognition] Error:', event.error);
+          stopDictation();
+        };
+
+        recognition.onend = () => {
+          setIsDictating(false);
+          setDictationInterim('');
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+      } catch (err) {
+        console.warn('Speech recognition failed, trying audio recording fallback...', err);
+        startAudioRecorderFallback();
+      }
+    } else {
+      startAudioRecorderFallback();
+    }
+  };
+
+  const startAudioRecorderFallback = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = e => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stream.getTracks().forEach(t => t.stop());
+
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'recording.webm');
+
+        try {
+          const res = await fetch('/api/ai/freellm/transcribe', {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await res.json();
+          if (data.ok && data.text) {
+            setInput(prev => (prev ? `${prev} ${data.text}` : data.text).trim());
+          }
+        } catch (err) {
+          console.error('Transcription error:', err);
+        } finally {
+          setIsDictating(false);
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsDictating(true);
+    } catch (err) {
+      alert('Microphone permission was denied or is unavailable.');
+      setIsDictating(false);
+    }
+  };
+
+  const stopDictation = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsDictating(false);
+    setDictationInterim('');
+  };
+
+  const toggleDictation = () => {
+    if (isDictating) {
+      stopDictation();
+    } else {
+      startDictation();
+    }
+  };
+
+  // ── Text-to-Speech Response Playback ──
+  const cleanMarkdownForSpeech = (text: string): string => {
+    return text
+      .replace(/```[\s\S]*?```/g, ' [Code snippet skipped] ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/#+\s*/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/https?:\/\/\S+/g, '')
+      .trim();
+  };
+
+  const handleSpeakMessage = (msg: FreeLLMMessage) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+
+    if (isSpeakingMessageId === msg.id) {
+      window.speechSynthesis.cancel();
+      setIsSpeakingMessageId(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const cleanText = cleanMarkdownForSpeech(msg.content);
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    utterance.onstart = () => setIsSpeakingMessageId(msg.id);
+    utterance.onend = () => setIsSpeakingMessageId(null);
+    utterance.onerror = () => setIsSpeakingMessageId(null);
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // ── Send Message to FreeLLMAPI Gateway & Multimodal Router ──
+  const handleSendMessage = async (customPrompt?: string, mode?: 'chat' | 'image_gen' | 'video_gen') => {
     const text = (customPrompt || input).trim();
-    if (!text || isLoading) return;
+    if ((!text && attachments.length === 0) || isLoading) return;
 
     const userMsg: FreeLLMMessage = {
       id: `usr-${Date.now()}`,
       role: 'user',
       content: text,
       timestamp: Date.now(),
+      attachments: attachments.length > 0 ? [...attachments] : undefined,
     };
 
     const updated = [...messages, userMsg];
     updateMessages(updated);
     if (!customPrompt) setInput('');
+    setAttachments([]);
     setIsLoading(true);
 
     try {
@@ -289,8 +555,13 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         body: JSON.stringify({
           messages: updated
             .filter(m => m.id !== 'msg-greeting')
-            .map(m => ({ role: m.role, content: m.content })),
+            .map(m => ({
+              role: m.role,
+              content: m.content,
+              attachments: m.attachments,
+            })),
           model: selectedModel || 'auto',
+          mode: mode || undefined,
         }),
       });
 
@@ -310,16 +581,24 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         timestamp: Date.now(),
         model: data.model || selectedModel,
         latencyMs: data.latencyMs,
+        generatedMedia: data.generatedMedia,
       };
 
       updateMessages(prev => [...prev, assistantMsg]);
       setGatewayOnline(true);
       if (data.latencyMs) setGatewayLatency(data.latencyMs);
+
+      // If in Voice Mode, automatically speak out the response
+      if (isVoiceModeActive) {
+        handleSpeakMessage(assistantMsg);
+        setVoiceSubtitle(assistantMsg.content.slice(0, 100) + '...');
+        setVoiceModeStatus('speaking');
+      }
     } catch (err: any) {
       const errorMsg: FreeLLMMessage = {
         id: `err-${Date.now()}`,
         role: 'assistant',
-        content: `⚠️ **FreeLLMAPI Connection Notice:**\n${err.message || 'Failed to reach FreeLLMAPI gateway on Render.'}`,
+        content: `⚠️ **FreeLLM Notice:**\n${err.message || 'Failed to process request.'}`,
         timestamp: Date.now(),
         model: selectedModel,
       };
@@ -333,7 +612,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
   };
 
   const handleClearHistory = () => {
-    if (window.confirm('Clear all FreeLLMAPI chat history?')) {
+    if (window.confirm('Clear all FreeLLM chat history and media?')) {
       loadDefaultGreeting();
       try {
         localStorage.removeItem(STORAGE_KEY_HISTORY);
@@ -347,6 +626,22 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // ── Drag & Drop Event Handlers ──
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFiles(e.dataTransfer.files);
+    }
+  };
+
   // ─────────────────────────────────────────────────────────────
   // RENDER: Collapsed State (Movable Floating AI Moon Button)
   // ─────────────────────────────────────────────────────────────
@@ -355,8 +650,8 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
       <button
         onPointerDown={handlePointerDown}
         className="freellm-moon-button"
-        aria-label="Open FreeLLMAPI Assistant (Movable AI Moon Button)"
-        title="🌙 FreeLLM AI Assistant • Drag to reposition, click to expand"
+        aria-label="Open Multimodal FreeLLM Assistant (Movable AI Moon Button)"
+        title="🌙 FreeLLM Multimodal AI Assistant • Drag to reposition, click to expand"
         style={{
           position: 'fixed',
           ...(btnPos
@@ -436,44 +731,57 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // RENDER: Expanded / Maximized State (Interactive Chat Window)
+  // RENDER: Expanded / Maximized State (Interactive Multimodal Chat Window)
   // ─────────────────────────────────────────────────────────────
   const isMax = windowState === 'maximized';
 
   return (
     <div
       role="dialog"
-      aria-label="FreeLLMAPI Assistant Window"
+      aria-label="FreeLLM Multimodal Assistant Window"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       style={{
         position: 'fixed',
         inset: isPhone || isMax ? 0 : 'auto',
         right: isPhone || isMax ? 0 : 20,
         bottom: isPhone || isMax ? 0 : 20,
-        width: isPhone || isMax ? '100vw' : 'min(480px, calc(100vw - 32px))',
-        height: isPhone || isMax ? '100vh' : 'min(700px, calc(100vh - 40px))',
+        width: isPhone || isMax ? '100vw' : 'min(500px, calc(100vw - 32px))',
+        height: isPhone || isMax ? '100vh' : 'min(730px, calc(100vh - 40px))',
         zIndex: 85,
         display: 'flex',
         flexDirection: 'column',
-        background: 'rgba(13, 11, 24, 0.92)',
+        background: 'rgba(13, 11, 24, 0.94)',
         backdropFilter: 'blur(28px) saturate(180%)',
         WebkitBackdropFilter: 'blur(28px) saturate(180%)',
-        border: isPhone ? 'none' : '1.5px solid rgba(192, 132, 252, 0.3)',
+        border: isPhone ? 'none' : isDragOver ? '2px dashed #a855f7' : '1.5px solid rgba(192, 132, 252, 0.3)',
         borderRadius: isPhone || isMax ? 0 : 24,
         boxShadow: '0 24px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(168, 85, 247, 0.25)',
         overflow: 'hidden',
         color: '#f8fafc',
         fontFamily: 'var(--font-system)',
-        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
+      {/* ── Hidden File Picker ── */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        multiple
+        accept="image/*,.pdf,.txt,.md,.json,.csv,.js,.ts,.tsx,.py,.html,.css,audio/*,video/*"
+        style={{ display: 'none' }}
+        onChange={handleFileSelect}
+      />
+
       {/* ── Header ── */}
       <header
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '14px 18px',
-          background: 'rgba(24, 20, 42, 0.7)',
+          padding: '12px 16px',
+          background: 'rgba(24, 20, 42, 0.75)',
           borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
           userSelect: 'none',
         }}
@@ -497,23 +805,23 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
 
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 600, fontSize: 15, letterSpacing: '0.01em', color: '#ffffff' }}>
-                FreeLLM Assistant
+              <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: '0.01em', color: '#ffffff' }}>
+                FreeLLM Moon Assistant
               </span>
               <span
                 style={{
-                  fontSize: 10,
+                  fontSize: 9,
                   fontWeight: 600,
                   textTransform: 'uppercase',
                   padding: '1px 6px',
                   borderRadius: 6,
-                  background: 'rgba(168, 85, 247, 0.2)',
-                  border: '1px solid rgba(168, 85, 247, 0.4)',
+                  background: 'rgba(168, 85, 247, 0.25)',
+                  border: '1px solid rgba(168, 85, 247, 0.45)',
                   color: '#d8b4fe',
                   letterSpacing: '0.05em',
                 }}
               >
-                Gateway
+                Multimodal
               </span>
             </div>
 
@@ -531,20 +839,47 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                 {gatewayOnline === true
                   ? `Online ${gatewayLatency ? `(${gatewayLatency}ms)` : ''}`
                   : gatewayOnline === false
-                  ? 'Offline / Not Connected'
-                  : 'Checking Gateway...'}
+                  ? 'Fallback Ready (Gemini/Groq)'
+                  : 'Checking Service...'}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Window Action Controls */}
+        {/* Window Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* Real-Time Voice Mode Toggle */}
+          <button
+            onClick={() => setIsVoiceModeActive(prev => !prev)}
+            aria-label="Toggle Voice Mode"
+            title="Toggle Hands-Free Real-Time Voice Mode"
+            style={{
+              background: isVoiceModeActive
+                ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.5), rgba(56, 189, 248, 0.5))'
+                : 'rgba(255, 255, 255, 0.08)',
+              border: isVoiceModeActive
+                ? '1px solid rgba(216, 180, 254, 0.6)'
+                : '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: 8,
+              padding: '5px 8px',
+              color: isVoiceModeActive ? '#ffffff' : '#cbd5e1',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 11,
+              fontWeight: 500,
+            }}
+          >
+            <Headphones style={{ width: 14, height: 14 }} />
+            {!isPhone && <span>Voice</span>}
+          </button>
+
           {/* Clear History */}
           <button
             onClick={handleClearHistory}
             aria-label="Clear chat history"
-            title="Clear FreeLLM chat history"
+            title="Clear chat and media history"
             style={{
               background: 'rgba(255, 255, 255, 0.08)',
               border: '1px solid rgba(255, 255, 255, 0.12)',
@@ -557,7 +892,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
               justifyContent: 'center',
             }}
           >
-            <Trash2 style={{ width: 15, height: 15 }} />
+            <Trash2 style={{ width: 14, height: 14 }} />
           </button>
 
           {/* Maximize / Restore Toggle (desktop) */}
@@ -565,7 +900,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             <button
               onClick={() => setWindowState(prev => (prev === 'maximized' ? 'expanded' : 'maximized'))}
               aria-label={isMax ? 'Restore window size' : 'Maximize window'}
-              title={isMax ? 'Restore' : 'Maximize to full screen'}
+              title={isMax ? 'Restore' : 'Maximize'}
               style={{
                 background: 'rgba(255, 255, 255, 0.08)',
                 border: '1px solid rgba(255, 255, 255, 0.12)',
@@ -578,7 +913,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                 justifyContent: 'center',
               }}
             >
-              {isMax ? <Minimize2 style={{ width: 15, height: 15 }} /> : <Maximize2 style={{ width: 15, height: 15 }} />}
+              {isMax ? <Minimize2 style={{ width: 14, height: 14 }} /> : <Maximize2 style={{ width: 14, height: 14 }} />}
             </button>
           )}
 
@@ -586,7 +921,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
           <button
             onClick={() => setWindowState('collapsed')}
             aria-label="Collapse to floating Moon button"
-            title="Collapse to floating Moon button"
+            title="Collapse to Moon button"
             style={{
               background: 'rgba(255, 255, 255, 0.08)',
               border: '1px solid rgba(255, 255, 255, 0.12)',
@@ -599,7 +934,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
               justifyContent: 'center',
             }}
           >
-            <X style={{ width: 15, height: 15 }} />
+            <X style={{ width: 14, height: 14 }} />
           </button>
         </div>
       </header>
@@ -610,14 +945,14 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '8px 18px',
+          padding: '6px 16px',
           background: 'rgba(255, 255, 255, 0.03)',
           borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
           fontSize: 12,
         }}
       >
         <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Bot style={{ width: 14, height: 14, color: '#a855f7' }} />
+          <Bot style={{ width: 13, height: 13, color: '#a855f7' }} />
           Model:
         </span>
 
@@ -630,7 +965,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             color: '#e2e8f0',
             fontSize: 12,
             borderRadius: 8,
-            padding: '4px 8px',
+            padding: '3px 8px',
             outline: 'none',
             cursor: 'pointer',
             maxWidth: '70%',
@@ -651,12 +986,133 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         </select>
       </div>
 
+      {/* ── Real-Time Voice Mode Overlay ── */}
+      {isVoiceModeActive && (
+        <div
+          style={{
+            padding: '16px 20px',
+            background: 'linear-gradient(180deg, rgba(30, 16, 50, 0.95), rgba(18, 12, 34, 0.98))',
+            borderBottom: '1px solid rgba(168, 85, 247, 0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            position: 'relative',
+          }}
+        >
+          {/* Animated Cosmic Voice Orb */}
+          <div
+            style={{
+              width: 68,
+              height: 68,
+              borderRadius: '50%',
+              background:
+                voiceModeStatus === 'speaking'
+                  ? 'radial-gradient(circle, #38bdf8 0%, #6366f1 70%, #a855f7 100%)'
+                  : isMicMuted
+                  ? 'radial-gradient(circle, #64748b 0%, #334155 100%)'
+                  : 'radial-gradient(circle, #c084fc 0%, #a855f7 60%, #4f46e5 100%)',
+              boxShadow: isMicMuted
+                ? '0 0 10px rgba(100, 116, 139, 0.3)'
+                : '0 0 35px rgba(168, 85, 247, 0.8), 0 0 50px rgba(56, 189, 248, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              animation: isMicMuted ? 'none' : 'pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              transition: 'all 0.3s ease',
+            }}
+          >
+            <Radio style={{ width: 30, height: 30, color: '#ffffff' }} />
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>
+              {isMicMuted
+                ? 'Microphone Muted'
+                : voiceModeStatus === 'speaking'
+                ? 'Moon Assistant is speaking...'
+                : voiceModeStatus === 'thinking'
+                ? 'Thinking...'
+                : 'Hands-Free Voice Active'}
+            </div>
+            <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2, maxWidth: 360, fontStyle: 'italic' }}>
+              {dictationInterim || voiceSubtitle}
+            </div>
+          </div>
+
+          {/* Voice Mode Action Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={() => setIsMicMuted(prev => !prev)}
+              style={{
+                background: isMicMuted ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.1)',
+                border: isMicMuted ? '1px solid #ef4444' : '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: 20,
+                padding: '6px 14px',
+                color: isMicMuted ? '#f87171' : '#ffffff',
+                fontSize: 12,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              {isMicMuted ? <MicOff style={{ width: 14, height: 14 }} /> : <Mic style={{ width: 14, height: 14 }} />}
+              {isMicMuted ? 'Unmute' : 'Mute'}
+            </button>
+
+            {/* Interrupt Button */}
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.speechSynthesis) {
+                  window.speechSynthesis.cancel();
+                }
+                setIsSpeakingMessageId(null);
+                setVoiceModeStatus('idle');
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: 20,
+                padding: '6px 14px',
+                color: '#ffffff',
+                fontSize: 12,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <Square style={{ width: 13, height: 13 }} />
+              Interrupt
+            </button>
+
+            {/* Exit Voice Mode */}
+            <button
+              onClick={() => setIsVoiceModeActive(false)}
+              style={{
+                background: 'rgba(168, 85, 247, 0.2)',
+                border: '1px solid rgba(168, 85, 247, 0.4)',
+                borderRadius: 20,
+                padding: '6px 14px',
+                color: '#d8b4fe',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              Exit Voice
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Messages Feed ── */}
       <div
         style={{
           flex: 1,
           overflowY: 'auto',
-          padding: '16px 18px',
+          padding: '16px 16px',
           display: 'flex',
           flexDirection: 'column',
           gap: 14,
@@ -675,6 +1131,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                 maxWidth: '100%',
               }}
             >
+              {/* Message Header Badge */}
               <div
                 style={{
                   display: 'flex',
@@ -690,7 +1147,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                 ) : (
                   <>
                     <Moon style={{ width: 12, height: 12 }} />
-                    <span style={{ fontWeight: 600 }}>FreeLLM</span>
+                    <span style={{ fontWeight: 600 }}>Moon Assistant</span>
                     {msg.model && (
                       <span
                         style={{
@@ -713,6 +1170,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                 )}
               </div>
 
+              {/* Message Body Bubble */}
               <div
                 style={{
                   maxWidth: isUser ? '85%' : '94%',
@@ -734,11 +1192,180 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     : '0 4px 14px rgba(0, 0, 0, 0.25)',
                 }}
               >
-                {msg.content}
+                {/* 1. Attached Files (if any) */}
+                {msg.attachments && msg.attachments.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                    {msg.attachments.map(att => (
+                      <div
+                        key={att.id}
+                        style={{
+                          background: 'rgba(0, 0, 0, 0.35)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: 8,
+                          padding: '4px 8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontSize: 11,
+                        }}
+                      >
+                        {att.type.startsWith('image/') && att.dataUrl ? (
+                          <img
+                            src={att.dataUrl}
+                            alt={att.name}
+                            onClick={() => setZoomedImage({ url: att.dataUrl!, prompt: att.name })}
+                            style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover', cursor: 'pointer' }}
+                          />
+                        ) : att.type.startsWith('audio/') ? (
+                          <Music style={{ width: 14, height: 14, color: '#38bdf8' }} />
+                        ) : att.type.startsWith('video/') ? (
+                          <VideoIcon style={{ width: 14, height: 14, color: '#f43f5e' }} />
+                        ) : (
+                          <FileText style={{ width: 14, height: 14, color: '#a855f7' }} />
+                        )}
+                        <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {att.name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 2. Text Content */}
+                <div>{msg.content}</div>
+
+                {/* 3. Generated Image Card */}
+                {msg.generatedMedia && msg.generatedMedia.type === 'image' && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      background: 'rgba(0, 0, 0, 0.4)',
+                      border: '1px solid rgba(168, 85, 247, 0.3)',
+                    }}
+                  >
+                    <div style={{ position: 'relative' }}>
+                      <img
+                        src={msg.generatedMedia.url}
+                        alt={msg.generatedMedia.prompt}
+                        onClick={() =>
+                          setZoomedImage({
+                            url: msg.generatedMedia!.url,
+                            prompt: msg.generatedMedia!.prompt,
+                          })
+                        }
+                        style={{
+                          width: '100%',
+                          maxHeight: 320,
+                          objectFit: 'cover',
+                          display: 'block',
+                          cursor: 'pointer',
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 8,
+                          right: 8,
+                          display: 'flex',
+                          gap: 6,
+                        }}
+                      >
+                        <button
+                          onClick={() =>
+                            setZoomedImage({
+                              url: msg.generatedMedia!.url,
+                              prompt: msg.generatedMedia!.prompt,
+                            })
+                          }
+                          title="Zoom In"
+                          style={{
+                            background: 'rgba(0, 0, 0, 0.7)',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            borderRadius: 6,
+                            padding: 5,
+                            color: '#ffffff',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <Eye style={{ width: 14, height: 14 }} />
+                        </button>
+                        <a
+                          href={msg.generatedMedia.url}
+                          download={`image-${Date.now()}.jpg`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Download Image"
+                          style={{
+                            background: 'rgba(0, 0, 0, 0.7)',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            borderRadius: 6,
+                            padding: 5,
+                            color: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Download style={{ width: 14, height: 14 }} />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Generated Video Card */}
+                {msg.generatedMedia && msg.generatedMedia.type === 'video' && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      background: 'rgba(0, 0, 0, 0.4)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                    }}
+                  >
+                    <video
+                      src={msg.generatedMedia.url}
+                      controls
+                      playsInline
+                      style={{
+                        width: '100%',
+                        maxHeight: 280,
+                        display: 'block',
+                        background: '#000',
+                      }}
+                    />
+                    <div
+                      style={{
+                        padding: '6px 10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: 11,
+                        color: '#94a3b8',
+                      }}
+                    >
+                      <span>🎬 Video Stream</span>
+                      <a
+                        href={msg.generatedMedia.url}
+                        download={`video-${Date.now()}.mp4`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: '#38bdf8', textDecoration: 'none' }}
+                      >
+                        Download Video
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
 
+              {/* Message Bottom Action Toolbar */}
               {!isUser && (
-                <div style={{ display: 'flex', gap: 6, paddingLeft: 4 }}>
+                <div style={{ display: 'flex', gap: 8, paddingLeft: 4 }}>
+                  {/* Copy Button */}
                   <button
                     onClick={() => handleCopy(msg.content, msg.id)}
                     title="Copy message"
@@ -764,18 +1391,45 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                       </>
                     )}
                   </button>
+
+                  {/* Text-To-Speech Listen Button */}
+                  <button
+                    onClick={() => handleSpeakMessage(msg)}
+                    title={isSpeakingMessageId === msg.id ? 'Stop Speaking' : 'Read aloud with voice'}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: isSpeakingMessageId === msg.id ? '#a855f7' : '#64748b',
+                      fontSize: 11,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: 2,
+                    }}
+                  >
+                    {isSpeakingMessageId === msg.id ? (
+                      <>
+                        <VolumeX style={{ width: 12, height: 12 }} /> Stop
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 style={{ width: 12, height: 12 }} /> Listen
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
             </div>
           );
         })}
 
-        {/* Loading / Typing Indicator */}
+        {/* Loading Indicator */}
         {isLoading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', color: '#cbd5e1' }}>
             <Moon style={{ width: 14, height: 14, color: '#a855f7', animation: 'spin 3s linear infinite' }} />
             <span style={{ fontSize: 12, fontStyle: 'italic', color: '#94a3b8' }}>
-              FreeLLMAPI is routing through free models...
+              Moon Assistant is processing multimodal pipeline...
             </span>
           </div>
         )}
@@ -783,35 +1437,201 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ── Prompt Suggestions (when chat is short) ── */}
-      {messages.length <= 2 && !isLoading && (
+      {/* ── Lightbox Image Zoom Modal ── */}
+      {zoomedImage && (
         <div
+          onClick={() => setZoomedImage(null)}
           style={{
-            padding: '8px 18px',
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(10px)',
+            zIndex: 100,
             display: 'flex',
-            gap: 8,
-            overflowX: 'auto',
-            whiteSpace: 'nowrap',
-            borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
           }}
         >
-          {STARTER_PROMPTS.map((prompt, i) => (
-            <button
-              key={i}
-              onClick={() => handleSendMessage(prompt)}
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              borderRadius: 16,
+              overflow: 'hidden',
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.9)',
+            }}
+          >
+            <img
+              src={zoomedImage.url}
+              alt={zoomedImage.prompt}
               style={{
-                fontSize: 11,
-                padding: '5px 10px',
-                borderRadius: 12,
-                background: 'rgba(168, 85, 247, 0.1)',
-                border: '1px solid rgba(168, 85, 247, 0.25)',
-                color: '#e2e8f0',
+                width: '100%',
+                maxHeight: '85vh',
+                objectFit: 'contain',
+                display: 'block',
+              }}
+            />
+            <button
+              onClick={() => setZoomedImage(null)}
+              style={{
+                position: 'absolute',
+                top: 12,
+                right: 12,
+                background: 'rgba(0, 0, 0, 0.75)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                borderRadius: '50%',
+                width: 32,
+                height: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
                 cursor: 'pointer',
-                flexShrink: 0,
               }}
             >
-              {prompt}
+              <X style={{ width: 16, height: 16 }} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Quick Multimodal Action Chips ── */}
+      <div
+        style={{
+          padding: '6px 14px',
+          display: 'flex',
+          gap: 6,
+          overflowX: 'auto',
+          whiteSpace: 'nowrap',
+          borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+          background: 'rgba(255, 255, 255, 0.02)',
+        }}
+      >
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            fontSize: 11,
+            padding: '4px 9px',
+            borderRadius: 10,
+            background: 'rgba(255, 255, 255, 0.06)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            color: '#e2e8f0',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <Paperclip style={{ width: 12, height: 12, color: '#38bdf8' }} />
+          Attach Files
+        </button>
+
+        <button
+          onClick={() => handleSendMessage('Generate an image of ', 'image_gen')}
+          style={{
+            fontSize: 11,
+            padding: '4px 9px',
+            borderRadius: 10,
+            background: 'rgba(168, 85, 247, 0.15)',
+            border: '1px solid rgba(168, 85, 247, 0.35)',
+            color: '#d8b4fe',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <ImageIcon style={{ width: 12, height: 12 }} />
+          Image Gen
+        </button>
+
+        <button
+          onClick={() => handleSendMessage('Generate a video clip of ', 'video_gen')}
+          style={{
+            fontSize: 11,
+            padding: '4px 9px',
+            borderRadius: 10,
+            background: 'rgba(56, 189, 248, 0.15)',
+            border: '1px solid rgba(56, 189, 248, 0.35)',
+            color: '#7dd3fc',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <VideoIcon style={{ width: 12, height: 12 }} />
+          Video Gen
+        </button>
+
+        <button
+          onClick={() => setIsVoiceModeActive(prev => !prev)}
+          style={{
+            fontSize: 11,
+            padding: '4px 9px',
+            borderRadius: 10,
+            background: 'rgba(236, 72, 153, 0.15)',
+            border: '1px solid rgba(236, 72, 153, 0.35)',
+            color: '#f472b6',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <Headphones style={{ width: 12, height: 12 }} />
+          Voice Mode
+        </button>
+      </div>
+
+      {/* ── Pending Selected Attachments Preview Strip ── */}
+      {attachments.length > 0 && (
+        <div
+          style={{
+            padding: '6px 14px',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 6,
+            background: 'rgba(20, 16, 36, 0.9)',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          {attachments.map(att => (
+            <div
+              key={att.id}
+              style={{
+                background: 'rgba(168, 85, 247, 0.2)',
+                border: '1px solid rgba(168, 85, 247, 0.4)',
+                borderRadius: 8,
+                padding: '3px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 11,
+                color: '#e2e8f0',
+              }}
+            >
+              <FileText style={{ width: 12, height: 12, color: '#c084fc' }} />
+              <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {att.name}
+              </span>
+              <button
+                onClick={() => handleRemoveAttachment(att.id)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: 0,
+                  display: 'flex',
+                }}
+              >
+                <X style={{ width: 12, height: 12 }} />
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -819,14 +1639,37 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
       {/* ── Input Bar ── */}
       <footer
         style={{
-          padding: '12px 18px',
-          background: 'rgba(20, 16, 36, 0.85)',
+          padding: '10px 14px',
+          background: 'rgba(20, 16, 36, 0.95)',
           borderTop: '1px solid rgba(255, 255, 255, 0.1)',
           display: 'flex',
           alignItems: 'flex-end',
-          gap: 10,
+          gap: 8,
         }}
       >
+        {/* Attach File Button */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          aria-label="Attach file or image"
+          title="Attach photos, PDFs, docs, audio, or code"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            color: '#cbd5e1',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <Paperclip style={{ width: 16, height: 16 }} />
+        </button>
+
+        {/* Text Input Area */}
         <textarea
           ref={inputRef}
           value={input}
@@ -837,16 +1680,22 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
               handleSendMessage();
             }
           }}
-          placeholder="Ask FreeLLMAPI anything (Enter to send)..."
+          placeholder={
+            isDictating
+              ? 'Listening to your voice...'
+              : 'Ask, analyze file, generate image/video...'
+          }
           rows={1}
           style={{
             flex: 1,
             maxHeight: 120,
-            minHeight: 38,
-            padding: '9px 12px',
-            borderRadius: 12,
+            minHeight: 36,
+            padding: '8px 12px',
+            borderRadius: 10,
             background: 'rgba(255, 255, 255, 0.06)',
-            border: '1px solid rgba(255, 255, 255, 0.18)',
+            border: isDictating
+              ? '1px solid #ef4444'
+              : '1px solid rgba(255, 255, 255, 0.18)',
             color: '#ffffff',
             fontSize: 13,
             outline: 'none',
@@ -856,29 +1705,59 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
           }}
         />
 
+        {/* Voice Dictation (Microphone) Button */}
         <button
-          onClick={() => handleSendMessage()}
-          disabled={!input.trim() || isLoading}
-          aria-label="Send message"
+          onClick={toggleDictation}
+          aria-label={isDictating ? 'Stop microphone dictation' : 'Start microphone dictation'}
+          title={isDictating ? 'Stop Recording' : 'Dictate with Voice'}
           style={{
-            width: 38,
-            height: 38,
-            borderRadius: 12,
-            background:
-              input.trim() && !isLoading
-                ? 'linear-gradient(135deg, #a855f7, #6366f1)'
-                : 'rgba(255, 255, 255, 0.08)',
-            border: 'none',
-            color: input.trim() && !isLoading ? '#ffffff' : '#64748b',
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            background: isDictating
+              ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+              : 'rgba(255, 255, 255, 0.08)',
+            border: isDictating ? '1px solid #f87171' : '1px solid rgba(255, 255, 255, 0.15)',
+            color: '#ffffff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            cursor: input.trim() && !isLoading ? 'pointer' : 'default',
-            transition: 'all 0.15s ease',
-            boxShadow: input.trim() && !isLoading ? '0 0 12px rgba(168, 85, 247, 0.5)' : 'none',
+            cursor: 'pointer',
+            flexShrink: 0,
+            animation: isDictating ? 'pulse 1.2s infinite' : 'none',
           }}
         >
-          <Send style={{ width: 16, height: 16 }} />
+          <Mic style={{ width: 16, height: 16 }} />
+        </button>
+
+        {/* Send Button */}
+        <button
+          onClick={() => handleSendMessage()}
+          disabled={(!input.trim() && attachments.length === 0) || isLoading}
+          aria-label="Send message"
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            background:
+              (input.trim() || attachments.length > 0) && !isLoading
+                ? 'linear-gradient(135deg, #a855f7, #6366f1)'
+                : 'rgba(255, 255, 255, 0.08)',
+            border: 'none',
+            color: (input.trim() || attachments.length > 0) && !isLoading ? '#ffffff' : '#64748b',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: (input.trim() || attachments.length > 0) && !isLoading ? 'pointer' : 'default',
+            transition: 'all 0.15s ease',
+            flexShrink: 0,
+            boxShadow:
+              (input.trim() || attachments.length > 0) && !isLoading
+                ? '0 0 12px rgba(168, 85, 247, 0.5)'
+                : 'none',
+          }}
+        >
+          <Send style={{ width: 15, height: 15 }} />
         </button>
       </footer>
     </div>
