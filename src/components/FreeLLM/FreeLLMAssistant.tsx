@@ -969,7 +969,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             stream: true,
           }),
         },
-        75000
+        600000
       );
 
       let data: any;

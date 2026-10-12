@@ -260,6 +260,37 @@ async function parseResponseBody(res: Response): Promise<{ text: string; json: a
   return { text, json, isHtml, contentType: res.headers?.get?.('content-type') || '' };
 }
 
+const DIRECT_ATTEMPT_TIMEOUT_MS = 20_000;
+
+/** Read numbered fallback keys in their configured order, then append the
+ * legacy unnumbered key if it is distinct. Key values are never logged. */
+function getProviderKeys(prefix: 'GEMINI_API_KEY' | 'GROQ_API_KEY'): string[] {
+  const keys: string[] = [];
+  for (let slot = 1; slot <= 8; slot += 1) {
+    const key = process.env[`${prefix}_${slot}`]?.trim();
+    if (key && key.length > 10 && !keys.includes(key)) keys.push(key);
+  }
+  const legacyKey = process.env[prefix]?.trim();
+  if (legacyKey && legacyKey.length > 10 && !keys.includes(legacyKey)) keys.push(legacyKey);
+  return keys;
+}
+
+function getGatewayKeys(): Array<string | undefined> {
+  const keys: string[] = [];
+  for (let slot = 1; slot <= 16; slot += 1) {
+    const key = process.env[`FREE_LLM_API_KEY_${slot}`]?.trim();
+    if (key && !keys.includes(key)) keys.push(key);
+  }
+  const configuredKey = getGatewayConfig().apiKey?.trim();
+  if (configuredKey && !keys.includes(configuredKey)) keys.push(configuredKey);
+  return keys.length ? keys : [undefined];
+}
+
+async function fetchDirect(url: string, init: RequestInit): Promise<Response> {
+  // AbortSignal.timeout remains active while the response body is being read.
+  return fetch(url, { ...init, signal: AbortSignal.timeout(DIRECT_ATTEMPT_TIMEOUT_MS) });
+}
+
 /**
  * Execute chat completion through the FreeLLMAPI Gateway
  */
@@ -436,12 +467,7 @@ async function callGeminiDirect(
   options: SendChatOptions,
   preferredModel?: string
 ): Promise<(ChatCompletionResult & { providerUsed: string }) | null> {
-  const geminiKeys = [
-    process.env.GEMINI_API_KEY_1,
-    process.env.GEMINI_API_KEY_2,
-    process.env.GEMINI_API_KEY_3,
-    process.env.GEMINI_API_KEY,
-  ].filter((k): k is string => Boolean(k && k.trim().length > 10));
+  const geminiKeys = getProviderKeys('GEMINI_API_KEY');
 
   if (geminiKeys.length === 0) return null;
 
@@ -469,7 +495,7 @@ async function callGeminiDirect(
     for (const model of modelsToTry) {
       try {
         const startTime = Date.now();
-        const res = await fetch(
+        const res = await fetchDirect(
           `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(cleanKey)}`,
           {
             method: 'POST',
@@ -495,6 +521,7 @@ async function callGeminiDirect(
         const data = parsed.json;
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
         if (text) {
+          console.info(`[FreeLLM Fallback] Gemini succeeded with model ${model}.`);
           return {
             content: text,
             model: `${model} (730M Token Provider)`,
@@ -508,7 +535,7 @@ async function callGeminiDirect(
           };
         }
       } catch {
-        // Try next model/key
+        // Continue in key/model order; avoid logging provider error payloads or keys.
       }
     }
   }
@@ -523,12 +550,7 @@ async function callGroqDirect(
   options: SendChatOptions,
   preferredModel?: string
 ): Promise<(ChatCompletionResult & { providerUsed: string }) | null> {
-  const groqKeys = [
-    process.env.GROQ_API_KEY_1,
-    process.env.GROQ_API_KEY_2,
-    process.env.GROQ_API_KEY_3,
-    process.env.GROQ_API_KEY,
-  ].filter((k): k is string => Boolean(k && k.trim().length > 10));
+  const groqKeys = getProviderKeys('GROQ_API_KEY');
 
   if (groqKeys.length === 0) return null;
 
@@ -554,7 +576,7 @@ async function callGroqDirect(
     for (const model of modelsToTry) {
       try {
         const startTime = Date.now();
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const res = await fetchDirect('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -578,6 +600,7 @@ async function callGroqDirect(
         const data = parsed.json;
         const text = data.choices?.[0]?.message?.content || '';
         if (text) {
+          console.info(`[FreeLLM Fallback] Groq succeeded with model ${model}.`);
           return {
             content: text,
             model: `${model} (Groq Ultra-Fast)`,
@@ -591,7 +614,7 @@ async function callGroqDirect(
           };
         }
       } catch {
-        // Try next model/key
+        // Continue in key/model order; avoid logging provider error payloads or keys.
       }
     }
   }
@@ -615,36 +638,43 @@ export async function sendChatCompletionWithFallback(
     effectiveModel === 'auto';
 
   // 1. Try FreeLLM Gateway first (if configured with customUrl or default)
-  try {
-    const result = await sendChatCompletion({ ...options, model: requestedModel || 'auto' });
-    return { ...result, providerUsed: 'FreeLLMAPI Gateway' };
-  } catch (gatewayErr: any) {
-    if (requestedModel !== 'auto' && /model[^.]{0,40}(not found|unknown|invalid|unsupported)|model_(not_found|not_supported)/i.test(String(gatewayErr.message))) {
-      throw new Error(`Selected model '${requestedModel}' was rejected by the FreeLLM gateway: ${String(gatewayErr.message).slice(0, 220)}`);
+  let gatewayErr: unknown;
+  for (const gatewayKey of getGatewayKeys()) {
+    try {
+      const result = await sendChatCompletion({
+        ...options,
+        model: requestedModel || 'auto',
+        ...(gatewayKey !== undefined ? { customKey: gatewayKey } : {}),
+      });
+      console.info(`[FreeLLM Fallback] Gateway succeeded with model ${result.model}.`);
+      return { ...result, providerUsed: 'FreeLLMAPI Gateway' };
+    } catch (error) {
+      gatewayErr = error;
     }
-    console.warn(`[FreeLLM Gateway] External gateway unavailable (${gatewayErr.message}). Routing to primary 730M token provider...`);
-
-    // 2. If it's a Google/Gemini target or Auto, run Gemini first (730M tokens!)
-    if (isGoogleTarget) {
-      const geminiResult = await callGeminiDirect(options, effectiveModel);
-      if (geminiResult) return geminiResult;
-
-      const groqResult = await callGroqDirect(options);
-      if (groqResult) return groqResult;
-    } else {
-      // 3. Otherwise try Groq first, then Gemini
-      const groqResult = await callGroqDirect(options, effectiveModel);
-      if (groqResult) return groqResult;
-
-      const geminiResult = await callGeminiDirect(options, 'gemini-3.6-flash');
-      if (geminiResult) return geminiResult;
-    }
-
-    // 4. Clean error message: NEVER expose unparsed <!doctype html> or raw JSON parser syntax errors
-    const sanitizedMsg = gatewayErr.message
-      ? gatewayErr.message.replace(/<!doctype[\s\S]*?>/gi, '').replace(/<html[\s\S]*?>/gi, '').slice(0, 250).trim()
-      : 'All FreeLLM providers are currently warming up. Please retry in a few moments.';
-
-    throw new Error(sanitizedMsg || 'FreeLLM service temporarily unavailable.');
   }
+  console.warn('[FreeLLM Gateway] Configured gateway keys failed; trying direct providers in order.');
+
+  // For Google/Gemini selections (and Auto), try Gemini before Groq.
+  if (isGoogleTarget) {
+    const geminiResult = await callGeminiDirect(options, effectiveModel);
+    if (geminiResult) return geminiResult;
+
+    const groqResult = await callGroqDirect(options);
+    if (groqResult) return groqResult;
+  } else {
+    // For other selected models, try Groq before Gemini.
+    const groqResult = await callGroqDirect(options, effectiveModel);
+    if (groqResult) return groqResult;
+
+    const geminiResult = await callGeminiDirect(options, 'gemini-3.6-flash');
+    if (geminiResult) return geminiResult;
+  }
+
+  console.error('[FreeLLM Fallback] All configured gateway and direct key/model attempts failed.');
+  // Keep detailed upstream failures in server logs only; never return keys, URLs,
+  // provider payloads, or model diagnostics to the end user.
+  if (gatewayErr instanceof Error) {
+    console.debug(`[FreeLLM Fallback] Last gateway failure: ${gatewayErr.name}.`);
+  }
+  throw new Error('The AI assistant is temporarily unavailable. Please try again shortly.');
 }
