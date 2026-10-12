@@ -36,6 +36,7 @@ import {
   Brain,
   Info,
   RotateCcw,
+  Settings,
 } from 'lucide-react';
 import {
   CatalogModel,
@@ -78,6 +79,8 @@ export interface FreeLLMMessage {
 const STORAGE_KEY_HISTORY = 'np_freellm_chat_history';
 const STORAGE_KEY_MODEL = 'np_freellm_selected_model';
 const STORAGE_KEY_POS = 'np_freellm_moon_btn_pos';
+const STORAGE_KEY_CUSTOM_URL = 'np_freellm_custom_url';
+const STORAGE_KEY_CUSTOM_KEY = 'np_freellm_custom_key';
 
 const STARTER_PROMPTS = [
   '🎨 Generate an image of a cybernetic lunar city',
@@ -167,6 +170,9 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
   );
   const [modelSearch, setModelSearch] = useState<string>('');
   const [showModelSearch, setShowModelSearch] = useState<boolean>(false);
+  const [customGatewayUrl, setCustomGatewayUrl] = useState<string>('');
+  const [customApiKey, setCustomApiKey] = useState<string>('');
+  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [isTestingGateway, setIsTestingGateway] = useState(false);
 
   // ── Clamp position inside viewport ──
@@ -219,6 +225,14 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
       loadDefaultGreeting();
     }
 
+    // 4. Custom Gateway URL & Key
+    try {
+      const savedUrl = localStorage.getItem(STORAGE_KEY_CUSTOM_URL);
+      if (savedUrl) setCustomGatewayUrl(savedUrl);
+      const savedKey = localStorage.getItem(STORAGE_KEY_CUSTOM_KEY);
+      if (savedKey) setCustomApiKey(savedKey);
+    } catch {}
+
     const onResize = () => {
       setBtnPos(prev => (prev ? clampPosition(prev.x, prev.y) : null));
     };
@@ -240,11 +254,19 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
   };
 
   // ── Check Gateway Status (Render Backend) ──
-  const testGatewayConnection = useCallback(async () => {
+  const testGatewayConnection = useCallback(async (overrideUrl?: string, overrideKey?: string) => {
     setIsTestingGateway(true);
     setGatewayError(null);
     try {
-      const res = await fetchWithTimeout('/api/ai/freellm/status', {}, 15000);
+      const targetUrl = overrideUrl !== undefined ? overrideUrl : customGatewayUrl;
+      const targetKey = overrideKey !== undefined ? overrideKey : customApiKey;
+
+      const params = new URLSearchParams();
+      if (targetUrl && targetUrl.trim()) params.set('url', targetUrl.trim());
+      if (targetKey && targetKey.trim()) params.set('apiKey', targetKey.trim());
+      const queryStr = params.toString() ? `?${params.toString()}` : '';
+
+      const res = await fetchWithTimeout(`/api/ai/freellm/status${queryStr}`, {}, 15000);
       const data = await res.json().catch(() => null);
 
       if (res.ok && data?.ok) {
@@ -273,7 +295,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     } finally {
       setIsTestingGateway(false);
     }
-  }, []);
+  }, [customGatewayUrl, customApiKey]);
 
   useEffect(() => {
     if (windowState !== 'collapsed') {
@@ -603,7 +625,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: updated
-              .filter(m => m.id !== 'msg-greeting')
+              .filter(m => m.id !== 'msg-greeting' && !m.id.startsWith('err-'))
               .map(m => ({
                 role: m.role,
                 content: m.content,
@@ -611,9 +633,11 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
               })),
             model: selectedModel || 'auto',
             mode: mode || undefined,
+            gatewayUrl: customGatewayUrl.trim() || undefined,
+            apiKey: customApiKey.trim() || undefined,
           }),
         },
-        60000
+        75000
       );
 
       const data = await response.json().catch(() => null);
@@ -927,6 +951,30 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             {!isPhone && <span>Voice</span>}
           </button>
 
+          {/* Settings Button */}
+          <button
+            onClick={() => setShowSettingsModal(prev => !prev)}
+            aria-label="FreeLLM Gateway Settings"
+            title="Configure Gateway URL & Unified API Key"
+            style={{
+              background: showSettingsModal
+                ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.4), rgba(56, 189, 248, 0.4))'
+                : 'rgba(255, 255, 255, 0.08)',
+              border: showSettingsModal
+                ? '1px solid rgba(216, 180, 254, 0.6)'
+                : '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: 8,
+              padding: 6,
+              color: showSettingsModal ? '#ffffff' : '#cbd5e1',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Settings style={{ width: 14, height: 14 }} />
+          </button>
+
           {/* Clear History */}
           <button
             onClick={handleClearHistory}
@@ -990,6 +1038,150 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
           </button>
         </div>
       </header>
+
+      {/* ── Settings Panel / Override Drawer ── */}
+      {showSettingsModal && (
+        <div
+          style={{
+            padding: '12px 16px',
+            background: 'rgba(20, 16, 36, 0.98)',
+            borderBottom: '1px solid rgba(168, 85, 247, 0.35)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            fontSize: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Settings style={{ width: 14, height: 14, color: '#c084fc' }} />
+              FreeLLM Gateway Connection Settings
+            </span>
+            <button
+              onClick={() => setShowSettingsModal(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                padding: 2,
+              }}
+            >
+              <X style={{ width: 14, height: 14 }} />
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 11, color: '#cbd5e1', fontWeight: 500 }}>
+              Gateway Base URL:
+            </label>
+            <input
+              type="text"
+              value={customGatewayUrl}
+              onChange={e => {
+                const val = e.target.value;
+                setCustomGatewayUrl(val);
+                try {
+                  localStorage.setItem(STORAGE_KEY_CUSTOM_URL, val);
+                } catch {}
+              }}
+              placeholder="https://free-llm-api-7fue.onrender.com/v1 (or leave blank for default)"
+              style={{
+                width: '100%',
+                background: 'rgba(0, 0, 0, 0.4)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                color: '#fff',
+                borderRadius: 8,
+                padding: '6px 10px',
+                fontSize: 12,
+                outline: 'none',
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 11, color: '#cbd5e1', fontWeight: 500 }}>
+              Unified API Key:
+            </label>
+            <input
+              type="password"
+              value={customApiKey}
+              onChange={e => {
+                const val = e.target.value;
+                setCustomApiKey(val);
+                try {
+                  localStorage.setItem(STORAGE_KEY_CUSTOM_KEY, val);
+                } catch {}
+              }}
+              placeholder="Enter unified API key (or leave blank to use Render env)"
+              style={{
+                width: '100%',
+                background: 'rgba(0, 0, 0, 0.4)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                color: '#fff',
+                borderRadius: 8,
+                padding: '6px 10px',
+                fontSize: 12,
+                outline: 'none',
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+            <span style={{ fontSize: 11, color: gatewayOnline ? '#10b981' : gatewayError ? '#ef4444' : '#94a3b8' }}>
+              {isTestingGateway
+                ? 'Testing connection...'
+                : gatewayOnline
+                ? `● Online (${gatewayLatency ?? 0}ms · ${catalogModels.length} models)`
+                : gatewayError
+                ? `⚠️ ${gatewayError.slice(0, 45)}...`
+                : '● Ready'}
+            </span>
+
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                onClick={() => {
+                  setCustomGatewayUrl('');
+                  setCustomApiKey('');
+                  try {
+                    localStorage.removeItem(STORAGE_KEY_CUSTOM_URL);
+                    localStorage.removeItem(STORAGE_KEY_CUSTOM_KEY);
+                  } catch {}
+                  testGatewayConnection('', '');
+                }}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: 6,
+                  padding: '4px 10px',
+                  color: '#cbd5e1',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                }}
+              >
+                Reset
+              </button>
+
+              <button
+                onClick={() => testGatewayConnection()}
+                disabled={isTestingGateway}
+                style={{
+                  background: 'linear-gradient(135deg, #a855f7, #6366f1)',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '4px 12px',
+                  color: '#fff',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: isTestingGateway ? 'default' : 'pointer',
+                }}
+              >
+                {isTestingGateway ? 'Testing...' : 'Test Connection'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Model Selector Bar ── */}
       <div
@@ -1482,24 +1674,6 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                   <>
                     <Moon style={{ width: 12, height: 12 }} />
                     <span style={{ fontWeight: 600 }}>Moon Assistant</span>
-                    {msg.model && (
-                      <span
-                        style={{
-                          fontSize: 9,
-                          padding: '1px 5px',
-                          borderRadius: 4,
-                          background: 'rgba(255, 255, 255, 0.08)',
-                          color: '#94a3b8',
-                        }}
-                      >
-                        {msg.model}
-                      </span>
-                    )}
-                    {msg.latencyMs && (
-                      <span style={{ fontSize: 9, color: '#64748b' }}>
-                        {msg.latencyMs}ms
-                      </span>
-                    )}
                   </>
                 )}
               </div>
@@ -1698,7 +1872,35 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
 
               {/* Message Bottom Action Toolbar */}
               {!isUser && (
-                <div style={{ display: 'flex', gap: 8, paddingLeft: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 4, flexWrap: 'wrap' }}>
+                  {/* FreeLLM Playground-style model & latency badge */}
+                  {(msg.model || selectedModel) && (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 10,
+                        fontWeight: 500,
+                        padding: '2px 8px',
+                        borderRadius: 12,
+                        background: 'rgba(168, 85, 247, 0.12)',
+                        border: '1px solid rgba(168, 85, 247, 0.28)',
+                        color: '#d8b4fe',
+                        letterSpacing: '0.01em',
+                      }}
+                    >
+                      <span style={{ color: '#c084fc', fontSize: 10 }}>✦</span>
+                      <span>{msg.model || selectedModel}</span>
+                      {msg.latencyMs ? (
+                        <>
+                          <span style={{ opacity: 0.45 }}>·</span>
+                          <span style={{ color: '#a5b4fc', fontFamily: 'monospace', fontSize: 9.5 }}>{msg.latencyMs}ms</span>
+                        </>
+                      ) : null}
+                    </span>
+                  )}
+
                   {/* Copy Button */}
                   <button
                     onClick={() => handleCopy(msg.content, msg.id)}

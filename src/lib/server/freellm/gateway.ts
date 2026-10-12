@@ -142,8 +142,8 @@ export async function checkGatewayStatus(
 
   try {
     const controller = new AbortController();
-    // 12s timeout to accommodate cold starts on free cloud hosting
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    // 15s timeout to accommodate cold starts on free cloud hosting
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
     const res = await fetch(modelsUrl, {
       method: 'GET',
@@ -196,7 +196,7 @@ export async function checkGatewayStatus(
       fallbackReady: hasFallback,
       error:
         err.name === 'AbortError'
-          ? 'Gateway check timed out after 12s (service may be waking up on Render).'
+          ? 'Gateway check timed out after 15s (service may be waking up on Render).'
           : err.message || 'Gateway unreachable',
     };
   }
@@ -233,8 +233,8 @@ export async function sendChatCompletion(
   };
 
   const controller = new AbortController();
-  // 50s timeout for complex inference
-  const timeout = setTimeout(() => controller.abort(), 50000);
+  // 65s timeout for complex inference & Render cold starts
+  const timeout = setTimeout(() => controller.abort(), 65000);
 
   try {
     const res = await fetch(endpoint, {
@@ -284,7 +284,7 @@ export async function sendChatCompletion(
     };
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      throw new Error(`FreeLLMAPI Gateway request timed out after 50 seconds (${endpoint}).`);
+      throw new Error(`FreeLLMAPI Gateway request timed out after 65 seconds (${endpoint}).`);
     }
     throw err;
   }
