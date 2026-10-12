@@ -887,7 +887,7 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                         }}
                       >
                         {availableWeeks.map(w => (
-                          <option key={w.startDate} value={w.startDate} style={{ background: '#0d0d11', color: '#fff' }}>
+                          <option key={w.startDate} value={w.startDate} style={{ background: 'var(--v-app-bg)', color: 'var(--text-primary)' }}>
                             {w.isCurrentWeek ? `⭐ Current: ${w.weekLabel}` : w.weekLabel}
                           </option>
                         ))}
@@ -1140,7 +1140,7 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                     }}
                   >
                     {availableWeeks.map(w => (
-                      <option key={w.startDate} value={w.startDate} style={{ background: '#0d0d11', color: '#fff' }}>
+                      <option key={w.startDate} value={w.startDate} style={{ background: 'var(--v-app-bg)', color: 'var(--text-primary)' }}>
                         {w.isCurrentWeek ? `⭐ Current: ${w.weekLabel}` : w.weekLabel}
                       </option>
                     ))}

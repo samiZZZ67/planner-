@@ -520,6 +520,7 @@ export default function NightPlannerApp() {
         onClose={() => setIsAIChatOpen(false)}
         currentDate={currentDate}
         isPhone={isPhone}
+        theme={theme}
       />
 
       {/* ── 9. Independent FreeLLMAPI Assistant (Movable, Expandable AI Moon Button) ── */}

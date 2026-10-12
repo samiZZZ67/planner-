@@ -59,6 +59,14 @@
 
   --accent-color: #38bdf8;
   --accent-glow: rgba(56, 189, 248, 0.35);
+
+  /* Legacy Design Token Aliases */
+  --glass-bg: var(--v-glass-bg);
+  --glass-bg-card: var(--v-glass-bg-card);
+  --glass-bg-light: var(--v-glass-bg-subtle);
+  --glass-bg-subtle: var(--v-glass-bg-subtle);
+  --glass-border: var(--v-glass-border);
+  --shadow-glass: var(--v-shadow-card);
 }
 
 /* ================================================================
@@ -87,6 +95,14 @@
 
   --accent-color: #0284c7;
   --accent-glow: rgba(2, 132, 199, 0.25);
+
+  /* Legacy Design Token Aliases */
+  --glass-bg: var(--v-glass-bg);
+  --glass-bg-card: var(--v-glass-bg-card);
+  --glass-bg-light: var(--v-glass-bg-subtle);
+  --glass-bg-subtle: var(--v-glass-bg-subtle);
+  --glass-border: var(--v-glass-border);
+  --shadow-glass: var(--v-shadow-card);
 }
 
 *, *::before, *::after {
@@ -403,3 +419,121 @@ select,
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--v-glass-border); border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--v-glass-border-bright); }
+
+/* ================================================================
+   MODAL & FORM DESIGN TOKENS (.g-*)
+   Aliased to glass tokens for complete theme fidelity
+   ================================================================ */
+.g-card {
+  background: var(--v-glass-bg-card);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1.5px solid var(--v-glass-border-subtle);
+  border-radius: 20px;
+  box-shadow: var(--v-shadow-card);
+  color: var(--text-primary);
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+
+.g-btn {
+  background: var(--v-glass-bg-subtle);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1.5px solid var(--v-glass-border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  outline: none;
+}
+.g-btn:hover {
+  background: var(--v-glass-bg-hover);
+  border-color: var(--v-glass-border-bright);
+}
+
+.g-btn-primary {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+  color: var(--v-app-bg);
+  font-weight: 700;
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+[data-theme="light"] .g-btn-primary {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
+}
+[data-theme="dark"] .g-btn-primary {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #0f172a;
+}
+
+.g-input {
+  background: var(--v-glass-bg-subtle);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1.5px solid var(--v-glass-border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 10px 14px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.g-input::placeholder {
+  color: var(--text-muted);
+}
+.g-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.g-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.g-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--v-glass-border);
+  background: var(--v-glass-bg-subtle);
+  color: var(--text-primary);
+}
+
+.g-icon-btn {
+  background: var(--v-glass-bg-subtle);
+  border: 1.5px solid var(--v-glass-border);
+  border-radius: 50%;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+.g-icon-btn:hover {
+  background: var(--v-glass-bg-hover);
+  border-color: var(--v-glass-border-bright);
+}
+

@@ -351,8 +351,8 @@ export function TaskFormModal({
           borderRadius: isPhone ? '20px 20px 0 0' : '20px 0 0 20px',
           display: 'flex',
           flexDirection: 'column',
-          background: 'rgba(12, 12, 15, 0.97)',
-          boxShadow: 'var(--shadow-glass)',
+          background: 'var(--v-glass-bg-card)',
+          boxShadow: 'var(--v-shadow-spatial)',
           overflow: 'hidden',
         }}
       >
@@ -360,15 +360,15 @@ export function TaskFormModal({
         <div
           style={{
             padding: '16px 20px',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            borderBottom: '1px solid var(--v-glass-border-subtle)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'rgba(15, 15, 18, 0.95)',
+            background: 'var(--v-glass-bg)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h2 id="task-form-title" className="font-bloody" style={{ fontSize: 20, margin: 0, color: 'rgba(255,255,255,0.9)' }}>
+            <h2 id="task-form-title" className="font-bloody" style={{ fontSize: 20, margin: 0, color: 'var(--text-primary)' }}>
               {existingTask ? 'Edit Task' : 'New Clear Plan'}
             </h2>
             {draftRestored && !existingTask && (
@@ -454,7 +454,7 @@ export function TaskFormModal({
                 className="g-input"
               >
                 {sections.map(s => (
-                  <option key={s.id} value={s.id} style={{ background: '#121215', color: '#fff' }}>
+                  <option key={s.id} value={s.id} style={{ background: 'var(--v-app-bg)', color: 'var(--text-primary)' }}>
                     {s.icon} {s.name}
                   </option>
                 ))}
@@ -829,11 +829,11 @@ export function TaskFormModal({
         <div
           style={{
             padding: '16px 20px',
-            borderTop: '1px solid rgba(255,255,255,0.08)',
+            borderTop: '1px solid var(--v-glass-border-subtle)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'rgba(15, 15, 18, 0.95)',
+            background: 'var(--v-glass-bg)',
           }}
         >
           <button

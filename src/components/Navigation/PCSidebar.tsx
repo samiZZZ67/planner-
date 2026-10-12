@@ -61,12 +61,12 @@ export function PCSidebar({ currentTab, onSelectTab, onOpenAIChat }: PCSidebarPr
           overflow: 'hidden',
           padding: 3,
         }}
-        title="Open AI Assistant & Plan Review"
-        aria-label="Open AI Assistant"
+        title="Open Sam’s AI & Plan Review"
+        aria-label="Open Sam’s AI"
       >
         <img
           src="/icons/icon-192.png"
-          alt="Night Planner"
+          alt="Sam’s AI"
           style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
         />
       </div>

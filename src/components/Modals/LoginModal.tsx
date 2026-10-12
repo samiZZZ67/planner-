@@ -50,8 +50,8 @@ export function LoginModal({ isOpen = true, onClose }: LoginModalProps) {
             <Shield size={20} style={{ color: 'rgba(139,92,246,0.8)' }} />
           </div>
           <div>
-            <div className="font-bloody" style={{ fontSize: 20, color: 'rgba(255,255,255,0.85)', lineHeight: 1 }}>Cloud Sync</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Login to enable sync across devices</div>
+            <div className="font-bloody" style={{ fontSize: 20, color: 'var(--text-primary)', lineHeight: 1 }}>Cloud Sync</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>Login to enable sync across devices</div>
           </div>
         </div>
 
@@ -69,7 +69,7 @@ export function LoginModal({ isOpen = true, onClose }: LoginModalProps) {
                 style={{ paddingRight: 40 }}
               />
               <button type="button" onClick={() => setShowPwd(!showPwd)}
-                style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0 }}>
+                style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}>
                 {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>

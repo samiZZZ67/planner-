@@ -7,17 +7,19 @@ import {
   Sparkles, X, Send, Bot, User, Trash2, ShieldCheck,
   CheckCircle2, AlertTriangle, ArrowRight, RefreshCw, Clock,
   Maximize2, Minimize2, Check, CheckSquare, PlusCircle,
-  Menu, PanelLeft, Plus, Search, Edit2, Square, Mic, MicOff,
+  Menu, Plus, Search, Edit2, Square, Mic, MicOff,
   Volume2, VolumeX, Paperclip, FileText, Image as ImageIcon
 } from 'lucide-react';
 import type { Task, Section, WeeklyPlan, MonthlyPlan, AIConversation, AIMessageItem } from '@/types';
 import { apiFetch } from '@/lib/api/apiClient';
+import { FormattedMessage } from './FormattedMessage';
 
 interface AIChatPanelProps {
   isOpen: boolean;
   onClose: () => void;
   currentDate: string;
   isPhone: boolean;
+  theme?: 'dark' | 'light';
 }
 
 export interface ActionReceipt {
@@ -98,7 +100,31 @@ Or command me to manage your planner:
 - *"Create a new category called Content Creation"*
 - *"Delete the task named Video Editing"* or *"Delete all my tasks for today"*.`;
 
-export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPanelProps) {
+export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AIChatPanelProps) {
+  // ── Theme State ──
+  const [activeTheme, setActiveTheme] = useState<'dark' | 'light'>(theme || 'dark');
+
+  useEffect(() => {
+    if (theme) {
+      setActiveTheme(theme);
+    } else if (typeof document !== 'undefined') {
+      const current = document.documentElement.getAttribute('data-theme') as 'dark' | 'light';
+      if (current) setActiveTheme(current);
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const observer = new MutationObserver(() => {
+      const current = document.documentElement.getAttribute('data-theme') as 'dark' | 'light';
+      if (current) setActiveTheme(current);
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  const isDark = activeTheme !== 'light';
+
   // ── Layout & Sidebar States ──
   const [isMaximized, setIsMaximized] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isPhone);
@@ -1037,7 +1063,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
         display: 'flex',
         justifyContent: 'flex-end',
         alignItems: 'stretch',
-        background: 'rgba(0, 0, 0, 0.45)',
+        background: isDark ? 'rgba(0, 0, 0, 0.55)' : 'rgba(15, 23, 42, 0.25)',
         backdropFilter: 'blur(6px)',
         WebkitBackdropFilter: 'blur(6px)',
       }}
@@ -1059,7 +1085,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
           background: 'var(--v-glass-bg)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          boxShadow: '-8px 0 32px rgba(0, 0, 0, 0.6)',
+          boxShadow: isDark ? '-8px 0 32px rgba(0, 0, 0, 0.6)' : 'var(--v-shadow-spatial)',
           borderRight: 'none',
           borderTop: isMaximized ? 'none' : undefined,
           borderBottom: isMaximized ? 'none' : undefined,
@@ -1076,14 +1102,29 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
           }
         `}</style>
 
+        {/* ── Mobile Backdrop for Sidebar Drawer ── */}
+        {isSidebarOpen && isPhone && (
+          <div
+            onClick={() => setIsSidebarOpen(false)}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 25,
+              background: isDark ? 'rgba(0, 0, 0, 0.5)' : 'rgba(15, 23, 42, 0.3)',
+              backdropFilter: 'blur(2px)',
+              WebkitBackdropFilter: 'blur(2px)',
+            }}
+          />
+        )}
+
         {/* ── ChatGPT-Style Collapsible Sidebar ── */}
         {isSidebarOpen && (
           <aside
             style={{
               width: isPhone ? '280px' : '260px',
               height: '100%',
-              background: 'rgba(12, 10, 24, 0.98)',
-              borderRight: '1px solid rgba(168, 85, 247, 0.25)',
+              background: isDark ? 'rgba(12, 10, 24, 0.98)' : 'rgba(248, 250, 252, 0.98)',
+              borderRight: isDark ? '1px solid rgba(168, 85, 247, 0.25)' : '1px solid rgba(15, 23, 42, 0.12)',
               display: 'flex',
               flexDirection: 'column',
               position: isPhone ? 'absolute' : 'relative',
@@ -1091,11 +1132,11 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
               top: 0,
               bottom: 0,
               zIndex: 30,
-              boxShadow: isPhone ? '4px 0 24px rgba(0, 0, 0, 0.7)' : 'none',
+              boxShadow: isPhone ? (isDark ? '4px 0 24px rgba(0, 0, 0, 0.7)' : '4px 0 24px rgba(15, 23, 42, 0.15)') : 'none',
               animation: 'slideInRight 0.2s ease-out',
             }}
           >
-            {/* Sidebar Top: New Chat & Close */}
+            {/* Sidebar Top: New Chat (Single button, duplicate hamburger/collapse removed) */}
             <div style={{ padding: '14px 12px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
               <button
                 type="button"
@@ -1109,24 +1150,14 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,
-                  background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(56, 189, 248, 0.3))',
-                  borderColor: 'rgba(192, 132, 252, 0.4)',
-                  color: '#ffffff',
+                  background: isDark ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(56, 189, 248, 0.3))' : 'rgba(15, 23, 42, 0.06)',
+                  borderColor: isDark ? 'rgba(192, 132, 252, 0.4)' : 'rgba(15, 23, 42, 0.16)',
+                  color: 'var(--text-primary)',
                 }}
               >
                 <Plus size={14} />
                 <span>New Chat</span>
                 <span style={{ marginLeft: 'auto', fontSize: 10, opacity: 0.6, fontFamily: 'monospace' }}>⌘K</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsSidebarOpen(false)}
-                className="v-circle-btn"
-                style={{ width: 32, height: 32, flexShrink: 0 }}
-                title="Collapse Sidebar (Esc)"
-              >
-                <PanelLeft size={14} />
               </button>
             </div>
 
@@ -1142,11 +1173,11 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                   style={{
                     width: '100%',
                     padding: '6px 10px 6px 28px',
-                    fontSize: 11,
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    fontSize: 11.5,
+                    background: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(15, 23, 42, 0.05)',
+                    border: isDark ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(15, 23, 42, 0.12)',
                     borderRadius: 8,
-                    color: '#ffffff',
+                    color: 'var(--text-primary)',
                     outline: 'none',
                   }}
                 />
@@ -1181,9 +1212,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         gap: 6,
-                        background: isActive ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
-                        border: isActive ? '1px solid rgba(192, 132, 252, 0.4)' : '1px solid transparent',
-                        color: isActive ? '#ffffff' : 'var(--text-primary)',
+                        background: isActive ? (isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(168, 85, 247, 0.15)') : 'transparent',
+                        border: isActive ? (isDark ? '1px solid rgba(192, 132, 252, 0.4)' : '1px solid rgba(168, 85, 247, 0.35)') : '1px solid transparent',
+                        color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
                         transition: 'all 0.15s ease',
                       }}
                     >
@@ -1201,11 +1232,11 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                             style={{
                               flex: 1,
                               fontSize: 11,
-                              background: '#000',
-                              border: '1px solid #a855f7',
+                              background: isDark ? '#09090b' : '#ffffff',
+                              border: '1px solid var(--accent-color)',
                               borderRadius: 4,
                               padding: '2px 6px',
-                              color: '#fff',
+                              color: 'var(--text-primary)',
                             }}
                           />
                           <button
@@ -1330,7 +1361,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              {/* Sidebar Hamburger Button */}
+              {/* Single Functional Sidebar Hamburger Button */}
               <button
                 type="button"
                 onClick={() => setIsSidebarOpen(prev => !prev)}
@@ -1338,13 +1369,13 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                 style={{
                   width: 34,
                   height: 34,
-                  background: isSidebarOpen ? 'rgba(168, 85, 247, 0.25)' : 'transparent',
-                  borderColor: isSidebarOpen ? 'rgba(192, 132, 252, 0.5)' : 'var(--v-glass-border)',
+                  background: isSidebarOpen ? (isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(168, 85, 247, 0.15)') : 'transparent',
+                  borderColor: isSidebarOpen ? (isDark ? 'rgba(192, 132, 252, 0.5)' : 'rgba(168, 85, 247, 0.4)') : 'var(--v-glass-border)',
                 }}
-                title={isSidebarOpen ? "Collapse sidebar" : "Open chat history"}
-                aria-label="Toggle chat history sidebar"
+                title={isSidebarOpen ? "Collapse sidebar" : "Open previous conversations"}
+                aria-label="Toggle conversation history sidebar"
               >
-                <Menu size={15} />
+                <Menu size={16} />
               </button>
 
               {/* Sam's AI Profile Launcher Avatar */}
@@ -1522,13 +1553,13 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                     padding: '10px 14px',
                     borderRadius: msg.role === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
                     background: msg.role === 'user'
-                      ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(99, 102, 241, 0.25))'
+                      ? (isDark ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(99, 102, 241, 0.25))' : 'rgba(2, 132, 199, 0.12)')
                       : 'var(--v-glass-bg-card)',
-                    border: `1.5px solid ${msg.role === 'user' ? 'rgba(56, 189, 248, 0.5)' : 'var(--v-glass-border)'}`,
+                    border: `1.5px solid ${msg.role === 'user' ? (isDark ? 'rgba(56, 189, 248, 0.5)' : 'rgba(2, 132, 199, 0.35)') : 'var(--v-glass-border)'}`,
                     fontSize: 13,
                     lineHeight: 1.6,
                     color: 'var(--text-primary)',
-                    whiteSpace: 'pre-wrap',
+                    whiteSpace: msg.role === 'user' ? 'pre-wrap' : 'normal',
                     wordBreak: 'break-word',
                   }}
                   className="font-system"
@@ -1541,13 +1572,13 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                           key={i}
                           style={{
                             padding: '4px 8px',
-                            background: 'rgba(0, 0, 0, 0.3)',
+                            background: isDark ? 'rgba(0, 0, 0, 0.3)' : 'rgba(15, 23, 42, 0.06)',
                             borderRadius: 6,
                             fontSize: 11,
                             display: 'flex',
                             alignItems: 'center',
                             gap: 4,
-                            color: '#7dd3fc',
+                            color: isDark ? '#7dd3fc' : '#0284c7',
                           }}
                         >
                           {att.dataUrl ? (
@@ -1561,7 +1592,11 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone }: AIChatPan
                     </div>
                   )}
 
-                  {msg.content}
+                  {msg.role === 'assistant' || msg.role === 'system' ? (
+                    <FormattedMessage content={msg.content} />
+                  ) : (
+                    <div>{msg.content}</div>
+                  )}
 
                   {/* ── Action Receipts & Destructive Confirmations ── */}
                   {msg.actions && msg.actions.length > 0 && (

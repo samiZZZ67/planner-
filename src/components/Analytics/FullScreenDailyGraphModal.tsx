@@ -47,17 +47,17 @@ const FullScreenTooltip = ({ active, payload, label }: any) => {
   return (
     <div
       style={{
-        background: 'rgba(15, 17, 26, 0.95)',
+        background: 'var(--v-glass-bg-card)',
         backdropFilter: 'blur(20px)',
-        border: '1.5px solid rgba(255, 255, 255, 0.2)',
+        border: '1.5px solid var(--v-glass-border)',
         borderRadius: 14,
         padding: '14px 18px',
-        boxShadow: '0 16px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.2)',
-        color: '#fff',
+        boxShadow: 'var(--v-shadow-spatial)',
+        color: 'var(--text-primary)',
         minWidth: 180,
       }}
     >
-      <div style={{ fontSize: 13, fontWeight: 800, color: '#94a3b8', marginBottom: 8 }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-muted)', marginBottom: 8 }}>
         {label}
       </div>
       {payload.map((p: any, i: number) => (
@@ -563,7 +563,7 @@ export function FullScreenDailyGraphModal({
             }}
           >
             {availableWeeks.map((w) => (
-              <option key={w.startDate} value={w.startDate} style={{ background: '#0d0d11', color: '#fff' }}>
+              <option key={w.startDate} value={w.startDate} style={{ background: 'var(--v-app-bg)', color: 'var(--text-primary)' }}>
                 {w.isCurrentWeek ? `⭐ Current: ${w.weekLabel}` : w.weekLabel}
               </option>
             ))}
