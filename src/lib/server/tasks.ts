@@ -384,3 +384,31 @@ export async function deleteTaskInDb(
     return { ok: false, error: err.message };
   }
 }
+
+/**
+ * Bulk delete all tasks for a specified date
+ */
+export async function deleteAllTasksInDb(
+  date: string
+): Promise<{ ok: boolean; deletedCount: number; error?: string }> {
+  try {
+    const tasks = await getTasksFromDb(date);
+    const toDelete = tasks.filter(t => t.date === date && !t.deleted);
+    const sql = getDb();
+    const now = Date.now();
+    for (const t of toDelete) {
+      if (sql) {
+        try {
+          await ensureSchema(sql);
+          await sql`UPDATE tasks SET deleted = TRUE, updated_at = ${now} WHERE id = ${t.id}`;
+        } catch {}
+      }
+      deleteLocalTask(t.id);
+    }
+    console.log(`[Task Service] Bulk deleted ${toDelete.length} tasks for date: ${date}`);
+    return { ok: true, deletedCount: toDelete.length };
+  } catch (err: any) {
+    console.error('[Task Service] Bulk delete failure:', err);
+    return { ok: false, deletedCount: 0, error: err.message };
+  }
+}

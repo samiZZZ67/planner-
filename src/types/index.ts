@@ -299,3 +299,21 @@ export interface UploadedFile {
   tags?: string[];
 }
 
+export interface AIConversation {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  userId?: string;
+}
+
+export interface AIMessageItem {
+  id: string;
+  conversationId: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+  provider?: string;
+  actions?: any[];
+  userId?: string;
+}

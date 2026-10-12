@@ -26,7 +26,7 @@ import { apiFetch } from '@/lib/api/apiClient';
 
 export default function NightPlannerApp() {
   const { isPhone, isPC } = useDeviceType();
-  const { isTimerRunning, pauseTimer, resumeTimer, activeTimer } = useTimer();
+  const { isTimerRunning, pauseTimer, resumeTimer, startTimer, stopTimer, activeTimer } = useTimer();
 
   // Mount Guard for Offline Client SPA & Next 16 Safety
   const [isMounted, setIsMounted] = useState(false);
@@ -39,8 +39,9 @@ export default function NightPlannerApp() {
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string>('/icons/icon-192.png');
 
-  // Draggable Moon Button State
+  // Draggable Launcher Button State
   const [btnPos, setBtnPos] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragInfoRef = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
@@ -129,8 +130,37 @@ export default function NightPlannerApp() {
     setTheme(savedTheme);
     document.documentElement.setAttribute('data-theme', savedTheme);
 
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+    // Profile avatar for Sam's AI
+    const savedAvatar = localStorage.getItem('np_sams_ai_avatar');
+    if (savedAvatar) setProfileAvatarUrl(savedAvatar);
+
+    // Live Copilot Action Listeners
+    const handleNavigate = (e: any) => {
+      const tab = e?.detail?.tab;
+      if (tab) setCurrentTab(tab as TabType);
+    };
+
+    const handleTimerAction = (e: any) => {
+      const detail = e?.detail;
+      if (!detail) return;
+      if (detail.action === 'start') {
+        startTimer(detail.taskId, detail.taskTitle, detail.minutes || 25);
+      } else if (detail.action === 'pause') {
+        pauseTimer();
+      } else if (detail.action === 'stop') {
+        stopTimer();
+      }
+    };
+
+    window.addEventListener('nightplanner:navigate', handleNavigate);
+    window.addEventListener('nightplanner:timer-action', handleTimerAction);
+
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('nightplanner:navigate', handleNavigate);
+      window.removeEventListener('nightplanner:timer-action', handleTimerAction);
+    };
+  }, [startTimer, pauseTimer, stopTimer]);
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -440,32 +470,31 @@ export default function NightPlannerApp() {
         onClose={() => setIsLoginModalOpen(false)}
       />
 
-      {/* ── 7. Floating Draggable Moon Button for AI Assistant ── */}
+      {/* ── 7. Floating Draggable Profile Button for Sam's AI ── */}
       {!isAIChatOpen && (
         <button
           onPointerDown={handlePointerDown}
           className="v-pill-btn"
-          aria-label="Open AI Assistant (Draggable)"
-          title="Drag with mouse or touch to reposition • Click to open AI Assistant"
+          aria-label="Open Sam’s AI (Draggable)"
+          title="Drag to reposition • Click to open Sam’s AI"
           style={{
             position: 'fixed',
             ...(btnPos
               ? { left: btnPos.x, top: btnPos.y, right: 'auto', bottom: 'auto' }
               : { right: isPhone ? 16 : 28, bottom: isPhone ? 84 : 28 }),
             zIndex: 45,
-            width: 48,
-            height: 48,
+            width: 50,
+            height: 50,
             borderRadius: '50%',
-            padding: 0,
+            padding: 2,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 22,
-            background: 'var(--v-glass-bg)',
-            border: '1.5px solid var(--v-glass-border)',
+            background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.4), rgba(56, 189, 248, 0.4))',
+            border: '2px solid rgba(192, 132, 252, 0.6)',
             boxShadow: isDragging
-              ? '0 12px 28px rgba(0, 0, 0, 0.6), 0 0 25px rgba(168, 85, 247, 0.5)'
-              : 'var(--v-shadow-btn), 0 0 20px rgba(168, 85, 247, 0.3)',
+              ? '0 12px 28px rgba(0, 0, 0, 0.7), 0 0 30px rgba(168, 85, 247, 0.6)'
+              : '0 8px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(168, 85, 247, 0.4)',
             cursor: isDragging ? 'grabbing' : 'grab',
             touchAction: 'none',
             userSelect: 'none',
@@ -477,9 +506,10 @@ export default function NightPlannerApp() {
           onMouseLeave={e => { if (!isDragging) e.currentTarget.style.transform = 'scale(1)'; }}
         >
           <img
-            src="/icons/icon-192.png"
-            alt="Night Planner"
+            src={profileAvatarUrl}
+            alt="Sam’s AI Profile"
             style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', pointerEvents: 'none' }}
+            onError={() => setProfileAvatarUrl('/icons/icon-192.png')}
           />
         </button>
       )}

@@ -93,7 +93,7 @@ async function executeServerActions(
         act.error = res.error;
         errorFeedback = `❌ Could not update task: ${res.error}`;
       }
-    } else if (act.type === 'delete_task') {
+    } else if (act.type === 'delete_task' || act.type === 'delete_all_tasks') {
       act.status = 'pending';
       act.requiresConfirmation = true;
     }
@@ -128,8 +128,8 @@ export async function POST(req: NextRequest) {
     const mergedContext = context || currentPlanContext;
     const latestUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
-    // Build system instructions for Full Authorized Copilot
-    const systemInstruction = `You are NightPlanner's elite AI Assistant and Authorized Website Copilot.
+    // Build system instructions for Sam's AI
+    const systemInstruction = `You are Sam’s AI, the official intelligent assistant and authorized copilot of NightPlanner.
 You have FULL authorized access to view, analyze, and manage the user's planner data:
 - Tasks (titles, categories, times, priorities, statuses, deadlines, completion)
 - Categories / Sections
@@ -304,7 +304,7 @@ SAFETY & INTEGRITY RULES:
           content: finalContent,
         },
         actions: finalActions,
-        provider: 'NightPlanner Copilot (Deterministic Rule Engine)',
+        provider: 'Sam’s AI (Deterministic Engine)',
         model: 'local-assistant',
       });
     }

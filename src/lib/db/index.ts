@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Section, Task, TimeLog, Day, DraftTask, ActiveTimer, WeeklyPlan, MonthlyPlan } from '@/types';
+import type { Section, Task, TimeLog, Day, DraftTask, ActiveTimer, WeeklyPlan, MonthlyPlan, AIConversation, AIMessageItem } from '@/types';
 
 export class NightPlannerDB extends Dexie {
   sections!: Table<Section, string>;
@@ -8,6 +8,8 @@ export class NightPlannerDB extends Dexie {
   days!: Table<Day, string>;
   weeklyPlans!: Table<WeeklyPlan, string>;
   monthlyPlans!: Table<MonthlyPlan, string>;
+  aiConversations!: Table<AIConversation, string>;
+  aiMessages!: Table<AIMessageItem, string>;
   meta!: Table<{ key: string; value: any }, string>;
 
   constructor() {
@@ -22,6 +24,10 @@ export class NightPlannerDB extends Dexie {
     this.version(2).stores({
       weeklyPlans: 'id, startDate, endDate, monthId, status, updatedAt, deleted, synced',
       monthlyPlans: 'id, month, status, updatedAt, deleted, synced',
+    });
+    this.version(3).stores({
+      aiConversations: 'id, title, createdAt, updatedAt, userId',
+      aiMessages: 'id, conversationId, role, timestamp, userId',
     });
   }
 }
@@ -165,4 +171,77 @@ export async function getUnsyncedCount(): Promise<number> {
     changes.weeklyPlans.length +
     changes.monthlyPlans.length
   );
+}
+
+/**
+ * Sam's AI Persistent Chat Storage
+ */
+export async function getAIConversations(userId: string = 'owner'): Promise<AIConversation[]> {
+  try {
+    const list = await db.aiConversations.toArray();
+    return list
+      .filter(c => !c.userId || c.userId === userId)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch {
+    return [];
+  }
+}
+
+export async function createAIConversation(title: string, userId: string = 'owner'): Promise<AIConversation> {
+  const now = Date.now();
+  const conv: AIConversation = {
+    id: `conv_${now}_${Math.random().toString(36).substring(2, 7)}`,
+    title: title || 'New Conversation',
+    createdAt: now,
+    updatedAt: now,
+    userId,
+  };
+  try {
+    await db.aiConversations.put(conv);
+  } catch {}
+  return conv;
+}
+
+export async function updateAIConversationTitle(id: string, title: string): Promise<void> {
+  try {
+    const conv = await db.aiConversations.get(id);
+    if (conv) {
+      conv.title = title;
+      conv.updatedAt = Date.now();
+      await db.aiConversations.put(conv);
+    }
+  } catch {}
+}
+
+export async function touchAIConversation(id: string): Promise<void> {
+  try {
+    const conv = await db.aiConversations.get(id);
+    if (conv) {
+      conv.updatedAt = Date.now();
+      await db.aiConversations.put(conv);
+    }
+  } catch {}
+}
+
+export async function deleteAIConversation(id: string): Promise<void> {
+  try {
+    await db.aiConversations.delete(id);
+    await db.aiMessages.where('conversationId').equals(id).delete();
+  } catch {}
+}
+
+export async function getAIMessages(conversationId: string): Promise<AIMessageItem[]> {
+  try {
+    const msgs = await db.aiMessages.where('conversationId').equals(conversationId).toArray();
+    return msgs.sort((a, b) => a.timestamp - b.timestamp);
+  } catch {
+    return [];
+  }
+}
+
+export async function saveAIMessage(msg: AIMessageItem): Promise<void> {
+  try {
+    await db.aiMessages.put(msg);
+    await touchAIConversation(msg.conversationId);
+  } catch {}
 }

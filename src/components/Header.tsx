@@ -17,6 +17,15 @@ interface HeaderProps {
 }
 
 export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }: HeaderProps) {
+  const [avatarUrl, setAvatarUrl] = React.useState('/icons/icon-192.png');
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const custom = localStorage.getItem('np_sams_ai_avatar');
+      if (custom) setAvatarUrl(custom);
+    }
+  }, []);
+
   const sync = useSync();
   const {
     activeTimer,
@@ -170,8 +179,8 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenAIChat?.(); } }}
         className="v-pill-btn"
         style={{ padding: '6px 16px', minHeight: 38, cursor: 'pointer', transition: 'all 0.2s ease' }}
-        title="Open AI Assistant & Plan Review"
-        aria-label="Open AI Assistant"
+        title="Open Sam’s AI & Plan Review"
+        aria-label="Open Sam’s AI"
       >
         <div
           style={{
@@ -188,8 +197,8 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }
           }}
         >
           <img
-            src="/icons/icon-192.png"
-            alt="Night Planner"
+            src={avatarUrl}
+            alt="Sam’s AI"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         </div>
