@@ -12,6 +12,7 @@ import type { Task, Section, PriorityLevel, TaskStatus } from '@/types';
 
 interface CategoryScreenProps {
   currentDate: string;
+  onChangeDate?: (date: string) => void;
   isPhone: boolean;
   focusTaskId?: string | null; // ID of task to scroll to / expand
   onClearFocus?: () => void;
@@ -73,13 +74,48 @@ function getDefaultEdit(task: Task): EditState {
   };
 }
 
-export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus }: CategoryScreenProps) {
+export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId, onClearFocus }: CategoryScreenProps) {
+  const [selectedDate, setSelectedDate] = useState<string>(currentDate);
+  const [viewMode, setViewMode] = useState<'day' | 'all'>('day'); // Default: day-specific tasks within categories
   const [sections, setSections] = useState<Section[]>([]);
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
+
+  // Synchronize when currentDate changes from parent
+  useEffect(() => {
+    setSelectedDate(currentDate);
+  }, [currentDate]);
+
+  const shiftDate = (days: number) => {
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    date.setUTCDate(date.getUTCDate() + days);
+    const nextDate = date.toISOString().split('T')[0];
+    setSelectedDate(nextDate);
+    onChangeDate?.(nextDate);
+  };
+
+  const setDateExplicit = (newDate: string) => {
+    if (!newDate) return;
+    setSelectedDate(newDate);
+    onChangeDate?.(newDate);
+  };
+
+  const dayName = useMemo(() => {
+    try {
+      const [y, m, d] = selectedDate.split('-').map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      return dt.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }).toUpperCase();
+    } catch {
+      return 'TODAY';
+    }
+  }, [selectedDate]);
+
+  const todayStr = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
+  const isSelectedToday = selectedDate === todayStr;
 
   // Inline Add Task inside Category
   const [addingTaskSectionId, setAddingTaskSectionId] = useState<string | null>(null);
@@ -112,23 +148,30 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
     return () => { clearInterval(interval); unsub(); };
   }, []);
 
-  // Auto-expand section and task if focusTaskId is given
+  // Auto-expand section, task, and switch to task date if focusTaskId is given
   useEffect(() => {
     if (!focusTaskId || allTasks.length === 0) return;
     const task = allTasks.find(t => t.id === focusTaskId);
     if (!task) return;
+    if (task.date && task.date !== selectedDate) {
+      setSelectedDate(task.date);
+      onChangeDate?.(task.date);
+    }
     setExpandedSections(prev => new Set([...prev, task.sectionId]));
     setExpandedTasks(prev => new Set([...prev, focusTaskId]));
     onClearFocus?.();
-  }, [focusTaskId, allTasks]);
+  }, [focusTaskId, allTasks, selectedDate, onChangeDate, onClearFocus]);
 
+  // Organize tasks by both category and date/day
   const tasksBySection = useMemo(() => {
     const map: Record<string, Task[]> = {};
     for (const sec of sections) {
-      map[sec.id] = allTasks.filter(t => t.sectionId === sec.id).sort((a, b) => a.order - b.order);
+      map[sec.id] = allTasks
+        .filter(t => t.sectionId === sec.id && (viewMode === 'all' || (t.date || currentDate) === selectedDate))
+        .sort((a, b) => a.order - b.order);
     }
     return map;
-  }, [sections, allTasks]);
+  }, [sections, allTasks, selectedDate, viewMode, currentDate]);
 
   const toggleSection = (sectionId: string) => {
     setExpandedSections(prev => {
@@ -236,7 +279,7 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
       strategy: '',
       doneMeans: '',
       sectionId,
-      date: currentDate,
+      date: selectedDate, // Day-specific to the day currently selected!
       priority: newTaskPriority,
       status: 'not_started',
       isCompleted: false,
@@ -291,8 +334,8 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
   const deleteSection = async (sectionId: string) => {
     if (!confirm('Delete this category? Tasks inside will be deleted too.')) return;
     await db.sections.update(sectionId, { deleted: true, updatedAt: Date.now(), synced: 0 });
-    const tasks = tasksBySection[sectionId] || [];
-    await Promise.all(tasks.map(t => db.tasks.update(t.id, { deleted: true, updatedAt: Date.now(), synced: 0 })));
+    const allSecTasks = allTasks.filter(t => t.sectionId === sectionId);
+    await Promise.all(allSecTasks.map(t => db.tasks.update(t.id, { deleted: true, updatedAt: Date.now(), synced: 0 })));
     syncEngine.notifyLocalMutation();
     load();
   };
@@ -315,6 +358,128 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
         >
           <Plus size={14} /> New Category
         </button>
+      </div>
+
+      {/* ── Day Navigator Header: Organizing tasks by both category and date/day ── */}
+      <div
+        className="v-card"
+        style={{
+          padding: '16px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          {/* Day Stepper */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => shiftDate(-1)}
+              className="v-circle-btn"
+              style={{ width: 34, height: 34 }}
+              aria-label="Previous day"
+              title="Previous day"
+            >
+              ‹
+            </button>
+            <div>
+              <div
+                className="font-bloody"
+                style={{ fontSize: isPhone ? 18 : 22, fontWeight: 700, letterSpacing: '0.04em' }}
+              >
+                {dayName}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {selectedDate}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => shiftDate(1)}
+              className="v-circle-btn"
+              style={{ width: 34, height: 34 }}
+              aria-label="Next day"
+              title="Next day"
+            >
+              ›
+            </button>
+          </div>
+
+          {/* Quick Date Shortcuts & Picker */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+            {!isSelectedToday && (
+              <button
+                type="button"
+                onClick={() => setDateExplicit(todayStr)}
+                className="v-pill-btn"
+                style={{ padding: '6px 12px', fontSize: 12 }}
+              >
+                Today
+              </button>
+            )}
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={e => setDateExplicit(e.target.value)}
+              className="v-input"
+              style={{
+                width: 138,
+                fontSize: 12,
+                padding: '4px 8px',
+                minHeight: 32,
+              }}
+              title="Select specific date"
+            />
+            {/* View Mode Toggle: Day vs All Days */}
+            <div style={{ display: 'flex', background: 'var(--v-glass-bg-subtle)', borderRadius: 8, padding: 2, border: '1px solid var(--v-glass-border)' }}>
+              <button
+                type="button"
+                onClick={() => setViewMode('day')}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: viewMode === 'day' ? 700 : 500,
+                  borderRadius: 6,
+                  border: 'none',
+                  background: viewMode === 'day' ? 'var(--accent-glow)' : 'transparent',
+                  color: viewMode === 'day' ? 'var(--text-primary)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {dayName} Only
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('all')}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: viewMode === 'all' ? 700 : 500,
+                  borderRadius: 6,
+                  border: 'none',
+                  background: viewMode === 'all' ? 'var(--accent-glow)' : 'transparent',
+                  color: viewMode === 'all' ? 'var(--text-primary)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+              >
+                All Days
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Informative indicator pill */}
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Calendar size={13} color="var(--accent-color)" />
+          <span>
+            {viewMode === 'day'
+              ? `Categories are shared across days, displaying separate tasks for ${dayName} (${selectedDate}).`
+              : 'Showing all tasks across all days in each category.'}
+          </span>
+        </div>
       </div>
 
       {/* New Category Form */}
@@ -553,7 +718,15 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
 
                 {tasks.length === 0 && addingTaskSectionId !== sec.id ? (
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>
-                    No tasks yet in {sec.name} — click <strong>+ Add Task</strong> above to add one directly.
+                    {viewMode === 'day' ? (
+                      <span>
+                        No tasks scheduled for <strong>{dayName}</strong> ({selectedDate}) in {sec.name} — click <strong>+ Add Task</strong> above to add one.
+                      </span>
+                    ) : (
+                      <span>
+                        No tasks recorded in {sec.name} across any days.
+                      </span>
+                    )}
                   </div>
                 ) : (
                   tasks.map((task, idx) => {
@@ -620,8 +793,26 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
                             }}>
-                              {task.title}
+                              <span>{task.title}</span>
+                              {viewMode === 'all' && (
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    background: 'var(--v-glass-bg-subtle)',
+                                    color: 'var(--text-muted)',
+                                    border: '1px solid var(--v-glass-border)',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  📅 {task.date || 'Undated'}
+                                </span>
+                              )}
                             </div>
                             {task.startTime && (
                               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>

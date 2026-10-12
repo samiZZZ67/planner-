@@ -473,6 +473,7 @@ export default function NightPlannerApp() {
             {currentTab === 'category' && (
               <CategoryScreen
                 currentDate={currentDate}
+                onChangeDate={setCurrentDate}
                 isPhone={isPhone}
                 focusTaskId={focusTaskId}
                 onClearFocus={() => setFocusTaskId(null)}

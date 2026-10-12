@@ -74,8 +74,22 @@ export function TodoListScreen({
   } = useTimer();
 
   const loadData = async () => {
+    // Preserve existing data: ensure any tasks missing a date are assigned a permanent date rather than appearing on every day
+    const undated = await db.tasks.filter(t => (!t.date || t.date === '') && !t.deleted).toArray();
+    if (undated.length > 0) {
+      await Promise.all(
+        undated.map(t =>
+          db.tasks.update(t.id, {
+            date: t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : currentDate,
+            updatedAt: Date.now(),
+            synced: 0,
+          })
+        )
+      );
+    }
+
     const [tList, sList, lList, dayRecord] = await Promise.all([
-      db.tasks.filter(t => (t.date === currentDate || !t.date || t.date === '') && !t.deleted).toArray(),
+      db.tasks.filter(t => t.date === currentDate && !t.deleted).toArray(),
       db.sections.filter(s => !s.deleted).toArray(),
       db.timeLogs.filter(l => l.date === currentDate && !l.deleted).toArray(),
       db.days.get(currentDate),

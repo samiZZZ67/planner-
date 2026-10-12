@@ -206,4 +206,61 @@ describe('Authoritative Task Service & Action Execution', () => {
       expect(phoneCheckingAfter?.deleted).toBe(phoneCheckingInitial.deleted);
     }
   });
+
+  it('9. should maintain separate day-specific tasks within the same category across different days', async () => {
+    const mondayDate = '2026-10-12';
+    const tuesdayDate = '2026-10-13';
+    const categoryName = 'Entertainment';
+
+    // 1. Create Monday task in Entertainment
+    const monRes = await createTaskInDb({
+      title: 'Monday Movie Time',
+      category: categoryName,
+      date: mondayDate,
+      scheduledMinutes: 90,
+      priority: 'Low',
+    });
+    expect(monRes.ok).toBe(true);
+    const monTask = monRes.task!;
+
+    // 2. Create Tuesday task in Entertainment
+    const tueRes = await createTaskInDb({
+      title: 'Tuesday Game Night',
+      category: categoryName,
+      date: tuesdayDate,
+      scheduledMinutes: 60,
+      priority: 'Medium',
+    });
+    expect(tueRes.ok).toBe(true);
+    const tueTask = tueRes.task!;
+
+    // 3. Query Monday tasks: must only contain Monday task, not Tuesday
+    const mondayTasks = await getTasksFromDb(mondayDate);
+    const monTitles = mondayTasks.map(t => t.title);
+    expect(monTitles).toContain('Monday Movie Time');
+    expect(monTitles).not.toContain('Tuesday Game Night');
+
+    // 4. Query Tuesday tasks: must only contain Tuesday task, not Monday
+    const tuesdayTasks = await getTasksFromDb(tuesdayDate);
+    const tueTitles = tuesdayTasks.map(t => t.title);
+    expect(tueTitles).toContain('Tuesday Game Night');
+    expect(tueTitles).not.toContain('Monday Movie Time');
+
+    // 5. Updating / completing Monday task must NOT affect Tuesday task
+    await updateTaskInDb(monTask.id, { isCompleted: true, status: 'completed' }, mondayDate);
+    const updatedTueTasks = await getTasksFromDb(tuesdayDate);
+    const targetTue = updatedTueTasks.find(t => t.id === tueTask.id);
+    expect(targetTue?.isCompleted).toBe(false);
+
+    // 6. Deleting Monday task must NOT delete Tuesday task
+    await deleteTaskInDb(monTask.id, mondayDate);
+    const finalTueTasks = await getTasksFromDb(tuesdayDate);
+    const stillAliveTue = finalTueTasks.find(t => t.id === tueTask.id);
+    expect(stillAliveTue).toBeDefined();
+    expect(stillAliveTue?.deleted).toBe(false);
+
+    // Cleanup Tuesday task
+    await deleteTaskInDb(tueTask.id, tuesdayDate);
+  });
 });
+
