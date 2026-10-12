@@ -112,6 +112,10 @@ export function TodoListScreen({
     const handleTaskChange = () => {
       loadData();
     };
+    window.addEventListener('samsspace:task-created', handleTaskChange);
+    window.addEventListener('samsspace:task-updated', handleTaskChange);
+    window.addEventListener('samsspace:task-deleted', handleTaskChange);
+    window.addEventListener('samsspace:tasks-bulk-deleted', handleTaskChange);
     window.addEventListener('nightplanner:task-created', handleTaskChange);
     window.addEventListener('nightplanner:task-updated', handleTaskChange);
     window.addEventListener('nightplanner:task-deleted', handleTaskChange);
@@ -119,6 +123,10 @@ export function TodoListScreen({
     return () => {
       clearInterval(interval);
       unsub();
+      window.removeEventListener('samsspace:task-created', handleTaskChange);
+      window.removeEventListener('samsspace:task-updated', handleTaskChange);
+      window.removeEventListener('samsspace:task-deleted', handleTaskChange);
+      window.removeEventListener('samsspace:tasks-bulk-deleted', handleTaskChange);
       window.removeEventListener('nightplanner:task-created', handleTaskChange);
       window.removeEventListener('nightplanner:task-updated', handleTaskChange);
       window.removeEventListener('nightplanner:task-deleted', handleTaskChange);
@@ -269,6 +277,7 @@ export function TodoListScreen({
     setShowInlineAdd(false);
     syncEngine.notifyLocalMutation();
     if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('samsspace:task-created', { detail: newTask }));
       window.dispatchEvent(new CustomEvent('nightplanner:task-created', { detail: newTask }));
     }
   };
@@ -300,6 +309,7 @@ export function TodoListScreen({
     setEditingTimeTaskId(null);
     syncEngine.notifyLocalMutation();
     if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('samsspace:task-updated', { detail: { id: taskId } }));
       window.dispatchEvent(new CustomEvent('nightplanner:task-updated', { detail: { id: taskId } }));
     }
   };

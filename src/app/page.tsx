@@ -25,7 +25,7 @@ import { AIChatPanel } from '@/components/Chat/AIChatPanel';
 import { FreeLLMAssistant } from '@/components/FreeLLM/FreeLLMAssistant';
 import { apiFetch } from '@/lib/api/apiClient';
 
-export default function NightPlannerApp() {
+export default function SamsSpaceApp() {
   const { isPhone, isPC } = useDeviceType();
   const { isTimerRunning, pauseTimer, resumeTimer, startTimer, stopTimer, activeTimer } = useTimer();
 
@@ -166,7 +166,7 @@ export default function NightPlannerApp() {
     }
     verifyAuthStatus();
 
-    // Live Copilot Action Listeners
+    // Live Action Listeners (Sam's Space)
     const handleNavigate = (e: any) => {
       const tab = e?.detail?.tab;
       if (tab) setCurrentTab(tab as TabType);
@@ -184,11 +184,15 @@ export default function NightPlannerApp() {
       }
     };
 
+    window.addEventListener('samsspace:navigate', handleNavigate);
+    window.addEventListener('samsspace:timer-action', handleTimerAction);
     window.addEventListener('nightplanner:navigate', handleNavigate);
     window.addEventListener('nightplanner:timer-action', handleTimerAction);
 
     return () => {
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('samsspace:navigate', handleNavigate);
+      window.removeEventListener('samsspace:timer-action', handleTimerAction);
       window.removeEventListener('nightplanner:navigate', handleNavigate);
       window.removeEventListener('nightplanner:timer-action', handleTimerAction);
     };

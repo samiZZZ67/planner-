@@ -1,5 +1,5 @@
 -- ====================================================================
--- Night Planner - Neon Postgres Database Schema
+-- Sam'Space - Neon Postgres Database Schema
 -- Run this script in the Neon SQL Editor or via psql
 -- ====================================================================
 

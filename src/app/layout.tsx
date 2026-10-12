@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: "Sam'Space - Clear Intentional Daily Planning",
-  description: "Personal offline-first daily planner with YouTube Studio style analytics and automatic cloud sync.",
+  title: "Sam'Space",
+  description: "Sam'Space - Personal productivity and workspace with cloud sync.",
   manifest: '/manifest.json',
   icons: {
     icon: [

@@ -132,7 +132,6 @@ export async function checkGatewayStatus(
   };
   if (apiKey) {
     headers['Authorization'] = `Bearer ${apiKey}`;
-    headers['Fetch-Relay-Authorization'] = `Bearer ${apiKey}`;
   }
 
   const hasFallback = Boolean(
@@ -154,37 +153,59 @@ export async function checkGatewayStatus(
     }).finally(() => clearTimeout(timeout));
 
     const latencyMs = Date.now() - startTime;
+    const parsed = await parseResponseBody(res);
+    const data = parsed.json;
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
+      const detail = parsed.isHtml
+        ? `HTML (${res.status}, ${res.headers?.get?.('content-type') || 'unknown content type'}): ${parsed.text.slice(0, 160)}`
+        : data?.error?.message || parsed.text.slice(0, 160);
       return {
         online: false,
         gatewayUrl: targetBaseUrl,
         latencyMs,
-        models: VERIFIED_FREE_MODELS.map(m => m.id),
-        catalog: VERIFIED_FREE_MODELS,
+        models: [],
+        catalog: [],
         fallbackReady: hasFallback,
-        error: `Gateway HTTP ${res.status}: ${res.statusText} (${errText.slice(0, 100) || 'Auth or service warming up'})`,
+        error: `Model discovery failed at ${modelsUrl}: HTTP ${res.status} ${res.statusText}; ${detail || 'request failed'}`,
       };
     }
 
-    const data = await res.json().catch(() => null);
     let rawModels: any[] = [];
 
     if (data && Array.isArray(data.data)) {
       rawModels = data.data;
     } else if (data && Array.isArray(data.models)) {
       rawModels = data.models;
+    } else {
+      const detail = parsed.isHtml
+        ? `HTML (${res.status}, ${res.headers?.get?.('content-type') || 'unknown content type'}): ${parsed.text.slice(0, 160)}`
+        : `invalid JSON model-list shape (${res.headers?.get?.('content-type') || 'unknown content type'})`
+      return {
+        online: false, gatewayUrl: targetBaseUrl, latencyMs, models: [], catalog: [],
+        fallbackReady: hasFallback,
+        error: `Model discovery at ${modelsUrl} returned HTTP ${res.status} but not a model-list JSON response: ${detail}`,
+      };
     }
 
-    const fullCatalog = mergeDiscoveredModels(rawModels);
+    const liveIds = rawModels
+      .map((item: unknown) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && 'id' in item) return (item as { id?: unknown }).id;
+        return undefined;
+      })
+      .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0);
+    if (liveIds.length === 0) {
+      return { online: false, gatewayUrl: targetBaseUrl, latencyMs, models: [], catalog: [], fallbackReady: hasFallback, error: `Model discovery at ${modelsUrl} returned an empty model list.` };
+    }
+    const liveCatalog = mergeDiscoveredModels(rawModels).filter(model => liveIds.includes(model.id));
 
     return {
       online: true,
       gatewayUrl: targetBaseUrl,
       latencyMs,
-      models: fullCatalog.map(m => m.id),
-      catalog: fullCatalog,
+      models: liveIds,
+      catalog: liveCatalog,
       fallbackReady: hasFallback,
     };
   } catch (err: any) {
@@ -193,8 +214,8 @@ export async function checkGatewayStatus(
       online: false,
       gatewayUrl: targetBaseUrl,
       latencyMs,
-      models: VERIFIED_FREE_MODELS.map(m => m.id),
-      catalog: VERIFIED_FREE_MODELS,
+      models: [],
+      catalog: [],
       fallbackReady: hasFallback,
       error:
         err.name === 'AbortError'
@@ -207,7 +228,7 @@ export async function checkGatewayStatus(
 /**
  * Helper to safely extract response body whether in real fetch or mocked environment
  */
-async function parseResponseBody(res: Response): Promise<{ text: string; json: any; isHtml: boolean }> {
+async function parseResponseBody(res: Response): Promise<{ text: string; json: any; isHtml: boolean; contentType: string }> {
   let text = '';
   let json: any = null;
 
@@ -236,7 +257,7 @@ async function parseResponseBody(res: Response): Promise<{ text: string; json: a
     }
   }
 
-  return { text, json, isHtml };
+  return { text, json, isHtml, contentType: res.headers?.get?.('content-type') || '' };
 }
 
 /**
@@ -249,7 +270,7 @@ export async function sendChatCompletion(
   const targetBaseUrl = (options.customUrl || config.baseUrl).trim().replace(/\/+$/, '');
   const apiKey = options.customKey !== undefined ? options.customKey : config.apiKey;
   const rawModel = options.model || config.defaultModel;
-  const model = !rawModel || rawModel === 'auto' ? 'gemini-3.6-flash' : rawModel;
+  const model = rawModel || 'auto';
 
   const endpoint = resolveChatCompletionsUrl(targetBaseUrl);
   const startTime = Date.now();
@@ -260,7 +281,6 @@ export async function sendChatCompletion(
   };
   if (apiKey) {
     headers['Authorization'] = `Bearer ${apiKey}`;
-    headers['Fetch-Relay-Authorization'] = `Bearer ${apiKey}`;
   }
 
   const payload = {
@@ -301,7 +321,7 @@ export async function sendChatCompletion(
 
     if (parsed.isHtml) {
       throw new Error(
-        `FreeLLMAPI Gateway returned an HTML page (${res.status} ${res.statusText}) instead of an API JSON response.`
+        `FreeLLMAPI Gateway ${endpoint} returned HTML with HTTP ${res.status} (${parsed.contentType || 'unknown content type'}): ${parsed.text.slice(0, 160)}`
       );
     }
 
@@ -310,13 +330,16 @@ export async function sendChatCompletion(
       throw new Error('FreeLLMAPI Gateway response could not be parsed as JSON.');
     }
 
+    if (data.error) {
+      throw new Error(`FreeLLMAPI Gateway API error at ${endpoint}: ${data.error.message || JSON.stringify(data.error).slice(0, 200)}`);
+    }
     const messageContent =
-      data.choices?.[0]?.message?.content ||
-      data.choices?.[0]?.text ||
-      '';
+      data.choices?.[0]?.message?.content ??
+      data.choices?.[0]?.text ??
+      null;
 
-    if (!messageContent && !data.error) {
-      throw new Error('FreeLLMAPI Gateway returned empty message content.');
+    if (typeof messageContent !== 'string' || messageContent.length === 0) {
+      throw new Error(`FreeLLMAPI Gateway returned HTTP ${res.status} but no valid chat completion choices at ${endpoint} (${parsed.contentType || 'unknown content type'}).`);
     }
 
     return {
@@ -335,6 +358,74 @@ export async function sendChatCompletion(
       throw new Error(`FreeLLMAPI Gateway request timed out after 65 seconds (${endpoint}).`);
     }
     throw err;
+  }
+}
+
+/** OpenAI-compatible SSE stream used by the moon assistant. The request
+ * abort signal and a hard timeout both cancel the upstream fetch. */
+export async function openChatCompletionStream(
+  options: SendChatOptions,
+  clientSignal?: AbortSignal,
+): Promise<ReadableStream<Uint8Array>> {
+  const config = getGatewayConfig();
+  const endpoint = resolveChatCompletionsUrl(config.baseUrl);
+  const apiKey = config.apiKey;
+  const controller = new AbortController();
+  const abortFromClient = () => controller.abort(clientSignal?.reason);
+  if (clientSignal?.aborted) abortFromClient();
+  else clientSignal?.addEventListener('abort', abortFromClient, { once: true });
+  const timeout = setTimeout(() => controller.abort(new Error('Gateway stream timed out after 65 seconds')), 65000);
+  const cleanup = () => {
+    clearTimeout(timeout);
+    clientSignal?.removeEventListener('abort', abortFromClient);
+  };
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model: options.model || config.defaultModel || 'auto',
+        messages: options.messages,
+        temperature: options.temperature ?? 0.7,
+        stream: true,
+      }),
+      signal: controller.signal,
+    });
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!res.ok || !res.body || !contentType.includes('text/event-stream')) {
+      const parsed = await parseResponseBody(res);
+      cleanup();
+      const excerpt = parsed.isHtml ? parsed.text.slice(0, 160) : parsed.json?.error?.message || parsed.text.slice(0, 200);
+      throw new Error(`FreeLLMAPI stream ${endpoint} returned HTTP ${res.status} (${contentType || 'unknown content type'}): ${excerpt || 'expected text/event-stream'}`);
+    }
+
+    const reader = res.body.getReader();
+    return new ReadableStream<Uint8Array>({
+      async pull(stream) {
+        try {
+          const item = await reader.read();
+          if (item.done) { cleanup(); stream.close(); }
+          else stream.enqueue(item.value);
+        } catch (error) { cleanup(); stream.error(error); }
+      },
+      async cancel(reason) {
+        controller.abort(reason);
+        cleanup();
+        await reader.cancel(reason).catch(() => undefined);
+      },
+    });
+  } catch (error: unknown) {
+    cleanup();
+    if (error instanceof Error && error.name === 'AbortError' && !clientSignal?.aborted) {
+      throw new Error(`FreeLLMAPI stream timed out after 65 seconds (${endpoint}).`);
+    }
+    throw error;
   }
 }
 
@@ -525,9 +616,12 @@ export async function sendChatCompletionWithFallback(
 
   // 1. Try FreeLLM Gateway first (if configured with customUrl or default)
   try {
-    const result = await sendChatCompletion({ ...options, model: effectiveModel });
+    const result = await sendChatCompletion({ ...options, model: requestedModel || 'auto' });
     return { ...result, providerUsed: 'FreeLLMAPI Gateway' };
   } catch (gatewayErr: any) {
+    if (requestedModel !== 'auto' && /model[^.]{0,40}(not found|unknown|invalid|unsupported)|model_(not_found|not_supported)/i.test(String(gatewayErr.message))) {
+      throw new Error(`Selected model '${requestedModel}' was rejected by the FreeLLM gateway: ${String(gatewayErr.message).slice(0, 220)}`);
+    }
     console.warn(`[FreeLLM Gateway] External gateway unavailable (${gatewayErr.message}). Routing to primary 730M token provider...`);
 
     // 2. If it's a Google/Gemini target or Auto, run Gemini first (730M tokens!)

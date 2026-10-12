@@ -76,6 +76,8 @@ export interface FreeLLMMessage {
   content: string;
   timestamp: number;
   model?: string;
+  provider?: string;
+  fallbackFrom?: string;
   latencyMs?: number;
   attachments?: AttachmentItem[];
   generatedMedia?: GeneratedMedia;
@@ -94,8 +96,6 @@ const STORAGE_KEY_ACTIVE_CONV = 'np_freellm_active_conv_id';
 const STORAGE_KEY_HISTORY = 'np_freellm_chat_history';
 const STORAGE_KEY_MODEL = 'np_freellm_selected_model';
 const STORAGE_KEY_POS = 'np_freellm_moon_btn_pos';
-const STORAGE_KEY_CUSTOM_URL = 'np_freellm_custom_url';
-const STORAGE_KEY_CUSTOM_KEY = 'np_freellm_custom_key';
 
 export function getDefaultGreeting(): FreeLLMMessage {
   return {
@@ -144,15 +144,17 @@ const STARTER_PROMPTS = [
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 60000): Promise<Response> {
   const controller = new AbortController();
+  const externalSignal = options.signal;
+  const abortFromCaller = () => controller.abort(externalSignal?.reason);
+  if (externalSignal?.aborted) abortFromCaller();
+  else externalSignal?.addEventListener('abort', abortFromCaller, { once: true });
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
+    const res = await fetch(url, { ...options, signal: controller.signal });
     return res;
   } finally {
     clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', abortFromCaller);
   }
 }
 
@@ -226,6 +228,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const activeRequestRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -256,14 +259,10 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   const [gatewayOnline, setGatewayOnline] = useState<boolean | null>(null);
   const [gatewayLatency, setGatewayLatency] = useState<number | null>(null);
   const [gatewayError, setGatewayError] = useState<string | null>(null);
-  const [catalogModels, setCatalogModels] = useState<CatalogModel[]>(VERIFIED_FREE_MODELS);
-  const [availableModels, setAvailableModels] = useState<string[]>(
-    VERIFIED_FREE_MODELS.map(m => m.id)
-  );
+  const [catalogModels, setCatalogModels] = useState<CatalogModel[]>([]);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [modelSearch, setModelSearch] = useState<string>('');
   const [showModelSearch, setShowModelSearch] = useState<boolean>(false);
-  const [customGatewayUrl, setCustomGatewayUrl] = useState<string>('');
-  const [customApiKey, setCustomApiKey] = useState<string>('');
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [isTestingGateway, setIsTestingGateway] = useState(false);
 
@@ -412,10 +411,8 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
 
     // 4. Custom Gateway URL & Key
     try {
-      const savedUrl = localStorage.getItem(STORAGE_KEY_CUSTOM_URL);
-      if (savedUrl) setCustomGatewayUrl(savedUrl);
-      const savedKey = localStorage.getItem(STORAGE_KEY_CUSTOM_KEY);
-      if (savedKey) setCustomApiKey(savedKey);
+      localStorage.removeItem('np_freellm_custom_url');
+      localStorage.removeItem('np_freellm_custom_key');
     } catch {}
 
     const onResize = () => {
@@ -426,19 +423,11 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   }, [clampPosition]);
 
   // ── Check Gateway Status (Render Backend) ──
-  const testGatewayConnection = useCallback(async (overrideUrl?: string, overrideKey?: string) => {
+  const testGatewayConnection = useCallback(async () => {
     setIsTestingGateway(true);
     setGatewayError(null);
     try {
-      const targetUrl = overrideUrl !== undefined ? overrideUrl : customGatewayUrl;
-      const targetKey = overrideKey !== undefined ? overrideKey : customApiKey;
-
-      const params = new URLSearchParams();
-      if (targetUrl && targetUrl.trim()) params.set('url', targetUrl.trim());
-      if (targetKey && targetKey.trim()) params.set('apiKey', targetKey.trim());
-      const queryStr = params.toString() ? `?${params.toString()}` : '';
-
-      const res = await fetchWithTimeout(`/api/ai/freellm/status${queryStr}`, {}, 15000);
+      const res = await fetchWithTimeout('/api/ai/freellm/status', {}, 15000);
       const data = await res.json().catch(() => null);
 
       if (res.ok && data?.ok) {
@@ -467,7 +456,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     } finally {
       setIsTestingGateway(false);
     }
-  }, [customGatewayUrl, customApiKey]);
+  }, []);
 
   useEffect(() => {
     if (windowState !== 'collapsed') {
@@ -957,12 +946,15 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     if (!customPrompt) setInput('');
     setAttachments([]);
     setIsLoading(true);
+    const requestController = new AbortController();
+    activeRequestRef.current = requestController;
 
     try {
       const response = await fetchWithTimeout(
         '/api/ai/freellm/chat',
         {
           method: 'POST',
+          signal: requestController.signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: updated
@@ -974,14 +966,64 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
               })),
             model: selectedModel || 'auto',
             mode: mode || undefined,
-            gatewayUrl: customGatewayUrl.trim() || undefined,
-            apiKey: customApiKey.trim() || undefined,
+            stream: true,
           }),
         },
         75000
       );
 
-      const data = await response.json().catch(() => null);
+      let data: any;
+      let streamedMessageId: string | null = null;
+      if (response.headers.get('content-type')?.includes('text/event-stream')) {
+        if (!response.ok || !response.body) {
+          throw new Error(`Gateway stream failed with HTTP ${response.status}.`);
+        }
+        streamedMessageId = `asst-${Date.now()}`;
+        let streamedContent = '';
+        let streamedModel = selectedModel;
+        updateMessages(prev => [...prev, {
+          id: streamedMessageId!, role: 'assistant', content: '', timestamp: Date.now(), model: streamedModel,
+        }]);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let ended = false;
+        const handleLine = (line: string) => {
+          if (!line.startsWith('data:')) return;
+          const payload = line.slice(5).trim();
+          if (payload === '[DONE]') { ended = true; return; }
+          try {
+            const event = JSON.parse(payload);
+            if (typeof event.model === 'string') streamedModel = event.model;
+            const delta = event.choices?.[0]?.delta?.content;
+            if (typeof delta === 'string' && delta) {
+              streamedContent += delta;
+              updateMessages(prev => prev.map(message => message.id === streamedMessageId
+                ? { ...message, content: streamedContent, model: streamedModel }
+                : message));
+            }
+            if (event.error?.message) throw new Error(event.error.message);
+          } catch (error: unknown) {
+            if (error instanceof SyntaxError) return;
+            throw error;
+          }
+        };
+        while (!ended) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || '';
+          for (const line of lines) handleLine(line);
+        }
+        buffer += decoder.decode();
+        if (buffer.trim()) handleLine(buffer);
+        if (requestController.signal.aborted) throw new DOMException('Request cancelled', 'AbortError');
+        if (!streamedContent) throw new Error('The gateway stream ended without assistant text.');
+        data = { ok: true, message: { content: streamedContent }, model: streamedModel, provider: 'FreeLLMAPI Gateway' };
+      } else {
+        data = await response.json().catch(() => null);
+      }
 
       if (!response.ok || !data?.ok) {
         const errorText =
@@ -991,16 +1033,20 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       }
 
       const assistantMsg: FreeLLMMessage = {
-        id: `asst-${Date.now()}`,
+        id: streamedMessageId || `asst-${Date.now()}`,
         role: 'assistant',
         content: data.message?.content || 'No text content returned.',
         timestamp: Date.now(),
         model: data.model || selectedModel,
+        provider: data.provider,
+        fallbackFrom: data.fallbackFrom,
         latencyMs: data.latencyMs,
         generatedMedia: data.generatedMedia,
       };
 
-      updateMessages(prev => [...prev, assistantMsg]);
+      updateMessages(prev => streamedMessageId
+        ? prev.map(message => message.id === streamedMessageId ? assistantMsg : message)
+        : [...prev, assistantMsg]);
       setGatewayOnline(true);
       if (data.latencyMs) setGatewayLatency(data.latencyMs);
 
@@ -1011,6 +1057,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         setVoiceModeStatus('speaking');
       }
     } catch (err: any) {
+      if (requestController.signal.aborted) return;
       const friendlyError = formatFetchError(err);
       const errorMsg: FreeLLMMessage = {
         id: `err-${Date.now()}`,
@@ -1023,6 +1070,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       setGatewayOnline(false);
       setGatewayError(friendlyError);
     } finally {
+      activeRequestRef.current = null;
       setIsLoading(false);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
@@ -1757,61 +1805,8 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
-                  Gateway Base URL:
-                </label>
-                <input
-                  type="text"
-                  value={customGatewayUrl}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setCustomGatewayUrl(val);
-                    try {
-                      localStorage.setItem(STORAGE_KEY_CUSTOM_URL, val);
-                    } catch {}
-                  }}
-                  placeholder="https://free-llm-api-7fue.onrender.com/v1 (or leave blank for default)"
-                  style={{
-                    width: '100%',
-                    background: isDark ? 'rgba(0, 0, 0, 0.4)' : '#ffffff',
-                    border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.15)'),
-                    color: 'var(--text-primary)',
-                    borderRadius: 8,
-                    padding: '6px 10px',
-                    fontSize: 12,
-                    outline: 'none',
-                  }}
-                />
-              </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
-                  Unified API Key:
-                </label>
-                <input
-                  type="password"
-                  value={customApiKey}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setCustomApiKey(val);
-                    try {
-                      localStorage.setItem(STORAGE_KEY_CUSTOM_KEY, val);
-                    } catch {}
-                  }}
-                  placeholder="Enter unified API key (or leave blank to use Render env)"
-                  style={{
-                    width: '100%',
-                    background: isDark ? 'rgba(0, 0, 0, 0.4)' : '#ffffff',
-                    border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.15)'),
-                    color: 'var(--text-primary)',
-                    borderRadius: 8,
-                    padding: '6px 10px',
-                    fontSize: 12,
-                    outline: 'none',
-                  }}
-                />
-              </div>
+
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
             <span style={{ fontSize: 11, color: gatewayOnline ? '#10b981' : gatewayError ? '#ef4444' : '#94a3b8' }}>
@@ -1827,13 +1822,11 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             <div style={{ display: 'flex', gap: 6 }}>
               <button
                 onClick={() => {
-                  setCustomGatewayUrl('');
-                  setCustomApiKey('');
                   try {
-                    localStorage.removeItem(STORAGE_KEY_CUSTOM_URL);
-                    localStorage.removeItem(STORAGE_KEY_CUSTOM_KEY);
+                    localStorage.removeItem('np_freellm_custom_url');
+                    localStorage.removeItem('np_freellm_custom_key');
                   } catch {}
-                  testGatewayConnection('', '');
+                  testGatewayConnection();
                 }}
                 style={{
                   background: 'rgba(255, 255, 255, 0.08)',
@@ -2590,6 +2583,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                     >
                       <span style={{ color: isDark ? '#c084fc' : '#9333ea', fontSize: 10 }}>✦</span>
                       <span>{msg.model || selectedModel}</span>
+                      {msg.provider && <span style={{ opacity: 0.7 }}>via {msg.provider}{msg.fallbackFrom ? ` ? fallback from ${msg.fallbackFrom}` : ''}</span>}
                       {msg.latencyMs ? (
                         <>
                           <span style={{ opacity: 0.45 }}>·</span>
@@ -3053,9 +3047,9 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
 
         {/* Send Button */}
         <button
-          onClick={() => handleSendMessage()}
-          disabled={(!input.trim() && attachments.length === 0) || isLoading}
-          aria-label="Send message"
+          onClick={() => isLoading ? activeRequestRef.current?.abort() : handleSendMessage()}
+          disabled={!isLoading && !input.trim() && attachments.length === 0}
+          aria-label={isLoading ? 'Stop response' : 'Send message'}
           style={{
             width: 36,
             height: 36,
@@ -3080,7 +3074,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                 : 'none',
           }}
         >
-          <Send style={{ width: 15, height: 15 }} />
+          {isLoading ? <Square style={{ width: 14, height: 14 }} /> : <Send style={{ width: 15, height: 15 }} />}
         </button>
       </footer>
         </div>

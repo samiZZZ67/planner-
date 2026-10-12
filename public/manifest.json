@@ -1,7 +1,7 @@
 {
   "name": "Sam'Space",
   "short_name": "Sam'Space",
-  "description": "Intentional evening daily planner with offline-first sync and YouTube Studio style analytics.",
+  "description": "Sam'Space - Personal productivity and workspace with offline-first sync and analytics.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#090a10",

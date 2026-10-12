@@ -71,10 +71,10 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Optional folder parameter
-    const folder = (formData.get('folder') as string) || 'nightplanner/uploads';
+    const folder = (formData.get('folder') as string) || 'samsspace/uploads';
     const customTags = formData.get('tags')
       ? String(formData.get('tags')).split(',').map(t => t.trim())
-      : ['nightplanner'];
+      : ['samsspace'];
 
     // 6. Upload directly to Cloudinary using appropriate resource type
     const uploadResult = await uploadBufferToCloudinary(buffer, {

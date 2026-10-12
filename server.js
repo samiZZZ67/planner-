@@ -106,7 +106,7 @@ app.prepare().then(() => {
 
   server.listen(port, hostname, (err) => {
     if (err) throw err;
-    console.log(`> Night Planner server ready on http://${hostname}:${port}`);
+    console.log(`> Sam'Space server ready on http://${hostname}:${port}`);
     console.log(`> Environment: ${process.env.NODE_ENV || 'production'}`);
     if (process.env.CLIENT_URL) {
       console.log(`> CORS & Socket.IO allowed origins: ${process.env.CLIENT_URL}`);

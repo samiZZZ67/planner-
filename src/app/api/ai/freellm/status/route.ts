@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { checkGatewayStatus, getGatewayConfig, POPULAR_FREE_MODELS } from '@/lib/server/freellm/gateway';
 import { getActiveGeminiKey, getActiveGroqKey } from '@/lib/server/freellm/multimodal';
-import { VERIFIED_FREE_MODELS } from '@/lib/server/freellm/catalog';
 
 function corsHeaders() {
   return {
@@ -18,13 +17,9 @@ export async function OPTIONS() {
   });
 }
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(req.url);
-    const customUrl = searchParams.get('url') || undefined;
-    const customKey = searchParams.get('apiKey') || undefined;
-
-    const status = await checkGatewayStatus(customUrl, customKey);
+    const status = await checkGatewayStatus();
 
     const hasVision = Boolean(getActiveGeminiKey());
     const hasTranscription = Boolean(getActiveGroqKey());
@@ -34,7 +29,7 @@ export async function GET(req: NextRequest) {
         ok: true,
         ...status,
         popularModels: POPULAR_FREE_MODELS,
-        totalModelsAvailable: status.catalog?.length || VERIFIED_FREE_MODELS.length,
+        totalModelsAvailable: status.catalog?.length ?? 0,
         defaultGatewayUrl: getGatewayConfig().baseUrl,
         capabilities: {
           chat: true,
@@ -57,10 +52,10 @@ export async function GET(req: NextRequest) {
         ok: false,
         online: false,
         error: err.message || 'Status check failed',
-        models: VERIFIED_FREE_MODELS.map(m => m.id),
-        catalog: VERIFIED_FREE_MODELS,
+        models: [],
+        catalog: [],
         popularModels: POPULAR_FREE_MODELS,
-        totalModelsAvailable: VERIFIED_FREE_MODELS.length,
+        totalModelsAvailable: 0,
         capabilities: {
           chat: true,
           vision: true,
@@ -72,7 +67,7 @@ export async function GET(req: NextRequest) {
         },
       },
       {
-        status: 200, // Return 200 so frontend can still gracefully use the catalog
+        status: 200, // Return JSON status so the frontend can preserve its current catalog
         headers: corsHeaders(),
       }
     );

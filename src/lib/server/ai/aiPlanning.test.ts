@@ -500,7 +500,7 @@ describe('AI Planning & Hierarchy Test Suite', () => {
     });
   });
 
-  describe('6. Live Website Copilot & Natural Language Actions Protocol', () => {
+  describe("6. Live Sam's AI & Natural Language Actions Protocol", () => {
     const mockContext = {
       currentDate: '2026-10-10',
       focusBudgetHours: 8,

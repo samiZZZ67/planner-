@@ -1,6 +1,6 @@
-# Night Planner — Render Deployment & Cross-Device Guide
+# Sam'Space — Render Deployment & Cross-Device Guide
 
-This guide walks you through deploying the **Night Planner** backend and fullstack application to **Render**, connecting it with **Neon Serverless Postgres (SSL)**, and setting up instant real-time synchronization between your **PC** and **Phone**.
+This guide walks you through deploying the **Sam'Space** backend and fullstack application to **Render**, connecting it with **Neon Serverless Postgres (SSL)**, and setting up instant real-time synchronization between your **PC** and **Phone**.
 
 ---
 
@@ -26,7 +26,7 @@ When creating a new **Web Service** on [Render](https://render.com), use the fol
 
 | Setting | Value | Notes |
 | :--- | :--- | :--- |
-| **Name** | `night-planner-backend` (or your choice) | Used in your public `.onrender.com` URL |
+| **Name** | `sams-space-backend` (or your choice) | Used in your public `.onrender.com` URL |
 | **Region** | Choose the region closest to you | e.g. `Frankfurt (EU)`, `Ohio (US East)` |
 | **Branch** | `main` (or your active branch) | Automatic deploys on git push |
 | **Root Directory** | `.` | Root of the repository |
@@ -49,7 +49,10 @@ Add the following environment variables in your Render Web Service dashboard und
 | `APP_PASSWORD` | **Yes** | `MySecurePlanner2026!` | The master password to log into cloud sync and use AI planning. |
 | `SESSION_SECRET` | **Yes** | `7f8a9b2c3d4e5f6a1b2c3d4e5f6a7b8c` | Random string (32+ chars) for HMAC signing session tokens. |
 | `CLIENT_URL` | Optional | `https://your-planner.vercel.app,http://localhost:3000` | Allowed origin(s) for CORS and Socket.IO. Set if frontend is on Vercel. Defaults to `*` if empty. |
-| `NEXT_PUBLIC_API_URL` | Optional | `https://night-planner-backend.onrender.com` | Public URL of this backend. Used if frontend is separated or pointing to Render. |
+| `NEXT_PUBLIC_API_URL` | Optional | `https://sams-space-backend.onrender.com` | Public URL of this backend. Used if frontend is separated or pointing to Render. |
+| `FREE_LLM_API_URL` | Optional | `https://free-llm-api-7fue.onrender.com/v1` | OpenAI-compatible FreeLLM gateway base URL, including `/v1`; moon assistant only. |
+| `FREE_LLM_API_KEY` | Required for gateway chat | (secret) | FreeLLM gateway unified API key. Set on Sam'Space backend only; never in browser storage. `RELAY_TOKEN` is not this key. |
+| `FREE_LLM_MODEL` | Optional | `auto` | Default gateway model. |
 | `GEMINI_API_KEY_1` | Optional | `AIzaSy...` | Primary Google Gemini API key for AI assistant & day planner. |
 | `GEMINI_API_KEY_2` | Optional | `AIzaSy...` | Secondary Gemini API key (automatic fallback). |
 | `GEMINI_API_KEY_3` | Optional | `AIzaSy...` | Tertiary Gemini API key. |
@@ -65,8 +68,8 @@ You have two simple ways to deploy:
 
 ### Option A: All-in-One on Render (Recommended & Easiest)
 Deploy both the frontend UI and backend API together on Render as a single Web Service.
-1. Render hosts the UI at `https://night-planner.onrender.com`.
-2. Both PC and Phone visit `https://night-planner.onrender.com`.
+1. Render hosts the UI at `https://sams-space.onrender.com`.
+2. Both PC and Phone visit `https://sams-space.onrender.com`.
 3. Zero CORS configuration needed because frontend and backend share the exact same domain.
 
 ### Option B: Frontend on Vercel + Backend on Render
@@ -74,7 +77,7 @@ If you prefer hosting the Next.js frontend on Vercel and the backend on Render:
 1. **On Render (Backend)**:
    - Set `CLIENT_URL` = `https://your-planner.vercel.app`
 2. **On Vercel (Frontend)**:
-   - Set `NEXT_PUBLIC_API_URL` = `https://night-planner-backend.onrender.com`
+   - Set `NEXT_PUBLIC_API_URL` = `https://sams-space-backend.onrender.com`
    - Set `APP_PASSWORD` and `SESSION_SECRET` (matching Render).
 
 ---
@@ -82,7 +85,7 @@ If you prefer hosting the Next.js frontend on Vercel and the backend on Render:
 ## 5. Step-by-Step Deployment Instructions
 
 ### Step 1: Set Up Neon Postgres Cloud Database
-1. Go to [Neon](https://console.neon.tech/) and create a free project named `night-planner`.
+1. Go to [Neon](https://console.neon.tech/) and create a free project named `sams-space`.
 2. In the dashboard, click on **SQL Editor**.
 3. Open [`schema.sql`](./schema.sql) in this repository, copy its entire contents, and paste into Neon's SQL Editor.
 4. Click **Run** to generate the tables (`sections`, `tasks`, `time_logs`, `days`, `weekly_plans`, `monthly_plans`) and sequence `server_seq`.
@@ -100,7 +103,7 @@ git push origin main
 2. Click **New +** -> **Web Service**.
 3. Select your GitHub repository.
 4. Fill in the service configuration:
-   - **Name**: `night-planner-backend`
+   - **Name**: `sams-space-backend`
    - **Root Directory**: `.`
    - **Runtime**: `Node`
    - **Build Command**: `npm install && npm run build`
@@ -116,7 +119,7 @@ git push origin main
    - *(If using Vercel for frontend)*: `CLIENT_URL` = `https://your-planner.vercel.app`
 7. Click **Create Web Service**.
 8. Wait 2–3 minutes for the build and deployment to finish. Render will display:
-   `> Night Planner server ready on http://0.0.0.0:10000`
+   `> Sam'Space server ready on http://0.0.0.0:10000`
    `> Database configured (SSL enabled)`
 
 ---
@@ -126,13 +129,13 @@ git push origin main
 ### Test 1: Verify the Backend Health Check
 Open your browser or run in terminal:
 ```bash
-curl https://night-planner-backend.onrender.com/health
+curl https://sams-space-backend.onrender.com/health
 ```
 **Expected Response (HTTP 200)**:
 ```json
 {
   "status": "ok",
-  "service": "night-planner-backend",
+  "service": "sams-space-backend",
   "uptime": 12.4,
   "timestamp": "2026-10-10T08:50:00.000Z",
   "database": "connected (SSL Postgres)",
@@ -144,7 +147,7 @@ curl https://night-planner-backend.onrender.com/health
 
 ### Test 2: Test from your PC
 1. In your PC browser (Chrome/Edge/Firefox), open your deployed URL:
-   `https://night-planner-backend.onrender.com` (or your Vercel URL).
+   `https://sams-space-backend.onrender.com` (or your Vercel URL).
 2. Look at the top-right header:
    - If a **Cloud Sync (Lock)** icon appears, click it.
    - Enter your `APP_PASSWORD` and click **Sign In**.
@@ -158,7 +161,7 @@ curl https://night-planner-backend.onrender.com/health
 ### Test 3: Test from your Phone (Mobile Chrome / Safari)
 1. Turn on Wi-Fi or mobile cellular data on your phone.
 2. Open Safari (iOS) or Chrome (Android) and navigate to the same URL:
-   `https://night-planner-backend.onrender.com`
+   `https://sams-space-backend.onrender.com`
 3. Click the lock icon and enter the same `APP_PASSWORD`.
 4. **Result**: Your *"Test task from PC"* instantly loads onto your phone screen!
 5. **(Optional) Install as PWA**:
@@ -169,7 +172,7 @@ curl https://night-planner-backend.onrender.com/health
 ---
 
 ### Test 4: Real-Time Cross-Device Synchronization Test
-1. Place your PC monitor and Phone screen side-by-side with Night Planner open on both.
+1. Place your PC monitor and Phone screen side-by-side with Sam'Space open on both.
 2. **On your PC**:
    - Click the checkbox to complete *"Test task from PC"*.
    - Within 1–2 seconds, the task automatically marks completed on your phone via Socket.IO without touching the phone!
@@ -181,7 +184,7 @@ curl https://night-planner-backend.onrender.com/health
 
 ### Test 5: Offline-First Reliability Test
 1. Put your phone in **Airplane Mode** (disconnect Wi-Fi and mobile data).
-2. Open Night Planner on your phone. Notice that the entire UI, tasks, and notes continue to open and work 100% offline via local IndexedDB.
+2. Open Sam'Space on your phone. Notice that the entire UI, tasks, and notes continue to open and work 100% offline via local IndexedDB.
 3. Check off a task or add a note on the phone. The status indicator shows `Unsaved changes (offline)`.
 4. Turn Airplane Mode **OFF**.
 5. As soon as the phone reconnects to the internet, it automatically syncs all changes up to the Neon cloud database and notifies your PC!

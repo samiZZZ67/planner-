@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendChatCompletionWithFallback, ChatMessage } from '@/lib/server/freellm/gateway';
+import { openChatCompletionStream, sendChatCompletionWithFallback, ChatMessage } from '@/lib/server/freellm/gateway';
 import {
   isImageGenerationRequest,
   isVideoGenerationRequest,
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { messages, model, temperature, gatewayUrl, apiKey, mode, stream } = body;
+    const { messages, model, temperature, mode, stream } = body;
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -179,12 +179,46 @@ export async function POST(req: NextRequest) {
       };
     });
 
+    if (stream) {
+      try {
+        const body = await openChatCompletionStream({
+          messages: formattedMessages,
+          model: typeof model === 'string' && model.trim() ? model.trim() : 'auto',
+          temperature: typeof temperature === 'number' ? temperature : 0.7,
+        }, req.signal);
+        return new Response(body, {
+          status: 200,
+          headers: {
+            ...corsHeaders(),
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          },
+        });
+      } catch (streamError) {
+        if (req.signal.aborted) throw streamError;
+        const fallback = await sendChatCompletionWithFallback({
+          messages: formattedMessages,
+          model: typeof model === 'string' && model.trim() ? model.trim() : 'auto',
+          temperature: typeof temperature === 'number' ? temperature : 0.7,
+        });
+        return NextResponse.json({
+          ok: true,
+          message: { role: 'assistant', content: fallback.content },
+          model: fallback.model,
+          provider: fallback.providerUsed,
+          fallbackFrom: model || 'auto',
+          latencyMs: fallback.latencyMs,
+          tokensUsed: fallback.tokensUsed,
+        }, { headers: corsHeaders() });
+      }
+    }
+
     const result = await sendChatCompletionWithFallback({
       messages: formattedMessages,
       model: selectedModel,
       temperature: typeof temperature === 'number' ? temperature : 0.7,
-      customUrl: typeof gatewayUrl === 'string' && gatewayUrl.trim() ? gatewayUrl.trim() : undefined,
-      customKey: typeof apiKey === 'string' && apiKey.trim() ? apiKey.trim() : undefined,
       stream: Boolean(stream),
     });
 

@@ -92,7 +92,7 @@ export function extractActionsAndCleanText(rawText: string): { cleanText: string
         }
       }
     } catch (e) {
-      console.warn('[Copilot] Could not parse action JSON block:', e);
+      console.warn("[Sam's AI] Could not parse action JSON block:", e);
     }
   }
 

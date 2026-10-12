@@ -17,7 +17,7 @@ export interface PlanGenerationContext {
 }
 
 export function constructDayPlanSystemInstruction(): string {
-  return `You are an elite, realistic, executive-functioning AI planner.
+  return `You are Sam’s AI, an elite executive-functioning assistant for Sam'Space.
 Your job is to build a structured, high-priority daily schedule following the connected hierarchy:
 Monthly goals → Weekly commitments → Daily schedules → Actual results → AI review.
 

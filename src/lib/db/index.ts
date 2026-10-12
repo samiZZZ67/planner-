@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type { Section, Task, TimeLog, Day, DraftTask, ActiveTimer, WeeklyPlan, MonthlyPlan, AIConversation, AIMessageItem } from '@/types';
 
-export class NightPlannerDB extends Dexie {
+export class SamsSpaceDB extends Dexie {
   sections!: Table<Section, string>;
   tasks!: Table<Task, string>;
   timeLogs!: Table<TimeLog, string>;
@@ -13,6 +13,7 @@ export class NightPlannerDB extends Dexie {
   meta!: Table<{ key: string; value: any }, string>;
 
   constructor() {
+    // Retain underlying IndexedDB identifier to preserve user offline data
     super('NightPlannerDB');
     this.version(1).stores({
       sections: 'id, order, updatedAt, deleted, synced, isSample',
@@ -32,7 +33,8 @@ export class NightPlannerDB extends Dexie {
   }
 }
 
-export const db = new NightPlannerDB();
+export type NightPlannerDB = SamsSpaceDB;
+export const db = new SamsSpaceDB();
 
 // Initial Default Sections
 export const DEFAULT_SECTIONS: Omit<Section, 'id' | 'updatedAt' | 'synced' | 'deleted' | 'isSample'>[] = [

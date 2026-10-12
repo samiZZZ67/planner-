@@ -7,7 +7,7 @@ export async function GET() {
   return NextResponse.json(
     {
       status: 'ok',
-      service: 'night-planner-backend',
+      service: 'sams-space-backend',
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
       database: dbHealth.ok ? 'connected (SSL Postgres)' : `fallback (${dbHealth.message})`,

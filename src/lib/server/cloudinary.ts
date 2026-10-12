@@ -234,12 +234,12 @@ export async function uploadBufferToCloudinary(
   return new Promise((resolve, reject) => {
     const uploadStream = client.uploader.upload_stream(
       {
-        folder: options.folder || 'nightplanner/uploads',
+        folder: options.folder || 'samsspace/uploads',
         resource_type: options.resourceType,
         public_id: options.publicId,
         use_filename: true,
         unique_filename: true,
-        tags: options.tags || ['nightplanner'],
+        tags: options.tags || ['samsspace'],
       },
       (error, result) => {
         if (error || !result) {

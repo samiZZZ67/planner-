@@ -228,6 +228,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
     });
     syncEngine.notifyLocalMutation();
     if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('samsspace:task-updated', { detail: task }));
       window.dispatchEvent(new CustomEvent('nightplanner:task-updated', { detail: task }));
     }
     setEditingTaskId(null);
@@ -240,6 +241,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
     await db.tasks.update(taskId, { deleted: true, updatedAt: Date.now(), synced: 0 });
     syncEngine.notifyLocalMutation();
     if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('samsspace:task-deleted', { detail: taskId }));
       window.dispatchEvent(new CustomEvent('nightplanner:task-deleted', { detail: taskId }));
     }
     load();
@@ -264,6 +266,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
     });
     syncEngine.notifyLocalMutation();
     if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('samsspace:task-updated', { detail: { ...task, isCompleted: next } }));
       window.dispatchEvent(new CustomEvent('nightplanner:task-updated', { detail: { ...task, isCompleted: next } }));
     }
   };
@@ -300,6 +303,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
     await db.tasks.put(newTask);
     syncEngine.notifyLocalMutation();
     if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('samsspace:task-created', { detail: newTask }));
       window.dispatchEvent(new CustomEvent('nightplanner:task-created', { detail: newTask }));
     }
     setNewTaskTitle('');

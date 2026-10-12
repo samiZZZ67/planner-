@@ -1,4 +1,4 @@
-const CACHE_NAME = 'night-planner-v1.2.0';
+const CACHE_NAME = 'sams-space-v2.0.0';
 
 const PRECACHE_ASSETS = [
   '/',

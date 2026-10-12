@@ -1,8 +1,8 @@
-# 🌙 Night Planner
+# 🌌 Sam'Space
 
-A personal, offline-first evening planning progressive web app (PWA) built with **Next.js (App Router)**, **React 19**, **TypeScript**, **Tailwind CSS**, **Dexie (IndexedDB)**, and **Neon Postgres**.
+A personal, offline-first productivity and workspace progressive web app (PWA) built with **Next.js (App Router)**, **React 19**, **TypeScript**, **Tailwind CSS**, **Dexie (IndexedDB)**, and **Neon Postgres**.
 
-Designed for intentional evening planning: forces you to articulate **what** you will do, **how** you will do it (Strategy), **how long** it will take, and **how you will know it is finished** (Done means). Tracks your real time with clock-accurate timers and presents your execution analytics inspired by **YouTube Studio**.
+Designed for daily planning: forces you to articulate **what** you will do, **how** you will do it (Strategy), **how long** it will take, and **how you will know it is finished** (Done means). Tracks your real time with clock-accurate timers and presents your execution analytics inspired by **YouTube Studio**.
 
 ---
 
@@ -148,7 +148,7 @@ Runs the 7 automated unit tests covering:
 - **Chrome (Android)**: Open your deployed URL $\rightarrow$ Tap the three dots $\rightarrow$ Tap **Install App** (or **Add to Home screen**).
 
 ### On PC (Chrome / Edge / Brave)
-- Look for the **Install Night Planner** icon on the right side of the address bar, or open browser settings $\rightarrow$ **Install Night Planner**.
+- Look for the **Install Sam'Space** icon on the right side of the address bar, or open browser settings $\rightarrow$ **Install Sam'Space**.
 - The app will run in its own standalone, distraction-free window.
 
 ---

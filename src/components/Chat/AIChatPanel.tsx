@@ -93,7 +93,7 @@ You can ask me live questions like:
 - *"Summarize my progress this week"*
 - *"Explain how offline synchronization works"*
 
-Or command me to manage your planner:
+Or command me to manage your workspace:
 - *"Add a task called Study Python under Learning for two hours"*
 - *"Update my task from 2 PM to 4 PM"*
 - *"Start the timer for 45 minutes"*
@@ -373,7 +373,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
     };
   }, []);
 
-  // ── Gather Live Context for Website Copilot ──
+  // ── Gather Live Context for Sam's AI ──
   const gatherFullContext = async () => {
     const monthId = currentDate.slice(0, 7);
     const [todayTasks, allTasks, sections, dayRecord, activeTimer, timeLogsToday, allWeeks, monthlyPlan] = await Promise.all([
@@ -473,6 +473,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
           await db.tasks.put({ ...saved, synced: 1 });
           syncEngine.notifyLocalMutation();
           if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('samsspace:task-created', { detail: saved }));
             window.dispatchEvent(new CustomEvent('nightplanner:task-created', { detail: saved }));
           }
           const matchedSec = sections.find(s => s.id === saved.sectionId);
@@ -525,6 +526,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
         await db.tasks.put(newTask);
         syncEngine.notifyLocalMutation();
         if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('samsspace:task-created', { detail: newTask }));
           window.dispatchEvent(new CustomEvent('nightplanner:task-created', { detail: newTask }));
         }
 
@@ -553,6 +555,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
           await db.tasks.put({ ...saved, synced: 1 });
           syncEngine.notifyLocalMutation();
           if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('samsspace:task-updated', { detail: saved }));
             window.dispatchEvent(new CustomEvent('nightplanner:task-updated', { detail: saved }));
           }
           return {
@@ -607,6 +610,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
         await db.tasks.put(targetTask);
         syncEngine.notifyLocalMutation();
         if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('samsspace:task-updated', { detail: targetTask }));
           window.dispatchEvent(new CustomEvent('nightplanner:task-updated', { detail: targetTask }));
         }
 
@@ -648,6 +652,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
         await db.tasks.put(targetTask);
         syncEngine.notifyLocalMutation();
         if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('samsspace:task-deleted', { detail: targetTask.id }));
           window.dispatchEvent(new CustomEvent('nightplanner:task-deleted', { detail: targetTask.id }));
         }
 
@@ -698,14 +703,14 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
 
       if (action.type === 'start_timer' || action.type === 'pause_timer' || action.type === 'stop_timer') {
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('nightplanner:timer-action', {
-            detail: {
-              action: action.type === 'start_timer' ? 'start' : action.type === 'pause_timer' ? 'pause' : 'stop',
-              taskId: action.params?.taskId,
-              taskTitle: action.params?.taskTitle,
-              minutes: action.params?.minutes || 25,
-            },
-          }));
+          const timerDetail = {
+            action: action.type === 'start_timer' ? 'start' : action.type === 'pause_timer' ? 'pause' : 'stop',
+            taskId: action.params?.taskId,
+            taskTitle: action.params?.taskTitle,
+            minutes: action.params?.minutes || 25,
+          };
+          window.dispatchEvent(new CustomEvent('samsspace:timer-action', { detail: timerDetail }));
+          window.dispatchEvent(new CustomEvent('nightplanner:timer-action', { detail: timerDetail }));
         }
         return {
           id: action.id,
@@ -723,6 +728,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
       if (action.type === 'navigate') {
         const tab = action.params?.tab || 'todo';
         if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('samsspace:navigate', { detail: { tab } }));
           window.dispatchEvent(new CustomEvent('nightplanner:navigate', { detail: { tab } }));
         }
         return {
@@ -798,6 +804,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
         }
         syncEngine.notifyLocalMutation();
         if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('samsspace:tasks-bulk-deleted', { detail: { date: targetDate } }));
           window.dispatchEvent(new CustomEvent('nightplanner:tasks-bulk-deleted', { detail: { date: targetDate } }));
         }
         updateActionReceipt(actionReceipt.id, 'success', `Deleted all ${tasksToDelete.length} tasks scheduled for ${targetDate}.`);
@@ -819,6 +826,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
       await db.tasks.put(targetTask);
       syncEngine.notifyLocalMutation();
       if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('samsspace:task-deleted', { detail: targetTask.id }));
         window.dispatchEvent(new CustomEvent('nightplanner:task-deleted', { detail: targetTask.id }));
       }
 
@@ -1517,12 +1525,12 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                   <span className="font-bloody" style={{ fontSize: 16, fontWeight: 700, letterSpacing: '0.02em' }}>
                     Sam’s AI
                   </span>
-                  <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.3)', color: '#38bdf8', fontWeight: 600 }}>
-                    Copilot
+                  <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#c084fc', fontWeight: 600 }}>
+                    AI
                   </span>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  Full Planner Access · {activeProviderName}
+                  Sam'Space · {activeProviderName}
                 </div>
               </div>
             </div>
@@ -1869,7 +1877,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                     animation: 'spin 0.8s linear infinite',
                   }}
                 />
-                <span className="font-system">Sam’s AI is analyzing your planner data…</span>
+                <span className="font-system">Sam’s AI is analyzing your workspace data…</span>
               </div>
             )}
 
