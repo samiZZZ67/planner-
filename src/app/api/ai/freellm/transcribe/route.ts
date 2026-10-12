@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { transcribeAudioWithGroq } from '@/lib/server/freellm/multimodal';
 
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-api-key',
+  };
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(),
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get('content-type') || '';
@@ -13,7 +28,10 @@ export async function POST(req: NextRequest) {
       const formData = await req.formData();
       const file = formData.get('file') as File | null;
       if (!file) {
-        return NextResponse.json({ ok: false, error: 'No audio file provided in form data.' }, { status: 400 });
+        return NextResponse.json(
+          { ok: false, error: 'No audio file provided in form data.' },
+          { status: 400, headers: corsHeaders() }
+        );
       }
       filename = file.name || 'recording.webm';
       mimeType = file.type || 'audio/webm';
@@ -24,7 +42,7 @@ export async function POST(req: NextRequest) {
       if (!body?.audioBase64) {
         return NextResponse.json(
           { ok: false, error: 'audioBase64 string or multipart form data is required.' },
-          { status: 400 }
+          { status: 400, headers: corsHeaders() }
         );
       }
       let base64 = body.audioBase64;
@@ -39,17 +57,23 @@ export async function POST(req: NextRequest) {
     }
 
     if (!audioBuffer || audioBuffer.length === 0) {
-      return NextResponse.json({ ok: false, error: 'Empty audio data received.' }, { status: 400 });
+      return NextResponse.json(
+        { ok: false, error: 'Empty audio data received.' },
+        { status: 400, headers: corsHeaders() }
+      );
     }
 
     const transcribedText = await transcribeAudioWithGroq(audioBuffer, filename, mimeType);
 
-    return NextResponse.json({
-      ok: true,
-      text: transcribedText,
-      model: 'whisper-large-v3-turbo',
-      provider: 'Groq Cloud Whisper',
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        text: transcribedText,
+        model: 'whisper-large-v3-turbo',
+        provider: 'Groq Cloud Whisper',
+      },
+      { headers: corsHeaders() }
+    );
   } catch (err: any) {
     console.error('[Transcribe Route] Error:', err);
     return NextResponse.json(
@@ -57,7 +81,7 @@ export async function POST(req: NextRequest) {
         ok: false,
         error: err.message || 'Audio transcription failed.',
       },
-      { status: 500 }
+      { status: 500, headers: corsHeaders() }
     );
   }
 }

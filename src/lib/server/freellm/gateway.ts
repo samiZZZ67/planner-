@@ -1,3 +1,10 @@
+import {
+  CatalogModel,
+  VERIFIED_FREE_MODELS,
+  mergeDiscoveredModels,
+  getModelById,
+} from './catalog';
+
 export interface FreeLLMGatewayConfig {
   baseUrl: string;
   apiKey?: string;
@@ -7,6 +14,7 @@ export interface FreeLLMGatewayConfig {
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+  attachments?: any[];
 }
 
 export interface SendChatOptions {
@@ -15,6 +23,7 @@ export interface SendChatOptions {
   temperature?: number;
   customUrl?: string;
   customKey?: string;
+  stream?: boolean;
 }
 
 export interface ChatCompletionResult {
@@ -34,22 +43,18 @@ export interface GatewayStatusResult {
   gatewayUrl: string;
   latencyMs?: number;
   models: string[];
+  catalog: CatalogModel[];
   error?: string;
+  fallbackReady: boolean;
 }
 
 /**
  * Standard recommended models supported across FreeLLMAPI providers
  */
-export const POPULAR_FREE_MODELS = [
-  { id: 'auto', name: 'Auto (Fastest Free Model)' },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Google)' },
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Google)' },
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (Groq)' },
-  { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 70B (Groq)' },
-  { id: 'mistral-small-latest', name: 'Mistral Small (Mistral AI)' },
-  { id: 'cerebras-llama3.3-70b', name: 'Llama 3.3 70B (Cerebras Ultra-Fast)' },
-  { id: 'qwen-2.5-72b-instruct', name: 'Qwen 2.5 72B' },
-];
+export const POPULAR_FREE_MODELS = VERIFIED_FREE_MODELS.filter(m => m.isPopular).map(m => ({
+  id: m.id,
+  name: m.name,
+}));
 
 /**
  * Get server-configured FreeLLMAPI Gateway settings
@@ -105,7 +110,7 @@ export function resolveModelsUrl(baseUrl: string): string {
 }
 
 /**
- * Check if the FreeLLMAPI Gateway is online and reachable
+ * Check if the FreeLLMAPI Gateway is online and retrieve all available models dynamically
  */
 export async function checkGatewayStatus(
   customUrl?: string,
@@ -119,15 +124,24 @@ export async function checkGatewayStatus(
   const startTime = Date.now();
 
   const headers: Record<string, string> = {
-    'Accept': 'application/json',
+    Accept: 'application/json',
   };
   if (apiKey) {
     headers['Authorization'] = `Bearer ${apiKey}`;
+    headers['Fetch-Relay-Authorization'] = `Bearer ${apiKey}`;
   }
+
+  const hasFallback = Boolean(
+    process.env.GROQ_API_KEY_1 ||
+    process.env.GROQ_API_KEY ||
+    process.env.GEMINI_API_KEY_1 ||
+    process.env.GEMINI_API_KEY
+  );
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000); // 6s timeout
+    // 12s timeout to accommodate cold starts on free cloud hosting
+    const timeout = setTimeout(() => controller.abort(), 12000);
 
     const res = await fetch(modelsUrl, {
       method: 'GET',
@@ -138,34 +152,36 @@ export async function checkGatewayStatus(
     const latencyMs = Date.now() - startTime;
 
     if (!res.ok) {
-      // Some gateways might require auth or return non-200 for models, test root or health
+      const errText = await res.text().catch(() => '');
       return {
         online: false,
         gatewayUrl: targetBaseUrl,
         latencyMs,
-        models: POPULAR_FREE_MODELS.map(m => m.id),
-        error: `Gateway returned HTTP ${res.status}: ${res.statusText}`,
+        models: VERIFIED_FREE_MODELS.map(m => m.id),
+        catalog: VERIFIED_FREE_MODELS,
+        fallbackReady: hasFallback,
+        error: `Gateway HTTP ${res.status}: ${res.statusText} (${errText.slice(0, 100) || 'Auth or service warming up'})`,
       };
     }
 
     const data = await res.json().catch(() => null);
-    let models: string[] = [];
+    let rawModels: any[] = [];
 
     if (data && Array.isArray(data.data)) {
-      models = data.data.map((item: any) => item.id || item.name).filter(Boolean);
+      rawModels = data.data;
     } else if (data && Array.isArray(data.models)) {
-      models = data.models.map((item: any) => item.id || item.name || String(item)).filter(Boolean);
+      rawModels = data.models;
     }
 
-    if (models.length === 0) {
-      models = POPULAR_FREE_MODELS.map(m => m.id);
-    }
+    const fullCatalog = mergeDiscoveredModels(rawModels);
 
     return {
       online: true,
       gatewayUrl: targetBaseUrl,
       latencyMs,
-      models,
+      models: fullCatalog.map(m => m.id),
+      catalog: fullCatalog,
+      fallbackReady: hasFallback,
     };
   } catch (err: any) {
     const latencyMs = Date.now() - startTime;
@@ -173,8 +189,13 @@ export async function checkGatewayStatus(
       online: false,
       gatewayUrl: targetBaseUrl,
       latencyMs,
-      models: POPULAR_FREE_MODELS.map(m => m.id),
-      error: err.name === 'AbortError' ? 'Connection timed out after 6 seconds.' : (err.message || 'Gateway unreachable'),
+      models: VERIFIED_FREE_MODELS.map(m => m.id),
+      catalog: VERIFIED_FREE_MODELS,
+      fallbackReady: hasFallback,
+      error:
+        err.name === 'AbortError'
+          ? 'Gateway check timed out after 12s (service may be waking up on Render).'
+          : err.message || 'Gateway unreachable',
     };
   }
 }
@@ -195,10 +216,11 @@ export async function sendChatCompletion(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    Accept: 'application/json',
   };
   if (apiKey) {
     headers['Authorization'] = `Bearer ${apiKey}`;
+    headers['Fetch-Relay-Authorization'] = `Bearer ${apiKey}`;
   }
 
   const payload = {
@@ -209,7 +231,8 @@ export async function sendChatCompletion(
   };
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000); // 60s timeout for large completions
+  // 50s timeout for complex inference
+  const timeout = setTimeout(() => controller.abort(), 50000);
 
   try {
     const res = await fetch(endpoint, {
@@ -259,82 +282,57 @@ export async function sendChatCompletion(
     };
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      throw new Error(`FreeLLMAPI Gateway request timed out after 60 seconds (${endpoint}).`);
+      throw new Error(`FreeLLMAPI Gateway request timed out after 50 seconds (${endpoint}).`);
     }
     throw err;
   }
 }
 
 /**
- * Executes chat completion with graceful fallback to Groq or Gemini if FreeLLM gateway fails or returns 401
+ * Executes chat completion with capability-aware, intelligent failover to Groq or Gemini
+ * when the external gateway is cold-starting or returning auth/network errors.
  */
 export async function sendChatCompletionWithFallback(
   options: SendChatOptions
 ): Promise<ChatCompletionResult & { providerUsed: string }> {
+  const requestedModel = options.model || 'auto';
+  const modelInfo = getModelById(requestedModel);
+
+  // 1. Try FreeLLM Gateway first
   try {
     const result = await sendChatCompletion(options);
     return { ...result, providerUsed: 'FreeLLMAPI Gateway' };
   } catch (gatewayErr: any) {
-    console.warn(`[FreeLLM Gateway] Request failed (${gatewayErr.message}). Attempting resilient fallback...`);
+    console.warn(`[FreeLLM Gateway] Request failed (${gatewayErr.message}). Attempting capability-aware fallback...`);
 
-    // 1. Try Groq (Llama 3.3 70B)
     const groqKey =
       process.env.GROQ_API_KEY_1 ||
       process.env.GROQ_API_KEY_2 ||
       process.env.GROQ_API_KEY_3 ||
       process.env.GROQ_API_KEY;
 
-    if (groqKey && groqKey.trim().length > 10) {
-      try {
-        const startTime = Date.now();
-        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${groqKey.trim()}`,
-          },
-          body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: options.messages,
-            temperature: options.temperature ?? 0.7,
-          }),
-        });
-
-        if (groqRes.ok) {
-          const data = await groqRes.json();
-          const content = data.choices?.[0]?.message?.content || '';
-          if (content) {
-            return {
-              content,
-              model: 'llama-3.3-70b-versatile (Groq Resilient Fallback)',
-              latencyMs: Date.now() - startTime,
-              tokensUsed: {
-                promptTokens: data.usage?.prompt_tokens,
-                completionTokens: data.usage?.completion_tokens,
-                totalTokens: data.usage?.total_tokens,
-              },
-              providerUsed: 'Groq Cloud (Fallback)',
-            };
-          }
-        }
-      } catch (fallbackErr) {
-        console.warn('[FreeLLM Fallback] Groq attempt failed:', fallbackErr);
-      }
-    }
-
-    // 2. Try Google Gemini (Gemini 2.5 Flash)
     const geminiKey =
       process.env.GEMINI_API_KEY_1 ||
       process.env.GEMINI_API_KEY_2 ||
       process.env.GEMINI_API_KEY_3 ||
       process.env.GEMINI_API_KEY;
 
-    if (geminiKey && geminiKey.trim().length > 10) {
+    const isGoogleTarget =
+      modelInfo?.provider === 'Google' ||
+      /gemini|gemma/i.test(requestedModel);
+
+    // 2. Route directly to Google Gemini if requested model is Gemini/Google
+    if (geminiKey && geminiKey.trim().length > 10 && (isGoogleTarget || !groqKey)) {
       try {
         const startTime = Date.now();
         const cleanKey = geminiKey.trim();
+        const targetGeminiModel =
+          requestedModel.startsWith('gemini-') && !requestedModel.includes('preview')
+            ? requestedModel
+            : 'gemini-2.5-flash';
+
         const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(cleanKey)}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetGeminiModel)}:generateContent?key=${encodeURIComponent(cleanKey)}`,
           {
             method: 'POST',
             headers: {
@@ -368,14 +366,14 @@ export async function sendChatCompletionWithFallback(
           if (content) {
             return {
               content,
-              model: 'gemini-2.5-flash (Google Resilient Fallback)',
+              model: `${targetGeminiModel} (Google Direct Fallback)`,
               latencyMs: Date.now() - startTime,
               tokensUsed: {
                 promptTokens: data.usageMetadata?.promptTokenCount,
                 completionTokens: data.usageMetadata?.candidatesTokenCount,
                 totalTokens: data.usageMetadata?.totalTokenCount,
               },
-              providerUsed: 'Google Gemini (Fallback)',
+              providerUsed: 'Google AI Studio (Direct Fallback)',
             };
           }
         }
@@ -384,8 +382,120 @@ export async function sendChatCompletionWithFallback(
       }
     }
 
-    // If both fallbacks fail or unavailable, rethrow original gateway error
+    // 3. Route to Groq Cloud (Ultra-Fast)
+    if (groqKey && groqKey.trim().length > 10) {
+      try {
+        const startTime = Date.now();
+        const groqSupportedModels = [
+          'llama-3.3-70b-versatile',
+          'llama-3.1-8b-instant',
+          'deepseek-r1-distill-llama-70b',
+          'openai/gpt-oss-20b',
+          'openai/gpt-oss-120b',
+          'qwen/qwen3.8-27b',
+          'allam-2-7b',
+          'mixtral-8x7b-32768',
+        ];
+
+        const targetGroqModel = groqSupportedModels.includes(requestedModel)
+          ? requestedModel
+          : 'llama-3.3-70b-versatile';
+
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${groqKey.trim()}`,
+          },
+          body: JSON.stringify({
+            model: targetGroqModel,
+            messages: options.messages.map(m => ({
+              role: m.role === 'assistant' ? 'assistant' : m.role === 'system' ? 'system' : 'user',
+              content: m.content,
+            })),
+            temperature: options.temperature ?? 0.7,
+          }),
+        });
+
+        if (groqRes.ok) {
+          const data = await groqRes.json();
+          const content = data.choices?.[0]?.message?.content || '';
+          if (content) {
+            return {
+              content,
+              model: `${targetGroqModel} (Groq Ultra-Fast Fallback)`,
+              latencyMs: Date.now() - startTime,
+              tokensUsed: {
+                promptTokens: data.usage?.prompt_tokens,
+                completionTokens: data.usage?.completion_tokens,
+                totalTokens: data.usage?.total_tokens,
+              },
+              providerUsed: 'Groq Cloud (Fallback)',
+            };
+          }
+        }
+      } catch (groqErr) {
+        console.warn('[FreeLLM Fallback] Groq attempt failed:', groqErr);
+      }
+    }
+
+    // 4. Second pass with Gemini if Groq was tried first but failed
+    if (geminiKey && geminiKey.trim().length > 10 && !isGoogleTarget) {
+      try {
+        const startTime = Date.now();
+        const cleanKey = geminiKey.trim();
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(cleanKey)}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': cleanKey,
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    {
+                      text: options.messages
+                        .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+                        .join('\n\n'),
+                    },
+                  ],
+                },
+              ],
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 2500,
+              },
+            }),
+          }
+        );
+
+        if (geminiRes.ok) {
+          const data = await geminiRes.json();
+          const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (content) {
+            return {
+              content,
+              model: 'gemini-2.5-flash (Google Direct Fallback)',
+              latencyMs: Date.now() - startTime,
+              tokensUsed: {
+                promptTokens: data.usageMetadata?.promptTokenCount,
+                completionTokens: data.usageMetadata?.candidatesTokenCount,
+                totalTokens: data.usageMetadata?.totalTokenCount,
+              },
+              providerUsed: 'Google AI Studio (Fallback)',
+            };
+          }
+        }
+      } catch (geminiErr2) {
+        console.warn('[FreeLLM Fallback] Final Gemini attempt failed:', geminiErr2);
+      }
+    }
+
+    // If all providers and fallbacks fail, rethrow original error
     throw gatewayErr;
   }
 }
-

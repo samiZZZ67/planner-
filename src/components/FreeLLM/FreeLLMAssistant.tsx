@@ -29,8 +29,20 @@ import {
   Headphones,
   Radio,
   Sparkle,
+  Search,
+  Filter,
+  Zap,
+  Code,
+  Brain,
+  Info,
+  RotateCcw,
 } from 'lucide-react';
-import { POPULAR_FREE_MODELS } from '@/lib/server/freellm/gateway';
+import {
+  CatalogModel,
+  VERIFIED_FREE_MODELS,
+  mergeDiscoveredModels,
+  ModelCapability,
+} from '@/lib/freellm/catalog';
 
 export interface AttachmentItem {
   id: string;
@@ -73,6 +85,31 @@ const STARTER_PROMPTS = [
   '🎙️ Start voice conversation mode',
   'Compare Gemini 2.5 Flash vs Llama 3.3 70B',
 ];
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 60000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return res;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function formatFetchError(err: any): string {
+  if (err?.name === 'AbortError') {
+    return '⏱️ Request timed out (60s). The FreeLLM API or Render service may still be booting up (free tier cold start). Please click Retry in a few moments.';
+  }
+  const msg = err?.message || String(err);
+  if (/failed to fetch/i.test(msg) || err instanceof TypeError) {
+    return '⚠️ Unable to reach the FreeLLM service endpoint ("Failed to fetch"). If your deployed backend on Render is waking up from sleep, it typically takes 30-50s. Please wait a moment and click Retry.';
+  }
+  return msg;
+}
 
 export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
   // ── 1. Assistant Visibility & Window States ──
@@ -124,9 +161,12 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
   const [gatewayOnline, setGatewayOnline] = useState<boolean | null>(null);
   const [gatewayLatency, setGatewayLatency] = useState<number | null>(null);
   const [gatewayError, setGatewayError] = useState<string | null>(null);
+  const [catalogModels, setCatalogModels] = useState<CatalogModel[]>(VERIFIED_FREE_MODELS);
   const [availableModels, setAvailableModels] = useState<string[]>(
-    POPULAR_FREE_MODELS.map(m => m.id)
+    VERIFIED_FREE_MODELS.map(m => m.id)
   );
+  const [modelSearch, setModelSearch] = useState<string>('');
+  const [showModelSearch, setShowModelSearch] = useState<boolean>(false);
   const [isTestingGateway, setIsTestingGateway] = useState(false);
 
   // ── Clamp position inside viewport ──
@@ -204,14 +244,19 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     setIsTestingGateway(true);
     setGatewayError(null);
     try {
-      const res = await fetch('/api/ai/freellm/status');
+      const res = await fetchWithTimeout('/api/ai/freellm/status', {}, 15000);
       const data = await res.json().catch(() => null);
 
       if (res.ok && data?.ok) {
         setGatewayOnline(Boolean(data.online));
         setGatewayLatency(data.latencyMs ?? null);
-        if (Array.isArray(data.models) && data.models.length > 0) {
-          setAvailableModels(data.models);
+        if (Array.isArray(data.catalog) && data.catalog.length > 0) {
+          setCatalogModels(data.catalog);
+          setAvailableModels(data.catalog.map((m: CatalogModel) => m.id));
+        } else if (Array.isArray(data.models) && data.models.length > 0) {
+          const merged = mergeDiscoveredModels(data.models);
+          setCatalogModels(merged);
+          setAvailableModels(merged.map(m => m.id));
         }
         if (data.error && !data.online) {
           setGatewayError(data.error);
@@ -224,7 +269,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
       }
     } catch (err: any) {
       setGatewayOnline(false);
-      setGatewayError(err.message || 'Could not connect to gateway endpoint.');
+      setGatewayError(formatFetchError(err));
     } finally {
       setIsTestingGateway(false);
     }
@@ -448,16 +493,18 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         formData.append('file', audioBlob, 'recording.webm');
 
         try {
-          const res = await fetch('/api/ai/freellm/transcribe', {
+          const res = await fetchWithTimeout('/api/ai/freellm/transcribe', {
             method: 'POST',
             body: formData,
-          });
-          const data = await res.json();
-          if (data.ok && data.text) {
+          }, 30000);
+          const data = await res.json().catch(() => null);
+          if (data?.ok && data?.text) {
             setInput(prev => (prev ? `${prev} ${data.text}` : data.text).trim());
+          } else if (data?.error) {
+            console.warn('[Transcription Warning]:', data.error);
           }
         } catch (err) {
-          console.error('Transcription error:', err);
+          console.error('Transcription error:', formatFetchError(err));
         } finally {
           setIsDictating(false);
         }
@@ -549,21 +596,25 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/ai/freellm/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: updated
-            .filter(m => m.id !== 'msg-greeting')
-            .map(m => ({
-              role: m.role,
-              content: m.content,
-              attachments: m.attachments,
-            })),
-          model: selectedModel || 'auto',
-          mode: mode || undefined,
-        }),
-      });
+      const response = await fetchWithTimeout(
+        '/api/ai/freellm/chat',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: updated
+              .filter(m => m.id !== 'msg-greeting')
+              .map(m => ({
+                role: m.role,
+                content: m.content,
+                attachments: m.attachments,
+              })),
+            model: selectedModel || 'auto',
+            mode: mode || undefined,
+          }),
+        },
+        60000
+      );
 
       const data = await response.json().catch(() => null);
 
@@ -595,16 +646,17 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         setVoiceModeStatus('speaking');
       }
     } catch (err: any) {
+      const friendlyError = formatFetchError(err);
       const errorMsg: FreeLLMMessage = {
         id: `err-${Date.now()}`,
         role: 'assistant',
-        content: `⚠️ **FreeLLM Notice:**\n${err.message || 'Failed to process request.'}`,
+        content: `⚠️ **FreeLLM Notice:**\n${friendlyError}`,
         timestamp: Date.now(),
         model: selectedModel,
       };
       updateMessages(prev => [...prev, errorMsg]);
       setGatewayOnline(false);
-      setGatewayError(err.message);
+      setGatewayError(friendlyError);
     } finally {
       setIsLoading(false);
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -943,47 +995,329 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '6px 16px',
+          flexDirection: 'column',
           background: 'rgba(255, 255, 255, 0.03)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-          fontSize: 12,
+          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
         }}
       >
-        <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Bot style={{ width: 13, height: 13, color: '#a855f7' }} />
-          Model:
-        </span>
-
-        <select
-          value={selectedModel}
-          onChange={e => handleModelChange(e.target.value)}
+        <div
           style={{
-            background: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            color: '#e2e8f0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '6px 14px',
             fontSize: 12,
-            borderRadius: 8,
-            padding: '3px 8px',
-            outline: 'none',
-            cursor: 'pointer',
-            maxWidth: '70%',
+            gap: 8,
           }}
         >
-          {POPULAR_FREE_MODELS.map(m => (
-            <option key={m.id} value={m.id} style={{ background: '#1e1b2e', color: '#fff' }}>
-              {m.name}
-            </option>
-          ))}
-          {availableModels
-            .filter(id => !POPULAR_FREE_MODELS.some(p => p.id === id))
-            .map(id => (
-              <option key={id} value={id} style={{ background: '#1e1b2e', color: '#fff' }}>
-                {id}
-              </option>
-            ))}
-        </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 64 }}>
+            <Bot style={{ width: 13, height: 13, color: '#a855f7' }} />
+            <span style={{ color: '#94a3b8', fontWeight: 500 }}>Model:</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, justifyContent: 'flex-end' }}>
+            {/* Search Toggle / Input */}
+            {showModelSearch ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, maxWidth: 220 }}>
+                <input
+                  type="text"
+                  value={modelSearch}
+                  onChange={e => setModelSearch(e.target.value)}
+                  placeholder="Filter 94+ models..."
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0, 0, 0, 0.35)',
+                    border: '1px solid rgba(168, 85, 247, 0.4)',
+                    color: '#fff',
+                    borderRadius: 6,
+                    padding: '2px 6px',
+                    fontSize: 11,
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    setShowModelSearch(false);
+                    setModelSearch('');
+                  }}
+                  title="Close search filter"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    padding: 2,
+                    display: 'flex',
+                  }}
+                >
+                  <X style={{ width: 12, height: 12 }} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowModelSearch(true)}
+                title="Search & filter 94+ free models"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: 6,
+                  padding: '3px 6px',
+                  color: '#94a3b8',
+                  fontSize: 10,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <Search style={{ width: 11, height: 11 }} />
+                <span>{catalogModels.length} models</span>
+              </button>
+            )}
+
+            <select
+              value={selectedModel}
+              onChange={e => handleModelChange(e.target.value)}
+              style={{
+                background: 'rgba(20, 16, 36, 0.95)',
+                border: '1px solid rgba(168, 85, 247, 0.35)',
+                color: '#f8fafc',
+                fontSize: 12,
+                borderRadius: 8,
+                padding: '3px 8px',
+                outline: 'none',
+                cursor: 'pointer',
+                maxWidth: isPhone ? '160px' : '260px',
+              }}
+            >
+              {modelSearch.trim() ? (
+                // Filtered search results
+                <optgroup label={`Search Matches (${catalogModels.filter(m => m.name.toLowerCase().includes(modelSearch.toLowerCase()) || m.id.toLowerCase().includes(modelSearch.toLowerCase()) || m.provider.toLowerCase().includes(modelSearch.toLowerCase())).length})`}>
+                  {catalogModels
+                    .filter(m =>
+                      m.name.toLowerCase().includes(modelSearch.toLowerCase()) ||
+                      m.id.toLowerCase().includes(modelSearch.toLowerCase()) ||
+                      m.provider.toLowerCase().includes(modelSearch.toLowerCase())
+                    )
+                    .map(m => (
+                      <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                        {m.name} ({m.provider})
+                      </option>
+                    ))}
+                </optgroup>
+              ) : (
+                // Grouped by Category & Capability
+                <>
+                  <optgroup label="⭐ Recommended & Auto Routers">
+                    {catalogModels
+                      .filter(m => m.isPopular)
+                      .map(m => (
+                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                          {m.name}
+                        </option>
+                      ))}
+                  </optgroup>
+
+                  <optgroup label="👁️ Vision & Multimodal">
+                    {catalogModels
+                      .filter(m => m.capabilities.includes('vision') && !m.isPopular)
+                      .map(m => (
+                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                          {m.name}
+                        </option>
+                      ))}
+                  </optgroup>
+
+                  <optgroup label="💻 Coding Specialists">
+                    {catalogModels
+                      .filter(m => m.capabilities.includes('code') && !m.isPopular && !m.capabilities.includes('vision'))
+                      .map(m => (
+                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                          {m.name}
+                        </option>
+                      ))}
+                  </optgroup>
+
+                  <optgroup label="🧠 Deep Reasoning & Math">
+                    {catalogModels
+                      .filter(m => m.capabilities.includes('reasoning') && !m.isPopular && !m.capabilities.includes('vision'))
+                      .map(m => (
+                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                          {m.name}
+                        </option>
+                      ))}
+                  </optgroup>
+
+                  <optgroup label="🎨 Image & Video Generation">
+                    {catalogModels
+                      .filter(m => (m.capabilities.includes('image_gen') || m.capabilities.includes('video_gen')) && !m.isPopular)
+                      .map(m => (
+                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                          {m.name}
+                        </option>
+                      ))}
+                  </optgroup>
+
+                  <optgroup label="⚡ Ultra-Fast LPUs & Wafer-Scale (Cerebras & Groq)">
+                    {catalogModels
+                      .filter(m => (m.provider === 'Cerebras' || m.provider === 'Groq') && !m.isPopular && !m.capabilities.includes('reasoning'))
+                      .map(m => (
+                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                          {m.name}
+                        </option>
+                      ))}
+                  </optgroup>
+
+                  <optgroup label="🌐 Google Gemini & Gemma">
+                    {catalogModels
+                      .filter(m => m.provider === 'Google' && !m.isPopular && !m.capabilities.includes('vision'))
+                      .map(m => (
+                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                          {m.name}
+                        </option>
+                      ))}
+                  </optgroup>
+
+                  <optgroup label="🌐 Mistral AI (European Open Weights)">
+                    {catalogModels
+                      .filter(m => m.provider === 'Mistral AI' && !m.isPopular && !m.capabilities.includes('vision') && !m.capabilities.includes('code'))
+                      .map(m => (
+                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                          {m.name}
+                        </option>
+                      ))}
+                  </optgroup>
+
+                  <optgroup label="🌐 OpenRouter Free Models">
+                    {catalogModels
+                      .filter(m => m.provider === 'OpenRouter' && !m.isPopular)
+                      .map(m => (
+                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                          {m.name}
+                        </option>
+                      ))}
+                  </optgroup>
+
+                  <optgroup label="🌐 Cohere, NVIDIA, Zhipu & Others">
+                    {catalogModels
+                      .filter(m => !['FreeLLM Router', 'Google', 'Groq', 'Cerebras', 'Mistral AI', 'OpenRouter'].includes(m.provider) && !m.isPopular && !m.capabilities.includes('image_gen') && !m.capabilities.includes('video_gen'))
+                      .map(m => (
+                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                          {m.name} ({m.provider})
+                        </option>
+                      ))}
+                  </optgroup>
+                </>
+              )}
+            </select>
+          </div>
+        </div>
+
+        {/* Active Model Capabilities & Routing Specs Bar */}
+        {(() => {
+          const activeModelObj =
+            catalogModels.find(m => m.id === selectedModel) ||
+            VERIFIED_FREE_MODELS.find(m => m.id === selectedModel);
+          const hasImageAttachment = attachments.some(a => a.type.startsWith('image/'));
+          const modelSupportsVision = activeModelObj?.capabilities.includes('vision') || selectedModel === 'auto';
+
+          return (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '3px 14px 5px',
+                background: 'rgba(0, 0, 0, 0.2)',
+                fontSize: 10,
+                color: '#94a3b8',
+                gap: 6,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: '#d8b4fe', fontWeight: 600 }}>
+                  {activeModelObj?.provider || 'FreeLLM Gateway'}
+                </span>
+                {activeModelObj?.contextWindow && (
+                  <span style={{ background: 'rgba(255, 255, 255, 0.08)', padding: '1px 5px', borderRadius: 4, fontSize: 9 }}>
+                    {activeModelObj.contextWindow >= 1000000
+                      ? `${Math.round(activeModelObj.contextWindow / 1000000)}M ctx`
+                      : `${Math.round(activeModelObj.contextWindow / 1000)}K ctx`}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {activeModelObj?.capabilities.map(cap => (
+                  <span
+                    key={cap}
+                    style={{
+                      fontSize: 9,
+                      padding: '1px 5px',
+                      borderRadius: 4,
+                      background:
+                        cap === 'vision'
+                          ? 'rgba(56, 189, 248, 0.2)'
+                          : cap === 'code'
+                          ? 'rgba(34, 197, 94, 0.2)'
+                          : cap === 'reasoning'
+                          ? 'rgba(234, 179, 8, 0.2)'
+                          : cap === 'image_gen'
+                          ? 'rgba(236, 72, 153, 0.2)'
+                          : cap === 'video_gen'
+                          ? 'rgba(244, 63, 94, 0.2)'
+                          : 'rgba(255, 255, 255, 0.06)',
+                      color:
+                        cap === 'vision'
+                          ? '#7dd3fc'
+                          : cap === 'code'
+                          ? '#86efac'
+                          : cap === 'reasoning'
+                          ? '#fde047'
+                          : cap === 'image_gen'
+                          ? '#f472b6'
+                          : cap === 'video_gen'
+                          ? '#fb7185'
+                          : '#cbd5e1',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {cap === 'vision' && '👁️ '}
+                    {cap === 'code' && '💻 '}
+                    {cap === 'reasoning' && '🧠 '}
+                    {cap === 'image_gen' && '🎨 '}
+                    {cap === 'video_gen' && '🎬 '}
+                    {cap}
+                  </span>
+                ))}
+              </div>
+
+              {hasImageAttachment && !modelSupportsVision && (
+                <div
+                  style={{
+                    width: '100%',
+                    marginTop: 2,
+                    padding: '2px 6px',
+                    borderRadius: 4,
+                    background: 'rgba(56, 189, 248, 0.15)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    color: '#7dd3fc',
+                    fontSize: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <Eye style={{ width: 11, height: 11, flexShrink: 0 }} />
+                  <span>Image attached: Capability router will automatically use Gemini 2.5 Flash for vision analysis.</span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Real-Time Voice Mode Overlay ── */}
@@ -1418,11 +1752,88 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                       </>
                     )}
                   </button>
+
+                  {/* Retry Button on Error */}
+                  {msg.id.startsWith('err-') && (
+                    <button
+                      onClick={() => {
+                        const lastUser = [...messages].reverse().find(m => m.role === 'user');
+                        if (lastUser) {
+                          handleSendMessage(lastUser.content);
+                        } else {
+                          testGatewayConnection();
+                        }
+                      }}
+                      title="Retry this request"
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.2)',
+                        border: '1px solid rgba(239, 68, 68, 0.4)',
+                        color: '#fca5a5',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                      }}
+                    >
+                      <RotateCcw style={{ width: 11, height: 11 }} /> Retry
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           );
         })}
+
+        {/* Starter Prompt Suggestions */}
+        {messages.length <= 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4, padding: '0 4px' }}>
+            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
+              Quick prompts to get started:
+            </span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {STARTER_PROMPTS.map(prompt => (
+                <button
+                  key={prompt}
+                  onClick={() => {
+                    if (prompt.includes('image')) {
+                      handleSendMessage(prompt.replace('🎨 ', ''), 'image_gen');
+                    } else if (prompt.includes('video')) {
+                      handleSendMessage(prompt.replace('🎬 ', ''), 'video_gen');
+                    } else if (prompt.includes('voice')) {
+                      setIsVoiceModeActive(true);
+                    } else {
+                      handleSendMessage(prompt);
+                    }
+                  }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: 12,
+                    padding: '5px 10px',
+                    fontSize: 11,
+                    color: '#e2e8f0',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(168, 85, 247, 0.2)';
+                    e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.4)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                  }}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Loading Indicator */}
         {isLoading && (
@@ -1530,7 +1941,11 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         </button>
 
         <button
-          onClick={() => handleSendMessage('Generate an image of ', 'image_gen')}
+          onClick={() => {
+            setInput(prev => (prev.trim() ? `Generate an image of ${prev.trim()}` : 'Generate an image of '));
+            setTimeout(() => inputRef.current?.focus(), 50);
+          }}
+          title="Compose an image generation prompt"
           style={{
             fontSize: 11,
             padding: '4px 9px',
@@ -1549,7 +1964,11 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         </button>
 
         <button
-          onClick={() => handleSendMessage('Generate a video clip of ', 'video_gen')}
+          onClick={() => {
+            setInput(prev => (prev.trim() ? `Generate a video clip of ${prev.trim()}` : 'Generate a video clip of '));
+            setTimeout(() => inputRef.current?.focus(), 50);
+          }}
+          title="Compose a video clip generation prompt"
           style={{
             fontSize: 11,
             padding: '4px 9px',
