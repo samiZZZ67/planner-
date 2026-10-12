@@ -507,7 +507,7 @@ export function handleFallbackNaturalLanguage(
   // 14. Explain offline sync: "Explain how offline synchronization works"
   if (p.includes('offline') && (p.includes('sync') || p.includes('how') || p.includes('work'))) {
     return {
-      content: `### 🔄 How Offline Synchronization Works in NightPlanner\n\n1. **Local-First Speed (Dexie IndexedDB):** Every change you make (creating, completing, editing, or deleting tasks) is committed instantly to your browser's IndexedDB. You can plan, start timers, and edit without internet connection.\n2. **State Tracking (\`synced: 0\`):** Unsynced changes are flagged with an update epoch timestamp and queued.\n3. **Deterministic Cloud Sync (Neon PostgreSQL):** When internet connectivity is detected, NightPlanner batches your unsynced changes to the server. The server uses a monotonic sequence counter and 'latest timestamp wins' conflict resolution to ensure multi-device consistency without data loss.\n4. **Zero Lock-In:** Even if the server is offline or restarting, you can continue working smoothly.`,
+      content: `### 🔄 How Offline Synchronization Works in Sam'Space\n\n1. **Local-First Speed (Dexie IndexedDB):** Every change you make (creating, completing, editing, or deleting tasks) is committed instantly to your browser's IndexedDB. You can plan, start timers, and edit without internet connection.\n2. **State Tracking (\`synced: 0\`):** Unsynced changes are flagged with an update epoch timestamp and queued.\n3. **Deterministic Cloud Sync (Neon PostgreSQL):** When internet connectivity is detected, Sam'Space batches your unsynced changes to the server. The server uses a monotonic sequence counter and 'latest timestamp wins' conflict resolution to ensure multi-device consistency without data loss.\n4. **Zero Lock-In:** Even if the server is offline or restarting, you can continue working smoothly.`,
       actions: [],
     };
   }
@@ -530,7 +530,7 @@ export function handleFallbackNaturalLanguage(
 
   // Default conversational answer
   return {
-    content: `Hello! I'm **Sam’s AI**, your NightPlanner assistant. I have full authorized access to your schedule, tasks, categories, and timers.\n\nYou can ask me live questions like:\n` +
+    content: `Hello! I'm **Sam’s AI**, your Sam'Space assistant. I have full authorized access to your schedule, tasks, categories, and timers.\n\nYou can ask me live questions like:\n` +
       `- *"What tasks do I still have today?"*\n` +
       `- *"How much time do I have left?"*\n` +
       `- *"Summarize my progress this week"* or *"What did I complete today?"*\n` +

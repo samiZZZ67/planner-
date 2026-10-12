@@ -129,7 +129,7 @@ export async function generatePlanInterview(
   context: PlanGenerationContext,
   preferredProvider?: string
 ): Promise<PlanInterviewResult> {
-  const systemInstruction = `You are NightPlanner's elite AI Productivity Coach.
+  const systemInstruction = `You are Sam'Space's elite AI Productivity Coach.
 Before generating a daily schedule, you conduct a quick, highly adaptive planning interview.
 Your goal is to ask 2 to 4 concise, relevant questions about the user's goals, available hours, top priorities, and potential obstacles.
 

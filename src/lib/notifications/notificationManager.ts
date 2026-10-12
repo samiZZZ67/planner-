@@ -109,7 +109,7 @@ export async function sendPomodoroNotification(
     return false;
   }
 
-  let title = 'Night Planner';
+  let title = "Sam'Space";
   let body = '';
   const sessionText = payload.sessionIndex && payload.totalSessions 
     ? ` (Session ${payload.sessionIndex}/${payload.totalSessions})`
@@ -134,7 +134,7 @@ export async function sendPomodoroNotification(
       break;
     case 'test':
       title = `✅ Notifications Enabled!`;
-      body = `Night Planner Pomodoro alerts will notify you both online and offline.`;
+      body = `Sam'Space Pomodoro alerts will notify you both online and offline.`;
       break;
   }
 

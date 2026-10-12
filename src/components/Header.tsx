@@ -204,7 +204,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
           />
         </div>
         <span className="font-bloody" style={{ fontSize: 17, fontWeight: 700, letterSpacing: '0.04em' }}>
-          Night Planner
+          Sam'Space
         </span>
       </div>
 

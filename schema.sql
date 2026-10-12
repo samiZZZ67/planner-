@@ -141,3 +141,30 @@ CREATE TABLE IF NOT EXISTS monthly_plans (
 );
 
 CREATE INDEX IF NOT EXISTS idx_monthly_plans_server_seq ON monthly_plans (server_seq);
+
+-- 9. AI Conversations Table (Cross-device PC ↔ Phone sync & permanent history)
+CREATE TABLE IF NOT EXISTS ai_conversations (
+    id VARCHAR(128) PRIMARY KEY,
+    assistant VARCHAR(32) NOT NULL DEFAULT 'sams_ai',
+    title TEXT NOT NULL,
+    user_id VARCHAR(64) NOT NULL DEFAULT 'owner',
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    data JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_conversations_assistant ON ai_conversations(assistant, user_id);
+
+-- 10. AI Messages Table
+CREATE TABLE IF NOT EXISTS ai_messages (
+    id VARCHAR(128) PRIMARY KEY,
+    conversation_id VARCHAR(128) NOT NULL,
+    role VARCHAR(32) NOT NULL,
+    content TEXT NOT NULL,
+    timestamp BIGINT NOT NULL,
+    provider VARCHAR(64),
+    actions JSONB DEFAULT '[]'::jsonb,
+    user_id VARCHAR(64) NOT NULL DEFAULT 'owner'
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_messages_conv ON ai_messages(conversation_id);

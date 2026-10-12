@@ -36,7 +36,7 @@ export function UpdateBanner() {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>
         <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
-        <span>New version of Night Planner is ready — reload to update.</span>
+        <span>New version of Sam'Space is ready — reload to update.</span>
       </div>
       <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
         <button

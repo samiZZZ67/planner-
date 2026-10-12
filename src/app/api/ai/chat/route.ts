@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
     const latestUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
     // Build system instructions for Sam's AI
-    const systemInstruction = `You are Sam’s AI, the official intelligent assistant and authorized copilot of NightPlanner.
+    const systemInstruction = `You are Sam’s AI, the official intelligent assistant and authorized copilot of Sam'Space.
 You have FULL authorized access to view, analyze, and manage the user's planner data:
 - Tasks (titles, categories, times, priorities, statuses, deadlines, completion)
 - Categories / Sections

@@ -42,6 +42,7 @@ import {
   Edit2,
 } from 'lucide-react';
 import { FormattedMessage } from '@/components/Chat/FormattedMessage';
+import { apiFetch } from '@/lib/api/apiClient';
 import {
   CatalogModel,
   VERIFIED_FREE_MODELS,
@@ -357,6 +358,55 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       setMessages([defaultGreeting]);
     }
 
+    // Fetch and merge server conversations for cross-device persistence
+    apiFetch('/api/ai/history?assistant=freellm')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.ok && Array.isArray(data.conversations)) {
+          const serverConvs: FreeLLMConversation[] = data.conversations;
+          setConversations(prev => {
+            const map = new Map<string, FreeLLMConversation>();
+            for (const c of prev) {
+              map.set(c.id, c);
+            }
+            for (const sc of serverConvs) {
+              const cur = map.get(sc.id);
+              if (!cur || (sc.updatedAt || 0) >= (cur.updatedAt || 0)) {
+                map.set(sc.id, sc);
+              }
+            }
+            const merged = Array.from(map.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            try {
+              localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(merged));
+            } catch {}
+
+            // If local had conversations not on server, sync up
+            const localOnly = prev.filter(p => !serverConvs.some(sc => sc.id === p.id));
+            if (localOnly.length > 0) {
+              apiFetch('/api/ai/history', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  assistant: 'freellm',
+                  action: 'sync',
+                  conversations: merged,
+                }),
+              }).catch(() => null);
+            }
+
+            const currentActive = activeConversationIdRef.current;
+            const target = merged.find(c => c.id === currentActive) || merged[0];
+            if (target) {
+              setActiveConversationId(target.id);
+              activeConversationIdRef.current = target.id;
+              setMessages(target.messages || [getDefaultGreeting()]);
+            }
+            return merged;
+          });
+        }
+      })
+      .catch(() => null);
+
     // 4. Custom Gateway URL & Key
     try {
       const savedUrl = localStorage.getItem(STORAGE_KEY_CUSTOM_URL);
@@ -438,17 +488,21 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         const currentId = activeConversationIdRef.current;
         const exists = convs.find(c => c.id === currentId);
         let nextConvs: FreeLLMConversation[];
+        let targetConv: FreeLLMConversation | undefined;
 
         if (exists) {
           const hasDefaultTitle = exists.title === 'New Chat' || exists.title === 'Welcome Chat';
           const firstUser = next.find(m => m.role === 'user');
           const newTitle = hasDefaultTitle && firstUser ? generateConversationTitle(firstUser.content) : exists.title;
 
-          nextConvs = convs.map(c =>
-            c.id === currentId
-              ? { ...c, messages: next, updatedAt: Date.now(), title: newTitle }
-              : c
-          );
+          nextConvs = convs.map(c => {
+            if (c.id === currentId) {
+              const u = { ...c, messages: next, updatedAt: Date.now(), title: newTitle };
+              targetConv = u;
+              return u;
+            }
+            return c;
+          });
         } else {
           const newConv: FreeLLMConversation = {
             id: currentId || `conv-${Date.now()}`,
@@ -457,12 +511,26 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             updatedAt: Date.now(),
             messages: next,
           };
+          targetConv = newConv;
           nextConvs = [newConv, ...convs];
         }
 
         try {
           localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(nextConvs));
         } catch {}
+
+        if (targetConv) {
+          apiFetch('/api/ai/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              assistant: 'freellm',
+              action: 'save_conversation',
+              conversation: targetConv,
+            }),
+          }).catch(() => null);
+        }
+
         return nextConvs;
       });
 
@@ -496,6 +564,16 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     setMessages(initialMessages);
     if (isPhone) setIsSidebarOpen(false);
     setTimeout(() => inputRef.current?.focus(), 50);
+
+    apiFetch('/api/ai/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        assistant: 'freellm',
+        action: 'save_conversation',
+        conversation: newConv,
+      }),
+    }).catch(() => null);
   };
 
   const handleSelectConversation = (convId: string) => {
@@ -517,10 +595,31 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       return;
     }
     setConversations(prev => {
-      const updated = prev.map(c => (c.id === convId ? { ...c, title: trimmed, updatedAt: Date.now() } : c));
+      let targetConv: FreeLLMConversation | undefined;
+      const updated = prev.map(c => {
+        if (c.id === convId) {
+          const u = { ...c, title: trimmed, updatedAt: Date.now() };
+          targetConv = u;
+          return u;
+        }
+        return c;
+      });
       try {
         localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(updated));
       } catch {}
+
+      if (targetConv) {
+        apiFetch('/api/ai/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assistant: 'freellm',
+            action: 'save_conversation',
+            conversation: targetConv,
+          }),
+        }).catch(() => null);
+      }
+
       return updated;
     });
     setEditingConvId(null);
@@ -548,6 +647,16 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       return filtered;
     });
     setDeletingConvId(null);
+
+    apiFetch('/api/ai/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        assistant: 'freellm',
+        action: 'delete_conversation',
+        conversationId: convId,
+      }),
+    }).catch(() => null);
   };
 
   const handleModelChange = (model: string) => {

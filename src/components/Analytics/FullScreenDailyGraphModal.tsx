@@ -178,7 +178,7 @@ export function FullScreenDailyGraphModal({
           >
             <img
               src="/icons/icon-192.png"
-              alt="Night Planner"
+              alt="Sam'Space"
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
           </div>

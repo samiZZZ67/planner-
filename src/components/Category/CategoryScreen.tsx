@@ -184,6 +184,9 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
       synced: 0,
     });
     syncEngine.notifyLocalMutation();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nightplanner:task-updated', { detail: task }));
+    }
     setEditingTaskId(null);
     setEditState(null);
     load();
@@ -193,6 +196,9 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
     setAllTasks(prev => prev.filter(t => t.id !== taskId));
     await db.tasks.update(taskId, { deleted: true, updatedAt: Date.now(), synced: 0 });
     syncEngine.notifyLocalMutation();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nightplanner:task-deleted', { detail: taskId }));
+    }
     load();
   };
 
@@ -214,6 +220,9 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
       synced: 0,
     });
     syncEngine.notifyLocalMutation();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nightplanner:task-updated', { detail: { ...task, isCompleted: next } }));
+    }
   };
 
   const handleCreateTaskInCategory = async (sectionId: string) => {
@@ -247,6 +256,9 @@ export function CategoryScreen({ currentDate, isPhone, focusTaskId, onClearFocus
     setAllTasks(prev => [...prev, newTask]);
     await db.tasks.put(newTask);
     syncEngine.notifyLocalMutation();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('nightplanner:task-created', { detail: newTask }));
+    }
     setNewTaskTitle('');
     setNewTaskMinutes('30');
     setAddingTaskSectionId(null);

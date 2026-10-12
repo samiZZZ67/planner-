@@ -202,15 +202,17 @@ export async function createAIConversation(title: string, userId: string = 'owne
   return conv;
 }
 
-export async function updateAIConversationTitle(id: string, title: string): Promise<void> {
+export async function updateAIConversationTitle(id: string, title: string): Promise<AIConversation | null> {
   try {
     const conv = await db.aiConversations.get(id);
     if (conv) {
       conv.title = title;
       conv.updatedAt = Date.now();
       await db.aiConversations.put(conv);
+      return conv;
     }
   } catch {}
+  return null;
 }
 
 export async function touchAIConversation(id: string): Promise<void> {

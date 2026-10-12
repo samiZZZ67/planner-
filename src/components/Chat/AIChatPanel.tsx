@@ -85,7 +85,7 @@ function findTaskByQuery(query: string, tasks: Task[]): Task | null {
   return null;
 }
 
-const DEFAULT_GREETING = `Hello! I'm **Sam’s AI**, your NightPlanner assistant with full authorized access to your schedule.
+const DEFAULT_GREETING = `Hello! I'm **Sam’s AI**, your Sam'Space assistant with full authorized access to your schedule.
 
 You can ask me live questions like:
 - *"What tasks do I still have today?"*
@@ -180,14 +180,64 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
 
   const loadConversations = async () => {
     try {
+      // 1. Instant load from local Dexie
       const list = await getAIConversations('owner');
       setConversations(list);
       if (list.length > 0 && !activeConversationId) {
-        // Open most recent conversation
         await selectConversation(list[0].id);
       }
+
+      // 2. Fetch server history to ensure phone and PC sync and keep long-term history
+      const res = await apiFetch('/api/ai/history?assistant=sams_ai');
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.ok && Array.isArray(data.conversations)) {
+          const serverConvs: AIConversation[] = data.conversations;
+          const serverMsgs: Record<string, AIMessageItem[]> = data.messages || {};
+
+          for (const c of serverConvs) {
+            await db.aiConversations.put(c);
+          }
+          for (const cId of Object.keys(serverMsgs)) {
+            const ms = serverMsgs[cId];
+            if (Array.isArray(ms)) {
+              for (const m of ms) {
+                await db.aiMessages.put(m);
+              }
+            }
+          }
+
+          // If local Dexie had items not on server, sync them up to server
+          const localOnly = list.filter(l => !serverConvs.some(s => s.id === l.id));
+          if (localOnly.length > 0) {
+            const allLocalMsgs: AIMessageItem[] = [];
+            for (const loc of localOnly) {
+              const ms = await getAIMessages(loc.id);
+              allLocalMsgs.push(...ms);
+            }
+            apiFetch('/api/ai/history', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                assistant: 'sams_ai',
+                action: 'sync',
+                conversations: localOnly,
+                messages: allLocalMsgs,
+              }),
+            }).catch(() => null);
+          }
+
+          const merged = await getAIConversations('owner');
+          setConversations(merged);
+          if (merged.length > 0) {
+            const curId = activeConversationId || merged[0].id;
+            const target = merged.find(c => c.id === curId) || merged[0];
+            await selectConversation(target.id);
+          }
+        }
+      }
     } catch (e) {
-      console.warn('Failed to load conversations from Dexie:', e);
+      console.warn('Failed to load conversations from Dexie/Server:', e);
     }
   };
 
@@ -241,9 +291,20 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
       setEditingConvId(null);
       return;
     }
-    await updateAIConversationTitle(convId, editingTitle.trim());
+    const updated = await updateAIConversationTitle(convId, editingTitle.trim());
     setConversations(prev => prev.map(c => c.id === convId ? { ...c, title: editingTitle.trim() } : c));
     setEditingConvId(null);
+    if (updated) {
+      apiFetch('/api/ai/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assistant: 'sams_ai',
+          action: 'save_conversation',
+          conversation: updated,
+        }),
+      }).catch(() => null);
+    }
   };
 
   const handleDeleteConversation = async (convId: string) => {
@@ -253,6 +314,15 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
     if (activeConversationId === convId) {
       handleStartNewChat();
     }
+    apiFetch('/api/ai/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        assistant: 'sams_ai',
+        action: 'delete_conversation',
+        conversationId: convId,
+      }),
+    }).catch(() => null);
   };
 
   // ── Keyboard Shortcuts (Esc & Ctrl+K) ──
@@ -783,6 +853,16 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
       convId = newConv.id;
       setActiveConversationId(convId);
       setConversations(prev => [newConv, ...prev]);
+
+      apiFetch('/api/ai/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assistant: 'sams_ai',
+          action: 'save_conversation',
+          conversation: newConv,
+        }),
+      }).catch(() => null);
     }
 
     // Build context with attached files if any
@@ -808,14 +888,24 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
     setAttachedFiles([]);
     setLoading(true);
 
-    // Save user message to Dexie
-    await saveAIMessage({
+    // Save user message to Dexie and sync to server
+    const userMsgItem: AIMessageItem = {
       id: userMsg.id,
       conversationId: convId,
       role: userMsg.role,
       content: userMsg.content,
       timestamp: userMsg.timestamp,
-    });
+    };
+    await saveAIMessage(userMsgItem);
+    apiFetch('/api/ai/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        assistant: 'sams_ai',
+        action: 'save_message',
+        message: userMsgItem,
+      }),
+    }).catch(() => null);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -876,8 +966,8 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
 
       setMessages(prev => [...prev, assistantMsg]);
 
-      // Save assistant message to Dexie
-      await saveAIMessage({
+      // Save assistant message to Dexie and sync to server
+      const assistantMsgItem: AIMessageItem = {
         id: assistantMsg.id,
         conversationId: convId,
         role: assistantMsg.role,
@@ -885,7 +975,17 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
         timestamp: assistantMsg.timestamp,
         provider: assistantMsg.provider,
         actions: assistantMsg.actions,
-      });
+      };
+      await saveAIMessage(assistantMsgItem);
+      apiFetch('/api/ai/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assistant: 'sams_ai',
+          action: 'save_message',
+          message: assistantMsgItem,
+        }),
+      }).catch(() => null);
     } catch (err: any) {
       if (err.name === 'AbortError') {
         const stopMsg: Message = {
@@ -895,13 +995,23 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
           timestamp: Date.now(),
         };
         setMessages(prev => [...prev, stopMsg]);
-        await saveAIMessage({
+        const stopMsgItem: AIMessageItem = {
           id: stopMsg.id,
           conversationId: convId,
           role: stopMsg.role,
           content: stopMsg.content,
           timestamp: stopMsg.timestamp,
-        });
+        };
+        await saveAIMessage(stopMsgItem);
+        apiFetch('/api/ai/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assistant: 'sams_ai',
+            action: 'save_message',
+            message: stopMsgItem,
+          }),
+        }).catch(() => null);
       } else {
         const errorMsg: Message = {
           id: crypto.randomUUID(),

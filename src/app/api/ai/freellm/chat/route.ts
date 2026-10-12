@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
         const visionResult = await analyzeMultimodalWithGemini(
           latestContent || 'Please analyze the attached image/document in detail.',
           attachments,
-          'You are the FreeLLM Moon Assistant in NightPlanner, an expert multimodal assistant. Analyze the user\'s uploaded images, screenshots, diagrams, documents, and instructions thoroughly, accurately, and concisely.'
+          'You are the FreeLLM Moon Assistant in Sam\'Space, an expert multimodal assistant. Analyze the user\'s uploaded images, screenshots, diagrams, documents, and instructions thoroughly, accurately, and concisely.'
         );
 
         return NextResponse.json(

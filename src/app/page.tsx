@@ -275,7 +275,7 @@ export default function NightPlannerApp() {
               className="w-full h-full object-cover"
             />
           </div>
-          <span className="font-bloody text-xl tracking-wider text-white/90">Night Planner</span>
+          <span className="font-bloody text-xl tracking-wider text-white/90">Sam'Space</span>
         </div>
       </div>
     );

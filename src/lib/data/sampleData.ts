@@ -215,7 +215,7 @@ export async function exportAllDataToJson(): Promise<void> {
   ]);
 
   const payload = {
-    appName: 'Night Planner',
+    appName: "Sam'Space",
     version: 1,
     exportedAt: new Date().toISOString(),
     data: { sections, tasks, timeLogs, days },

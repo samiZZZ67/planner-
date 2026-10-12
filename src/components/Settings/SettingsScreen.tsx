@@ -258,7 +258,7 @@ export function SettingsScreen({
         </div>
 
         <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-          Night Planner stores everything on your device first in IndexedDB, and automatically synchronizes with your Neon Postgres cloud database when online.
+          Sam'Space stores everything on your device first in IndexedDB, and automatically synchronizes with your Neon Postgres cloud database when online.
         </p>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

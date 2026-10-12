@@ -116,7 +116,7 @@ export function MasterLockScreen({ onUnlock, theme = 'dark' }: MasterLockScreenP
           >
             <img
               src="/icons/icon-192.png"
-              alt="Night Planner"
+              alt="Sam'Space"
               style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
             />
           </div>
@@ -152,7 +152,7 @@ export function MasterLockScreen({ onUnlock, theme = 'dark' }: MasterLockScreenP
             textAlign: 'center',
           }}
         >
-          Night Planner
+          Sam'Space
         </h1>
 
         <div

@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Night Planner - Clear Intentional Daily Planning',
-  description: 'Personal offline-first night planner with YouTube Studio style analytics and automatic cloud sync.',
+  title: "Sam'Space - Clear Intentional Daily Planning",
+  description: "Personal offline-first daily planner with YouTube Studio style analytics and automatic cloud sync.",
   manifest: '/manifest.json',
   icons: {
     icon: [
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Night Planner',
+    title: "Sam'Space",
   },
 };
 

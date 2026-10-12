@@ -185,6 +185,35 @@ export async function ensureSchema(sql: any): Promise<void> {
     await sql`CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_files_public_id ON files(public_id)`;
 
+    // AI Conversations table for cross-device sync & permanent history
+    await sql`
+      CREATE TABLE IF NOT EXISTS ai_conversations (
+        id VARCHAR(128) PRIMARY KEY,
+        assistant VARCHAR(32) NOT NULL DEFAULT 'sams_ai',
+        title TEXT NOT NULL,
+        user_id VARCHAR(64) NOT NULL DEFAULT 'owner',
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL,
+        data JSONB DEFAULT '{}'::jsonb
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_ai_conversations_assistant ON ai_conversations(assistant, user_id)`;
+
+    // AI Messages table for persistent cross-device history
+    await sql`
+      CREATE TABLE IF NOT EXISTS ai_messages (
+        id VARCHAR(128) PRIMARY KEY,
+        conversation_id VARCHAR(128) NOT NULL,
+        role VARCHAR(32) NOT NULL,
+        content TEXT NOT NULL,
+        timestamp BIGINT NOT NULL,
+        provider VARCHAR(64),
+        actions JSONB DEFAULT '[]'::jsonb,
+        user_id VARCHAR(64) NOT NULL DEFAULT 'owner'
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_ai_messages_conv ON ai_messages(conversation_id)`;
+
     // Ensure all tables have required columns if they were created with earlier schemas
     await sql`ALTER TABLE sections ADD COLUMN IF NOT EXISTS daily_target_minutes INTEGER`;
     await sql`ALTER TABLE sections ADD COLUMN IF NOT EXISTS target_type VARCHAR(20) DEFAULT 'at least'`;

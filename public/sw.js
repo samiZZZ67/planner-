@@ -77,7 +77,7 @@ self.addEventListener('fetch', event => {
           // Offline navigation fallback: serve cached root app shell
           const cached = await caches.match('/') || await caches.match(request);
           if (cached) return cached;
-          return new Response('<h1>Offline</h1><p>Night Planner offline cache is ready.</p>', {
+          return new Response("<h1>Offline</h1><p>Sam'Space offline cache is ready.</p>", {
             headers: { 'Content-Type': 'text/html' },
           });
         })

@@ -11,6 +11,9 @@ interface ServerDbData {
   weeklyPlans: Record<string, WeeklyPlan & { serverSeq: number }>;
   monthlyPlans: Record<string, MonthlyPlan & { serverSeq: number }>;
   files?: Record<string, UploadedFile & { serverSeq: number }>;
+  aiConversations?: Record<string, any>;
+  aiMessages?: Record<string, any>;
+  freellmConversations?: Record<string, any>;
 }
 
 const DATA_DIR = path.join(process.cwd(), '.data');
@@ -27,6 +30,9 @@ function ensureDataFile(): ServerDbData {
       if (!parsed.weeklyPlans) parsed.weeklyPlans = {};
       if (!parsed.monthlyPlans) parsed.monthlyPlans = {};
       if (!parsed.files) parsed.files = {};
+      if (!parsed.aiConversations) parsed.aiConversations = {};
+      if (!parsed.aiMessages) parsed.aiMessages = {};
+      if (!parsed.freellmConversations) parsed.freellmConversations = {};
       return parsed;
     }
   } catch {
@@ -42,6 +48,9 @@ function ensureDataFile(): ServerDbData {
     weeklyPlans: {},
     monthlyPlans: {},
     files: {},
+    aiConversations: {},
+    aiMessages: {},
+    freellmConversations: {},
   };
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), 'utf-8');
@@ -310,6 +319,83 @@ export function deleteLocalFile(fileId: string): boolean {
     serverSeq: db.lastServerSeq,
   };
   saveDb(db);
+  return true;
+}
+
+// ── AI Conversation & Message Persistence ──
+
+export function getAIConversationsLocal(userId: string = 'owner') {
+  const db = getDb();
+  if (!db.aiConversations) db.aiConversations = {};
+  return Object.values(db.aiConversations)
+    .filter((c: any) => !c.userId || c.userId === userId)
+    .sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+
+export function saveAIConversationLocal(conv: any) {
+  const db = getDb();
+  if (!db.aiConversations) db.aiConversations = {};
+  db.aiConversations[conv.id] = { ...conv, updatedAt: conv.updatedAt || Date.now() };
+  saveDb(db);
+  return db.aiConversations[conv.id];
+}
+
+export function deleteAIConversationLocal(id: string) {
+  const db = getDb();
+  if (db.aiConversations && db.aiConversations[id]) {
+    delete db.aiConversations[id];
+  }
+  if (db.aiMessages) {
+    for (const msgId of Object.keys(db.aiMessages)) {
+      if (db.aiMessages[msgId].conversationId === id) {
+        delete db.aiMessages[msgId];
+      }
+    }
+  }
+  saveDb(db);
+  return true;
+}
+
+export function getAIMessagesLocal(conversationId: string) {
+  const db = getDb();
+  if (!db.aiMessages) db.aiMessages = {};
+  return Object.values(db.aiMessages)
+    .filter((m: any) => m.conversationId === conversationId)
+    .sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0));
+}
+
+export function saveAIMessageLocal(msg: any) {
+  const db = getDb();
+  if (!db.aiMessages) db.aiMessages = {};
+  db.aiMessages[msg.id] = msg;
+  if (db.aiConversations && db.aiConversations[msg.conversationId]) {
+    db.aiConversations[msg.conversationId].updatedAt = msg.timestamp || Date.now();
+  }
+  saveDb(db);
+  return msg;
+}
+
+export function getFreeLLMConversationsLocal() {
+  const db = getDb();
+  if (!db.freellmConversations) db.freellmConversations = {};
+  return Object.values(db.freellmConversations)
+    .sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0));
+}
+
+export function saveFreeLLMConversationLocal(conv: any) {
+  const db = getDb();
+  if (!db.freellmConversations) db.freellmConversations = {};
+  db.freellmConversations[conv.id] = { ...conv, updatedAt: conv.updatedAt || Date.now() };
+  saveDb(db);
+  return db.freellmConversations[conv.id];
+}
+
+export function deleteFreeLLMConversationLocal(id: string) {
+  const db = getDb();
+  if (db.freellmConversations && db.freellmConversations[id]) {
+    delete db.freellmConversations[id];
+    saveDb(db);
+  }
   return true;
 }
 
