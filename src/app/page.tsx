@@ -20,6 +20,7 @@ import { MonthlyPlanScreen } from '@/components/Monthly/MonthlyPlanScreen';
 import { AnalyticsScreen } from '@/components/Analytics/AnalyticsScreen';
 import { SettingsScreen } from '@/components/Settings/SettingsScreen';
 import { LoginModal } from '@/components/Modals/LoginModal';
+import { MasterLockScreen } from '@/components/Auth/MasterLockScreen';
 import { AIChatPanel } from '@/components/Chat/AIChatPanel';
 import { FreeLLMAssistant } from '@/components/FreeLLM/FreeLLMAssistant';
 import { apiFetch } from '@/lib/api/apiClient';
@@ -30,6 +31,8 @@ export default function NightPlannerApp() {
 
   // Mount Guard for Offline Client SPA & Next 16 Safety
   const [isMounted, setIsMounted] = useState(false);
+  // Full-Site Master Password Gate: null = verifying, false = locked, true = unlocked
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   // 4 Primary Views: add_task | note | todo | category (plus analytics | settings)
   const [currentTab, setCurrentTab] = useState<TabType>('todo');
@@ -134,6 +137,35 @@ export default function NightPlannerApp() {
     const savedAvatar = localStorage.getItem('np_sams_ai_avatar');
     if (savedAvatar) setProfileAvatarUrl(savedAvatar);
 
+    // Full-Site Master Password Verification
+    async function verifyAuthStatus() {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('np_session_token') : null;
+      if (!token) {
+        setIsAuthenticated(false);
+        return;
+      }
+      try {
+        const res = await apiFetch('/api/auth/verify', { method: 'GET' });
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data && data.authenticated) {
+            setIsAuthenticated(true);
+            return;
+          }
+        }
+        if (typeof window !== 'undefined') localStorage.removeItem('np_session_token');
+        setIsAuthenticated(false);
+      } catch {
+        // Offline resilience: if token exists locally, allow offline planner access
+        if (token) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+        }
+      }
+    }
+    verifyAuthStatus();
+
     // Live Copilot Action Listeners
     const handleNavigate = (e: any) => {
       const tab = e?.detail?.tab;
@@ -174,14 +206,14 @@ export default function NightPlannerApp() {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('np_session_token');
       }
+      setIsAuthenticated(false);
       await apiFetch('/api/logout', { method: 'POST' });
-      window.location.reload();
     } catch {
       // Offline fallback
       if (typeof window !== 'undefined') {
         localStorage.removeItem('np_session_token');
       }
-      window.location.reload();
+      setIsAuthenticated(false);
     }
   };
 
@@ -232,7 +264,7 @@ export default function NightPlannerApp() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isPC, activeTimer, isTimerRunning, pauseTimer, resumeTimer, isLoginModalOpen]);
 
-  if (!isMounted) {
+  if (!isMounted || isAuthenticated === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0d0d11] text-white">
         <div className="flex flex-col items-center gap-4">
@@ -249,6 +281,15 @@ export default function NightPlannerApp() {
     );
   }
 
+  if (isAuthenticated === false) {
+    return (
+      <MasterLockScreen
+        onUnlock={() => setIsAuthenticated(true)}
+        theme={theme}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-start overflow-x-hidden selection:bg-sky-500/30 selection:text-white">
       {/* ── 1. Room Backdrop ── */}
@@ -260,6 +301,7 @@ export default function NightPlannerApp() {
       {/* ── 3. Floating Glass Header Bar ── */}
       <Header
         onOpenLogin={() => setIsLoginModalOpen(true)}
+        onLockSession={handleLogout}
         isPC={isPC}
         theme={theme}
         onToggleTheme={toggleTheme}

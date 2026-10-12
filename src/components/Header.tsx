@@ -14,9 +14,10 @@ interface HeaderProps {
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
   onOpenAIChat?: () => void;
+  onLockSession?: () => void;
 }
 
-export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }: HeaderProps) {
+export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, onLockSession }: HeaderProps) {
   const [avatarUrl, setAvatarUrl] = React.useState('/icons/icon-192.png');
 
   React.useEffect(() => {
@@ -286,11 +287,11 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat }
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <SyncBadge />
         <button
-          onClick={onOpenLogin}
+          onClick={onLockSession || onOpenLogin}
           className="v-circle-btn"
           style={{ width: 38, height: 38 }}
-          aria-label="Cloud Login"
-          title="Sign in to Cloud Sync"
+          aria-label="Lock Website"
+          title="Lock website"
         >
           <Lock size={15} style={{ color: 'var(--text-secondary)' }} />
         </button>
