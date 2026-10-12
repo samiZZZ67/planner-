@@ -37,7 +37,11 @@ import {
   Info,
   RotateCcw,
   Settings,
+  Menu,
+  Plus,
+  Edit2,
 } from 'lucide-react';
+import { FormattedMessage } from '@/components/Chat/FormattedMessage';
 import {
   CatalogModel,
   VERIFIED_FREE_MODELS,
@@ -76,11 +80,59 @@ export interface FreeLLMMessage {
   generatedMedia?: GeneratedMedia;
 }
 
+export interface FreeLLMConversation {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: FreeLLMMessage[];
+}
+
+const STORAGE_KEY_CONVERSATIONS = 'np_freellm_conversations';
+const STORAGE_KEY_ACTIVE_CONV = 'np_freellm_active_conv_id';
 const STORAGE_KEY_HISTORY = 'np_freellm_chat_history';
 const STORAGE_KEY_MODEL = 'np_freellm_selected_model';
 const STORAGE_KEY_POS = 'np_freellm_moon_btn_pos';
 const STORAGE_KEY_CUSTOM_URL = 'np_freellm_custom_url';
 const STORAGE_KEY_CUSTOM_KEY = 'np_freellm_custom_key';
+
+export function getDefaultGreeting(): FreeLLMMessage {
+  return {
+    id: 'msg-greeting',
+    role: 'assistant',
+    content:
+      '👋 Hello! I am your multimodal **FreeLLM Moon Assistant**.\n\nNow equipped with full multimodal power:\n• 🎙️ **Voice dictation & real-time voice conversation**\n• 👁️ **Visual question answering & photo analysis**\n• 📄 **PDF, document, and source code understanding**\n• 🎨 **High-resolution image generation (Flux)**\n• 🎬 **Text & prompt video generation**\n• 🔊 **Voice response narration**\n\nHow can I help you today?',
+    timestamp: Date.now(),
+    model: 'auto',
+  };
+}
+
+export function generateConversationTitle(prompt: string): string {
+  const cleaned = prompt
+    .replace(/^[\s\p{P}]+/u, '')
+    .replace(/[#*`_~]/g, '')
+    .trim();
+  if (!cleaned) return 'New Chat';
+  const firstLine = cleaned.split('\n')[0].trim();
+  if (firstLine.length <= 34) return firstLine;
+  return firstLine.slice(0, 32) + '...';
+}
+
+export function formatConversationDate(ts: number): string {
+  const date = new Date(ts);
+  const now = new Date();
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } else if (diffDays === 1) {
+    return 'Yesterday';
+  } else if (diffDays < 7) {
+    return date.toLocaleDateString([], { weekday: 'short' });
+  } else {
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+}
 
 const STARTER_PROMPTS = [
   '🎨 Generate an image of a cybernetic lunar city',
@@ -114,11 +166,47 @@ function formatFetchError(err: any): string {
   return msg;
 }
 
-export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
+export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhone?: boolean; theme?: 'dark' | 'light' }) {
+  // ── Theme State & Observer ──
+  const [theme, setTheme] = useState<'dark' | 'light'>(propTheme || 'dark');
+
+  useEffect(() => {
+    if (propTheme) setTheme(propTheme);
+  }, [propTheme]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const current = (document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark';
+    if (!propTheme && current) setTheme(current);
+
+    const observer = new MutationObserver(() => {
+      const updated = (document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark';
+      setTheme(updated);
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, [propTheme]);
+
+  const isDark = theme !== 'light';
+
   // ── 1. Assistant Visibility & Window States ──
   const [windowState, setWindowState] = useState<'collapsed' | 'expanded' | 'maximized'>('collapsed');
 
-  // ── 2. Draggable Position for AI Moon Button ──
+  // ── 2. Conversations & Hamburger Sidebar State ──
+  const [conversations, setConversations] = useState<FreeLLMConversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string>('');
+  const activeConversationIdRef = useRef<string>('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [conversationSearch, setConversationSearch] = useState('');
+  const [editingConvId, setEditingConvId] = useState<string | null>(null);
+  const [editingTitleText, setEditingTitleText] = useState('');
+  const [deletingConvId, setDeletingConvId] = useState<string | null>(null);
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
+
+  // ── 3. Draggable Position for AI Moon Button ──
   const [btnPos, setBtnPos] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const dragInfoRef = useRef<{
@@ -129,7 +217,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     moved: boolean;
   } | null>(null);
 
-  // ── 3. Chat Messages & Input ──
+  // ── 4. Chat Messages & Input ──
   const [messages, setMessages] = useState<FreeLLMMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -208,21 +296,65 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
       }
     } catch {}
 
-    // 3. History
+    // 3. Conversation History & Migration
     try {
-      const savedHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
-      if (savedHistory) {
-        const parsed = JSON.parse(savedHistory);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
-        } else {
-          loadDefaultGreeting();
+      const savedConvs = localStorage.getItem(STORAGE_KEY_CONVERSATIONS);
+      const savedActiveId = localStorage.getItem(STORAGE_KEY_ACTIVE_CONV);
+      let parsedConvs: FreeLLMConversation[] = [];
+
+      if (savedConvs) {
+        parsedConvs = JSON.parse(savedConvs);
+      }
+
+      if (!Array.isArray(parsedConvs) || parsedConvs.length === 0) {
+        const legacyHistory = localStorage.getItem(STORAGE_KEY_HISTORY);
+        if (legacyHistory) {
+          const parsedMsgs = JSON.parse(legacyHistory);
+          if (Array.isArray(parsedMsgs) && parsedMsgs.length > 0) {
+            const firstUser = parsedMsgs.find((m: FreeLLMMessage) => m.role === 'user');
+            const title = firstUser ? generateConversationTitle(firstUser.content) : 'Previous Chat';
+            const initialConv: FreeLLMConversation = {
+              id: `conv-${Date.now()}`,
+              title,
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              messages: parsedMsgs,
+            };
+            parsedConvs = [initialConv];
+            try {
+              localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(parsedConvs));
+            } catch {}
+          }
         }
+      }
+
+      if (Array.isArray(parsedConvs) && parsedConvs.length > 0) {
+        setConversations(parsedConvs);
+        const target = parsedConvs.find(c => c.id === savedActiveId) || parsedConvs[0];
+        setActiveConversationId(target.id);
+        activeConversationIdRef.current = target.id;
+        setMessages(target.messages || [getDefaultGreeting()]);
       } else {
-        loadDefaultGreeting();
+        const defaultGreeting = getDefaultGreeting();
+        const initialConv: FreeLLMConversation = {
+          id: `conv-${Date.now()}`,
+          title: 'New Chat',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          messages: [defaultGreeting],
+        };
+        setConversations([initialConv]);
+        setActiveConversationId(initialConv.id);
+        activeConversationIdRef.current = initialConv.id;
+        setMessages([defaultGreeting]);
+        try {
+          localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify([initialConv]));
+          localStorage.setItem(STORAGE_KEY_ACTIVE_CONV, initialConv.id);
+        } catch {}
       }
     } catch {
-      loadDefaultGreeting();
+      const defaultGreeting = getDefaultGreeting();
+      setMessages([defaultGreeting]);
     }
 
     // 4. Custom Gateway URL & Key
@@ -239,19 +371,6 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [clampPosition]);
-
-  const loadDefaultGreeting = () => {
-    setMessages([
-      {
-        id: 'msg-greeting',
-        role: 'assistant',
-        content:
-          '👋 Hello! I am your multimodal **FreeLLM Moon Assistant**.\n\nNow equipped with full multimodal power:\n• 🎙️ **Voice dictation & real-time voice conversation**\n• 👁️ **Visual question answering & photo analysis**\n• 📄 **PDF, document, and source code understanding**\n• 🎨 **High-resolution image generation (Flux)**\n• 🎬 **Text & prompt video generation**\n• 🔊 **Voice response narration**\n\nHow can I help you today?',
-        timestamp: Date.now(),
-        model: 'auto',
-      },
-    ]);
-  };
 
   // ── Check Gateway Status (Render Backend) ──
   const testGatewayConnection = useCallback(async (overrideUrl?: string, overrideKey?: string) => {
@@ -310,15 +429,125 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
     }
   }, [messages, windowState]);
 
-  // Save messages to localStorage
+  // Save messages to localStorage and active conversation
   const updateMessages = (newMsgs: FreeLLMMessage[] | ((prev: FreeLLMMessage[]) => FreeLLMMessage[])) => {
     setMessages(prev => {
       const next = typeof newMsgs === 'function' ? newMsgs(prev) : newMsgs;
+
+      setConversations(convs => {
+        const currentId = activeConversationIdRef.current;
+        const exists = convs.find(c => c.id === currentId);
+        let nextConvs: FreeLLMConversation[];
+
+        if (exists) {
+          const hasDefaultTitle = exists.title === 'New Chat' || exists.title === 'Welcome Chat';
+          const firstUser = next.find(m => m.role === 'user');
+          const newTitle = hasDefaultTitle && firstUser ? generateConversationTitle(firstUser.content) : exists.title;
+
+          nextConvs = convs.map(c =>
+            c.id === currentId
+              ? { ...c, messages: next, updatedAt: Date.now(), title: newTitle }
+              : c
+          );
+        } else {
+          const newConv: FreeLLMConversation = {
+            id: currentId || `conv-${Date.now()}`,
+            title: 'New Chat',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            messages: next,
+          };
+          nextConvs = [newConv, ...convs];
+        }
+
+        try {
+          localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(nextConvs));
+        } catch {}
+        return nextConvs;
+      });
+
       try {
         localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(next));
       } catch {}
       return next;
     });
+  };
+
+  const handleNewChat = () => {
+    const newId = `conv-${Date.now()}`;
+    const initialMessages: FreeLLMMessage[] = [getDefaultGreeting()];
+    const newConv: FreeLLMConversation = {
+      id: newId,
+      title: 'New Chat',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messages: initialMessages,
+    };
+    setConversations(prev => {
+      const next = [newConv, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(next));
+        localStorage.setItem(STORAGE_KEY_ACTIVE_CONV, newId);
+      } catch {}
+      return next;
+    });
+    setActiveConversationId(newId);
+    activeConversationIdRef.current = newId;
+    setMessages(initialMessages);
+    if (isPhone) setIsSidebarOpen(false);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const handleSelectConversation = (convId: string) => {
+    const conv = conversations.find(c => c.id === convId);
+    if (!conv) return;
+    setActiveConversationId(convId);
+    activeConversationIdRef.current = convId;
+    setMessages(conv.messages || [getDefaultGreeting()]);
+    try {
+      localStorage.setItem(STORAGE_KEY_ACTIVE_CONV, convId);
+    } catch {}
+    if (isPhone) setIsSidebarOpen(false);
+  };
+
+  const handleRenameConversation = (convId: string, newTitle: string) => {
+    const trimmed = newTitle.trim();
+    if (!trimmed) {
+      setEditingConvId(null);
+      return;
+    }
+    setConversations(prev => {
+      const updated = prev.map(c => (c.id === convId ? { ...c, title: trimmed, updatedAt: Date.now() } : c));
+      try {
+        localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    setEditingConvId(null);
+  };
+
+  const handleDeleteConversation = (convId: string) => {
+    setConversations(prev => {
+      const filtered = prev.filter(c => c.id !== convId);
+      try {
+        localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(filtered));
+      } catch {}
+      if (convId === activeConversationId) {
+        if (filtered.length > 0) {
+          const nextTarget = filtered[0];
+          setActiveConversationId(nextTarget.id);
+          activeConversationIdRef.current = nextTarget.id;
+          setMessages(nextTarget.messages || [getDefaultGreeting()]);
+          try {
+            localStorage.setItem(STORAGE_KEY_ACTIVE_CONV, nextTarget.id);
+          } catch {}
+        } else {
+          handleNewChat();
+        }
+      }
+      return filtered;
+    });
+    setDeletingConvId(null);
   };
 
   const handleModelChange = (model: string) => {
@@ -689,9 +918,23 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
 
   const handleClearHistory = () => {
     if (window.confirm('Clear all FreeLLM chat history and media?')) {
-      loadDefaultGreeting();
+      const defaultMsg = getDefaultGreeting();
+      const newConvId = `conv-${Date.now()}`;
+      const newConv: FreeLLMConversation = {
+        id: newConvId,
+        title: 'New Chat',
+        messages: [defaultMsg],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setConversations([newConv]);
+      setActiveConversationId(newConvId);
+      activeConversationIdRef.current = newConvId;
+      setMessages([defaultMsg]);
       try {
         localStorage.removeItem(STORAGE_KEY_HISTORY);
+        localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify([newConv]));
+        localStorage.setItem(STORAGE_KEY_ACTIVE_CONV, newConvId);
       } catch {}
     }
   };
@@ -744,11 +987,19 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(135deg, rgba(28, 20, 50, 0.88), rgba(15, 12, 30, 0.95))',
-          border: '1.5px solid rgba(192, 132, 252, 0.45)',
+          background: isDark
+            ? 'linear-gradient(135deg, rgba(28, 20, 50, 0.88), rgba(15, 12, 30, 0.95))'
+            : 'linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(243, 232, 255, 0.95))',
+          border: isDark
+            ? '1.5px solid rgba(192, 132, 252, 0.45)'
+            : '1.5px solid rgba(168, 85, 247, 0.45)',
           boxShadow: isDragging
-            ? '0 16px 36px rgba(0, 0, 0, 0.7), 0 0 30px rgba(168, 85, 247, 0.65)'
-            : '0 8px 24px rgba(0, 0, 0, 0.45), 0 0 20px rgba(168, 85, 247, 0.35)',
+            ? (isDark
+                ? '0 16px 36px rgba(0, 0, 0, 0.7), 0 0 30px rgba(168, 85, 247, 0.65)'
+                : '0 16px 36px rgba(15, 23, 42, 0.2), 0 0 30px rgba(168, 85, 247, 0.45)')
+            : (isDark
+                ? '0 8px 24px rgba(0, 0, 0, 0.45), 0 0 20px rgba(168, 85, 247, 0.35)'
+                : '0 8px 24px rgba(15, 23, 42, 0.12), 0 0 20px rgba(168, 85, 247, 0.25)'),
           cursor: isDragging ? 'grabbing' : 'grab',
           touchAction: 'none',
           userSelect: 'none',
@@ -769,8 +1020,8 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             style={{
               width: 26,
               height: 26,
-              color: '#e9d5ff',
-              filter: 'drop-shadow(0 0 6px rgba(216, 180, 254, 0.9))',
+              color: isDark ? '#e9d5ff' : '#7c3aed',
+              filter: isDark ? 'drop-shadow(0 0 6px rgba(216, 180, 254, 0.9))' : 'drop-shadow(0 0 4px rgba(124, 58, 237, 0.4))',
               transform: 'rotate(-15deg)',
             }}
           />
@@ -782,8 +1033,8 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
               right: -6,
               width: 14,
               height: 14,
-              color: '#38bdf8',
-              filter: 'drop-shadow(0 0 4px rgba(56, 189, 248, 0.9))',
+              color: isDark ? '#38bdf8' : '#0284c7',
+              filter: isDark ? 'drop-shadow(0 0 4px rgba(56, 189, 248, 0.9))' : 'drop-shadow(0 0 4px rgba(2, 132, 199, 0.5))',
               animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             }}
           />
@@ -797,7 +1048,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
               height: 9,
               borderRadius: '50%',
               background: gatewayOnline === false ? '#ef4444' : '#10b981',
-              border: '1.5px solid #0d0d11',
+              border: isDark ? '1.5px solid #0d0d11' : '1.5px solid #ffffff',
               boxShadow: gatewayOnline === false ? '0 0 6px #ef4444' : '0 0 6px #10b981',
             }}
           />
@@ -823,21 +1074,23 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         inset: isPhone || isMax ? 0 : 'auto',
         right: isPhone || isMax ? 0 : 20,
         bottom: isPhone || isMax ? 0 : 20,
-        width: isPhone || isMax ? '100vw' : 'min(500px, calc(100vw - 32px))',
+        width: isPhone || isMax ? '100vw' : isSidebarOpen ? 'min(760px, calc(100vw - 32px))' : 'min(500px, calc(100vw - 32px))',
         height: isPhone || isMax ? '100vh' : 'min(730px, calc(100vh - 40px))',
         zIndex: 85,
         display: 'flex',
         flexDirection: 'column',
-        background: 'rgba(13, 11, 24, 0.94)',
+        background: isDark ? 'rgba(13, 11, 24, 0.95)' : 'rgba(255, 255, 255, 0.96)',
         backdropFilter: 'blur(28px) saturate(180%)',
         WebkitBackdropFilter: 'blur(28px) saturate(180%)',
-        border: isPhone ? 'none' : isDragOver ? '2px dashed #a855f7' : '1.5px solid rgba(192, 132, 252, 0.3)',
+        border: isPhone ? 'none' : isDragOver ? '2px dashed #a855f7' : isDark ? '1.5px solid rgba(192, 132, 252, 0.3)' : '1.5px solid rgba(168, 85, 247, 0.3)',
         borderRadius: isPhone || isMax ? 0 : 24,
-        boxShadow: '0 24px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(168, 85, 247, 0.25)',
+        boxShadow: isDark
+          ? '0 24px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(168, 85, 247, 0.25)'
+          : '0 24px 60px rgba(15, 23, 42, 0.15), 0 0 40px rgba(168, 85, 247, 0.15)',
         overflow: 'hidden',
-        color: '#f8fafc',
+        color: 'var(--text-primary)',
         fontFamily: 'var(--font-system)',
-        transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        transition: 'width 0.2s cubic-bezier(0.16, 1, 0.3, 1), height 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
       {/* ── Hidden File Picker ── */}
@@ -857,31 +1110,59 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '12px 16px',
-          background: 'rgba(24, 20, 42, 0.75)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+          background: isDark ? 'rgba(24, 20, 42, 0.8)' : 'rgba(248, 250, 252, 0.92)',
+          borderBottom: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(15, 23, 42, 0.1)'),
           userSelect: 'none',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Hamburger Menu Toggle Button */}
+          <button
+            onClick={() => setIsSidebarOpen(prev => !prev)}
+            aria-label="Toggle Conversation History"
+            title={isSidebarOpen ? 'Close chat sidebar' : 'Open chat history'}
             style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(56, 189, 248, 0.35))',
-              border: '1px solid rgba(216, 180, 254, 0.5)',
+              background: isSidebarOpen
+                ? (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(168, 85, 247, 0.18)')
+                : (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.06)'),
+              border: isSidebarOpen
+                ? (isDark ? '1px solid rgba(216, 180, 254, 0.5)' : '1px solid rgba(168, 85, 247, 0.4)')
+                : (isDark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(15, 23, 42, 0.1)'),
+              borderRadius: 8,
+              padding: 6,
+              color: isSidebarOpen
+                ? (isDark ? '#e9d5ff' : '#7c3aed')
+                : (isDark ? '#cbd5e1' : '#475569'),
+              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 0 14px rgba(168, 85, 247, 0.3)',
             }}
           >
-            <Moon style={{ width: 18, height: 18, color: '#e9d5ff', transform: 'rotate(-15deg)' }} />
+            <Menu style={{ width: 16, height: 16 }} />
+          </button>
+
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 10,
+              background: isDark
+                ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(56, 189, 248, 0.35))'
+                : 'linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(56, 189, 248, 0.2))',
+              border: isDark ? '1px solid rgba(216, 180, 254, 0.5)' : '1px solid rgba(168, 85, 247, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: isDark ? '0 0 14px rgba(168, 85, 247, 0.3)' : '0 0 10px rgba(168, 85, 247, 0.15)',
+            }}
+          >
+            <Moon style={{ width: 17, height: 17, color: isDark ? '#e9d5ff' : '#7c3aed', transform: 'rotate(-15deg)' }} />
           </div>
 
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontWeight: 600, fontSize: 14, letterSpacing: '0.01em', color: '#ffffff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontWeight: 600, fontSize: 13.5, letterSpacing: '0.01em', color: 'var(--text-primary)' }}>
                 FreeLLM Moon Assistant
               </span>
               <span
@@ -889,11 +1170,11 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                   fontSize: 9,
                   fontWeight: 600,
                   textTransform: 'uppercase',
-                  padding: '1px 6px',
+                  padding: '1px 5px',
                   borderRadius: 6,
-                  background: 'rgba(168, 85, 247, 0.25)',
-                  border: '1px solid rgba(168, 85, 247, 0.45)',
-                  color: '#d8b4fe',
+                  background: isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(168, 85, 247, 0.15)',
+                  border: isDark ? '1px solid rgba(168, 85, 247, 0.45)' : '1px solid rgba(168, 85, 247, 0.3)',
+                  color: isDark ? '#d8b4fe' : '#7c3aed',
                   letterSpacing: '0.05em',
                 }}
               >
@@ -901,7 +1182,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
               </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
               <span
                 style={{
                   width: 7,
@@ -932,13 +1213,13 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             style={{
               background: isVoiceModeActive
                 ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.5), rgba(56, 189, 248, 0.5))'
-                : 'rgba(255, 255, 255, 0.08)',
+                : isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.06)',
               border: isVoiceModeActive
                 ? '1px solid rgba(216, 180, 254, 0.6)'
-                : '1px solid rgba(255, 255, 255, 0.12)',
+                : '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.1)'),
               borderRadius: 8,
               padding: '5px 8px',
-              color: isVoiceModeActive ? '#ffffff' : '#cbd5e1',
+              color: isVoiceModeActive ? '#ffffff' : 'var(--text-secondary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -959,13 +1240,13 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             style={{
               background: showSettingsModal
                 ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.4), rgba(56, 189, 248, 0.4))'
-                : 'rgba(255, 255, 255, 0.08)',
+                : isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.06)',
               border: showSettingsModal
                 ? '1px solid rgba(216, 180, 254, 0.6)'
-                : '1px solid rgba(255, 255, 255, 0.12)',
+                : '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.1)'),
               borderRadius: 8,
               padding: 6,
-              color: showSettingsModal ? '#ffffff' : '#cbd5e1',
+              color: showSettingsModal ? '#ffffff' : 'var(--text-secondary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -979,13 +1260,13 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
           <button
             onClick={handleClearHistory}
             aria-label="Clear chat history"
-            title="Clear chat and media history"
+            title="Clear chat messages"
             style={{
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.06)',
+              border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.1)'),
               borderRadius: 8,
               padding: 6,
-              color: '#cbd5e1',
+              color: 'var(--text-secondary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -1002,11 +1283,11 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
               aria-label={isMax ? 'Restore window size' : 'Maximize window'}
               title={isMax ? 'Restore' : 'Maximize'}
               style={{
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
+                background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.06)',
+                border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.1)'),
                 borderRadius: 8,
                 padding: 6,
-                color: '#cbd5e1',
+                color: 'var(--text-secondary)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1023,11 +1304,11 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             aria-label="Collapse to floating Moon button"
             title="Collapse to Moon button"
             style={{
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
+              background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.06)',
+              border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.1)'),
               borderRadius: 8,
               padding: 6,
-              color: '#cbd5e1',
+              color: 'var(--text-secondary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -1039,93 +1320,386 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         </div>
       </header>
 
-      {/* ── Settings Panel / Override Drawer ── */}
-      {showSettingsModal && (
-        <div
-          style={{
-            padding: '12px 16px',
-            background: 'rgba(20, 16, 36, 0.98)',
-            borderBottom: '1px solid rgba(168, 85, 247, 0.35)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10,
-            fontSize: 12,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontWeight: 600, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Settings style={{ width: 14, height: 14, color: '#c084fc' }} />
-              FreeLLM Gateway Connection Settings
-            </span>
-            <button
-              onClick={() => setShowSettingsModal(false)}
+      {/* ── Main Workspace Body (Sidebar + Chat Area) ── */}
+      <div
+        style={{
+          display: 'flex',
+          flex: 1,
+          minHeight: 0,
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        {/* ── Collapsible & Slide-Over Conversation History Sidebar ── */}
+        {isSidebarOpen && (
+          <aside
+            style={{
+              width: isPhone ? '100%' : 240,
+              position: isPhone ? 'absolute' : 'relative',
+              inset: isPhone ? 0 : 'auto',
+              zIndex: isPhone ? 50 : 1,
+              display: 'flex',
+              flexDirection: 'column',
+              background: isDark ? 'rgba(18, 14, 34, 0.96)' : 'rgba(248, 250, 252, 0.97)',
+              borderRight: isPhone ? 'none' : '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)'),
+              padding: '12px 10px',
+              boxSizing: 'border-box',
+              overflow: 'hidden',
+              backdropFilter: isPhone ? 'blur(20px)' : undefined,
+              boxShadow: isPhone ? '0 10px 30px rgba(0,0,0,0.5)' : undefined,
+            }}
+          >
+            {/* Sidebar Top: New Chat + Close on mobile */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+              <button
+                onClick={handleNewChat}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  background: isDark
+                    ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(99, 102, 241, 0.35))'
+                    : 'linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(99, 102, 241, 0.18))',
+                  border: isDark ? '1px solid rgba(168, 85, 247, 0.5)' : '1px solid rgba(168, 85, 247, 0.35)',
+                  color: isDark ? '#ffffff' : '#6d28d9',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                <Plus style={{ width: 14, height: 14 }} />
+                <span>New Chat</span>
+              </button>
+              {isPhone && (
+                <button
+                  onClick={() => setIsSidebarOpen(false)}
+                  style={{
+                    background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.06)',
+                    border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.1)'),
+                    color: 'var(--text-muted)',
+                    padding: 6,
+                    cursor: 'pointer',
+                    borderRadius: 8,
+                    display: 'flex',
+                  }}
+                  title="Close sidebar"
+                >
+                  <X style={{ width: 16, height: 16 }} />
+                </button>
+              )}
+            </div>
+
+            {/* Search Chats Input */}
+            <div style={{ position: 'relative', marginBottom: 10 }}>
+              <Search
+                style={{
+                  position: 'absolute',
+                  left: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 12,
+                  height: 12,
+                  color: 'var(--text-muted)',
+                }}
+              />
+              <input
+                type="text"
+                value={conversationSearch}
+                onChange={e => setConversationSearch(e.target.value)}
+                placeholder="Search chats..."
+                style={{
+                  width: '100%',
+                  padding: '5px 8px 5px 26px',
+                  borderRadius: 8,
+                  background: isDark ? 'rgba(0, 0, 0, 0.3)' : 'rgba(15, 23, 42, 0.05)',
+                  border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(15, 23, 42, 0.1)'),
+                  color: 'var(--text-primary)',
+                  fontSize: 11,
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* Conversation List */}
+            <div
               style={{
-                background: 'none',
-                border: 'none',
-                color: '#94a3b8',
-                cursor: 'pointer',
-                padding: 2,
+                flex: 1,
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                paddingRight: 2,
               }}
             >
-              <X style={{ width: 14, height: 14 }} />
-            </button>
-          </div>
+              {(() => {
+                const filtered = conversations.filter(c =>
+                  !conversationSearch.trim() || c.title.toLowerCase().includes(conversationSearch.toLowerCase().trim())
+                );
+                if (filtered.length === 0) {
+                  return (
+                    <div style={{ textAlign: 'center', padding: '24px 8px', color: 'var(--text-muted)', fontSize: 11 }}>
+                      {conversationSearch ? 'No chats match search' : 'No previous chats yet'}
+                    </div>
+                  );
+                }
+                return filtered.map(conv => {
+                  const isActive = conv.id === activeConversationId;
+                  const isEditing = editingConvId === conv.id;
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: 11, color: '#cbd5e1', fontWeight: 500 }}>
-              Gateway Base URL:
-            </label>
-            <input
-              type="text"
-              value={customGatewayUrl}
-              onChange={e => {
-                const val = e.target.value;
-                setCustomGatewayUrl(val);
-                try {
-                  localStorage.setItem(STORAGE_KEY_CUSTOM_URL, val);
-                } catch {}
-              }}
-              placeholder="https://free-llm-api-7fue.onrender.com/v1 (or leave blank for default)"
-              style={{
-                width: '100%',
-                background: 'rgba(0, 0, 0, 0.4)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#fff',
-                borderRadius: 8,
-                padding: '6px 10px',
-                fontSize: 12,
-                outline: 'none',
-              }}
-            />
-          </div>
+                  if (isEditing) {
+                    return (
+                      <div
+                        key={conv.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '4px 6px',
+                          borderRadius: 8,
+                          background: isDark ? 'rgba(168, 85, 247, 0.2)' : 'rgba(168, 85, 247, 0.12)',
+                        }}
+                      >
+                        <input
+                          type="text"
+                          value={editingTitleText}
+                          onChange={e => setEditingTitleText(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleRenameConversation(conv.id, editingTitleText);
+                            if (e.key === 'Escape') setEditingConvId(null);
+                          }}
+                          autoFocus
+                          style={{
+                            flex: 1,
+                            background: isDark ? 'rgba(0, 0, 0, 0.4)' : '#ffffff',
+                            border: '1px solid #a855f7',
+                            borderRadius: 4,
+                            padding: '3px 6px',
+                            color: 'var(--text-primary)',
+                            fontSize: 11,
+                            outline: 'none',
+                          }}
+                        />
+                        <button
+                          onClick={() => handleRenameConversation(conv.id, editingTitleText)}
+                          style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', padding: 2 }}
+                          title="Save title"
+                        >
+                          <Check style={{ width: 13, height: 13 }} />
+                        </button>
+                        <button
+                          onClick={() => setEditingConvId(null)}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}
+                          title="Cancel"
+                        >
+                          <X style={{ width: 13, height: 13 }} />
+                        </button>
+                      </div>
+                    );
+                  }
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: 11, color: '#cbd5e1', fontWeight: 500 }}>
-              Unified API Key:
-            </label>
-            <input
-              type="password"
-              value={customApiKey}
-              onChange={e => {
-                const val = e.target.value;
-                setCustomApiKey(val);
-                try {
-                  localStorage.setItem(STORAGE_KEY_CUSTOM_KEY, val);
-                } catch {}
-              }}
-              placeholder="Enter unified API key (or leave blank to use Render env)"
+                  return (
+                    <div
+                      key={conv.id}
+                      onClick={() => handleSelectConversation(conv.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '7px 8px',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        background: isActive
+                          ? (isDark ? 'rgba(168, 85, 247, 0.22)' : 'rgba(168, 85, 247, 0.14)')
+                          : 'transparent',
+                        border: isActive
+                          ? (isDark ? '1px solid rgba(192, 132, 252, 0.4)' : '1px solid rgba(168, 85, 247, 0.35)')
+                          : '1px solid transparent',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={e => {
+                        if (!isActive) {
+                          e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(15, 23, 42, 0.05)';
+                        }
+                      }}
+                      onMouseLeave={e => {
+                        if (!isActive) {
+                          e.currentTarget.style.background = 'transparent';
+                        }
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0, paddingRight: 6 }}>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: isActive ? 600 : 500,
+                            color: isActive ? (isDark ? '#f8fafc' : '#581c87') : 'var(--text-primary)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {conv.title || 'Untitled Chat'}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {formatConversationDate(conv.updatedAt || conv.createdAt)}
+                        </div>
+                      </div>
+
+                      {/* Actions: Rename & Delete */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            setEditingConvId(conv.id);
+                            setEditingTitleText(conv.title);
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: 3,
+                            borderRadius: 4,
+                          }}
+                          title="Rename chat"
+                        >
+                          <Edit2 style={{ width: 11, height: 11 }} />
+                        </button>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (deletingConvId === conv.id) {
+                              handleDeleteConversation(conv.id);
+                            } else {
+                              setDeletingConvId(conv.id);
+                              setTimeout(() => setDeletingConvId(null), 3000);
+                            }
+                          }}
+                          style={{
+                            background: deletingConvId === conv.id ? 'rgba(239, 68, 68, 0.2)' : 'none',
+                            border: deletingConvId === conv.id ? '1px solid rgba(239, 68, 68, 0.4)' : 'none',
+                            color: deletingConvId === conv.id ? '#ef4444' : 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: 3,
+                            borderRadius: 4,
+                          }}
+                          title={deletingConvId === conv.id ? 'Click to confirm delete' : 'Delete chat'}
+                        >
+                          <Trash2 style={{ width: 11, height: 11 }} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </aside>
+        )}
+
+        {/* ── Primary Chat Area ── */}
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            position: 'relative',
+          }}
+        >
+          {/* ── Settings Panel / Override Drawer ── */}
+          {showSettingsModal && (
+            <div
               style={{
-                width: '100%',
-                background: 'rgba(0, 0, 0, 0.4)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#fff',
-                borderRadius: 8,
-                padding: '6px 10px',
+                padding: '12px 16px',
+                background: isDark ? 'rgba(20, 16, 36, 0.98)' : 'rgba(248, 250, 252, 0.98)',
+                borderBottom: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(168, 85, 247, 0.25)'),
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
                 fontSize: 12,
-                outline: 'none',
               }}
-            />
-          </div>
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Settings style={{ width: 14, height: 14, color: '#c084fc' }} />
+                  FreeLLM Gateway Connection Settings
+                </span>
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: 2,
+                  }}
+                >
+                  <X style={{ width: 14, height: 14 }} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                  Gateway Base URL:
+                </label>
+                <input
+                  type="text"
+                  value={customGatewayUrl}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setCustomGatewayUrl(val);
+                    try {
+                      localStorage.setItem(STORAGE_KEY_CUSTOM_URL, val);
+                    } catch {}
+                  }}
+                  placeholder="https://free-llm-api-7fue.onrender.com/v1 (or leave blank for default)"
+                  style={{
+                    width: '100%',
+                    background: isDark ? 'rgba(0, 0, 0, 0.4)' : '#ffffff',
+                    border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.15)'),
+                    color: 'var(--text-primary)',
+                    borderRadius: 8,
+                    padding: '6px 10px',
+                    fontSize: 12,
+                    outline: 'none',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                  Unified API Key:
+                </label>
+                <input
+                  type="password"
+                  value={customApiKey}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setCustomApiKey(val);
+                    try {
+                      localStorage.setItem(STORAGE_KEY_CUSTOM_KEY, val);
+                    } catch {}
+                  }}
+                  placeholder="Enter unified API key (or leave blank to use Render env)"
+                  style={{
+                    width: '100%',
+                    background: isDark ? 'rgba(0, 0, 0, 0.4)' : '#ffffff',
+                    border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.15)'),
+                    color: 'var(--text-primary)',
+                    borderRadius: 8,
+                    padding: '6px 10px',
+                    fontSize: 12,
+                    outline: 'none',
+                  }}
+                />
+              </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
             <span style={{ fontSize: 11, color: gatewayOnline ? '#10b981' : gatewayError ? '#ef4444' : '#94a3b8' }}>
@@ -1188,8 +1762,8 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         style={{
           display: 'flex',
           flexDirection: 'column',
-          background: 'rgba(255, 255, 255, 0.03)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          background: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.03)',
+          borderBottom: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)'),
         }}
       >
         <div
@@ -1204,7 +1778,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 64 }}>
             <Bot style={{ width: 13, height: 13, color: '#a855f7' }} />
-            <span style={{ color: '#94a3b8', fontWeight: 500 }}>Model:</span>
+            <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Model:</span>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, justifyContent: 'flex-end' }}>
@@ -1219,9 +1793,9 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                   autoFocus
                   style={{
                     width: '100%',
-                    background: 'rgba(0, 0, 0, 0.35)',
+                    background: isDark ? 'rgba(0, 0, 0, 0.4)' : '#ffffff',
                     border: '1px solid rgba(168, 85, 247, 0.4)',
-                    color: '#fff',
+                    color: 'var(--text-primary)',
                     borderRadius: 6,
                     padding: '2px 6px',
                     fontSize: 11,
@@ -1237,7 +1811,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                   style={{
                     background: 'none',
                     border: 'none',
-                    color: '#94a3b8',
+                    color: 'var(--text-muted)',
                     cursor: 'pointer',
                     padding: 2,
                     display: 'flex',
@@ -1251,11 +1825,11 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                 onClick={() => setShowModelSearch(true)}
                 title="Search & filter 94+ free models"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.06)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  background: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(15, 23, 42, 0.05)',
+                  border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.1)'),
                   borderRadius: 6,
                   padding: '3px 6px',
-                  color: '#94a3b8',
+                  color: 'var(--text-secondary)',
                   fontSize: 10,
                   cursor: 'pointer',
                   display: 'flex',
@@ -1272,9 +1846,9 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
               value={selectedModel}
               onChange={e => handleModelChange(e.target.value)}
               style={{
-                background: 'rgba(20, 16, 36, 0.95)',
-                border: '1px solid rgba(168, 85, 247, 0.35)',
-                color: '#f8fafc',
+                background: isDark ? 'rgba(20, 16, 36, 0.95)' : '#ffffff',
+                border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(168, 85, 247, 0.4)'),
+                color: 'var(--text-primary)',
                 fontSize: 12,
                 borderRadius: 8,
                 padding: '3px 8px',
@@ -1293,7 +1867,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                       m.provider.toLowerCase().includes(modelSearch.toLowerCase())
                     )
                     .map(m => (
-                      <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                      <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
                         {m.name} ({m.provider})
                       </option>
                     ))}
@@ -1305,7 +1879,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     {catalogModels
                       .filter(m => m.isPopular)
                       .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
                           {m.name}
                         </option>
                       ))}
@@ -1315,7 +1889,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     {catalogModels
                       .filter(m => m.capabilities.includes('vision') && !m.isPopular)
                       .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
                           {m.name}
                         </option>
                       ))}
@@ -1325,7 +1899,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     {catalogModels
                       .filter(m => m.capabilities.includes('code') && !m.isPopular && !m.capabilities.includes('vision'))
                       .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
                           {m.name}
                         </option>
                       ))}
@@ -1335,7 +1909,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     {catalogModels
                       .filter(m => m.capabilities.includes('reasoning') && !m.isPopular && !m.capabilities.includes('vision'))
                       .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
                           {m.name}
                         </option>
                       ))}
@@ -1345,7 +1919,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     {catalogModels
                       .filter(m => (m.capabilities.includes('image_gen') || m.capabilities.includes('video_gen')) && !m.isPopular)
                       .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
                           {m.name}
                         </option>
                       ))}
@@ -1355,7 +1929,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     {catalogModels
                       .filter(m => (m.provider === 'Cerebras' || m.provider === 'Groq') && !m.isPopular && !m.capabilities.includes('reasoning'))
                       .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
                           {m.name}
                         </option>
                       ))}
@@ -1365,7 +1939,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     {catalogModels
                       .filter(m => m.provider === 'Google' && !m.isPopular && !m.capabilities.includes('vision'))
                       .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
                           {m.name}
                         </option>
                       ))}
@@ -1375,7 +1949,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     {catalogModels
                       .filter(m => m.provider === 'Mistral AI' && !m.isPopular && !m.capabilities.includes('vision') && !m.capabilities.includes('code'))
                       .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
                           {m.name}
                         </option>
                       ))}
@@ -1385,7 +1959,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     {catalogModels
                       .filter(m => m.provider === 'OpenRouter' && !m.isPopular)
                       .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
                           {m.name}
                         </option>
                       ))}
@@ -1395,7 +1969,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     {catalogModels
                       .filter(m => !['FreeLLM Router', 'Google', 'Groq', 'Cerebras', 'Mistral AI', 'OpenRouter'].includes(m.provider) && !m.isPopular && !m.capabilities.includes('image_gen') && !m.capabilities.includes('video_gen'))
                       .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: '#171426', color: '#fff' }}>
+                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
                           {m.name} ({m.provider})
                         </option>
                       ))}
@@ -1421,19 +1995,19 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '3px 14px 5px',
-                background: 'rgba(0, 0, 0, 0.2)',
+                background: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(15, 23, 42, 0.04)',
                 fontSize: 10,
-                color: '#94a3b8',
+                color: 'var(--text-secondary)',
                 gap: 6,
                 flexWrap: 'wrap',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: '#d8b4fe', fontWeight: 600 }}>
+                <span style={{ color: isDark ? '#d8b4fe' : '#7c3aed', fontWeight: 600 }}>
                   {activeModelObj?.provider || 'FreeLLM Gateway'}
                 </span>
                 {activeModelObj?.contextWindow && (
-                  <span style={{ background: 'rgba(255, 255, 255, 0.08)', padding: '1px 5px', borderRadius: 4, fontSize: 9 }}>
+                  <span style={{ background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)', color: 'var(--text-secondary)', padding: '1px 5px', borderRadius: 4, fontSize: 9 }}>
                     {activeModelObj.contextWindow >= 1000000
                       ? `${Math.round(activeModelObj.contextWindow / 1000000)}M ctx`
                       : `${Math.round(activeModelObj.contextWindow / 1000)}K ctx`}
@@ -1460,20 +2034,20 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                           ? 'rgba(236, 72, 153, 0.2)'
                           : cap === 'video_gen'
                           ? 'rgba(244, 63, 94, 0.2)'
-                          : 'rgba(255, 255, 255, 0.06)',
+                          : isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(15, 23, 42, 0.06)',
                       color:
                         cap === 'vision'
-                          ? '#7dd3fc'
+                          ? '#0284c7'
                           : cap === 'code'
-                          ? '#86efac'
+                          ? '#16a34a'
                           : cap === 'reasoning'
-                          ? '#fde047'
+                          ? '#ca8a04'
                           : cap === 'image_gen'
-                          ? '#f472b6'
+                          ? '#db2777'
                           : cap === 'video_gen'
-                          ? '#fb7185'
-                          : '#cbd5e1',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                          ? '#e11d48'
+                          : 'var(--text-primary)',
+                      border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(15, 23, 42, 0.1)'),
                       textTransform: 'capitalize',
                     }}
                   >
@@ -1664,7 +2238,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                   alignItems: 'center',
                   gap: 6,
                   fontSize: 11,
-                  color: isUser ? '#cbd5e1' : '#a855f7',
+                  color: isUser ? (isDark ? '#cbd5e1' : '#64748b') : '#a855f7',
                   padding: '0 4px',
                 }}
               >
@@ -1685,19 +2259,24 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                   padding: '10px 14px',
                   borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                   background: isUser
-                    ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.45), rgba(99, 102, 241, 0.5))'
-                    : 'rgba(255, 255, 255, 0.05)',
+                    ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.55), rgba(99, 102, 241, 0.6))'
+                    : isDark
+                    ? 'rgba(255, 255, 255, 0.05)'
+                    : 'rgba(255, 255, 255, 0.95)',
                   border: isUser
                     ? '1px solid rgba(216, 180, 254, 0.4)'
-                    : '1px solid rgba(255, 255, 255, 0.1)',
-                  color: '#f8fafc',
+                    : isDark
+                    ? '1px solid rgba(255, 255, 255, 0.1)'
+                    : '1px solid rgba(15, 23, 42, 0.1)',
+                  color: isUser ? '#ffffff' : 'var(--text-primary)',
                   fontSize: 13,
                   lineHeight: 1.55,
-                  whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                   boxShadow: isUser
                     ? '0 4px 14px rgba(168, 85, 247, 0.2)'
-                    : '0 4px 14px rgba(0, 0, 0, 0.25)',
+                    : isDark
+                    ? '0 4px 14px rgba(0, 0, 0, 0.25)'
+                    : '0 2px 10px rgba(0, 0, 0, 0.06)',
                 }}
               >
                 {/* 1. Attached Files (if any) */}
@@ -1707,14 +2286,15 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                       <div
                         key={att.id}
                         style={{
-                          background: 'rgba(0, 0, 0, 0.35)',
-                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          background: isDark ? 'rgba(0, 0, 0, 0.35)' : 'rgba(15, 23, 42, 0.05)',
+                          border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.1)'),
                           borderRadius: 8,
                           padding: '4px 8px',
                           display: 'flex',
                           alignItems: 'center',
                           gap: 6,
                           fontSize: 11,
+                          color: 'var(--text-primary)',
                         }}
                       >
                         {att.type.startsWith('image/') && att.dataUrl ? (
@@ -1740,7 +2320,13 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                 )}
 
                 {/* 2. Text Content */}
-                <div>{msg.content}</div>
+                {isUser ? (
+                  <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.content}</div>
+                ) : (
+                  <div style={{ color: 'inherit' }}>
+                    <FormattedMessage content={msg.content} />
+                  </div>
+                )}
 
                 {/* 3. Generated Image Card */}
                 {msg.generatedMedia && msg.generatedMedia.type === 'image' && (
@@ -1884,18 +2470,18 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                         fontWeight: 500,
                         padding: '2px 8px',
                         borderRadius: 12,
-                        background: 'rgba(168, 85, 247, 0.12)',
-                        border: '1px solid rgba(168, 85, 247, 0.28)',
-                        color: '#d8b4fe',
+                        background: isDark ? 'rgba(168, 85, 247, 0.12)' : 'rgba(168, 85, 247, 0.1)',
+                        border: isDark ? '1px solid rgba(168, 85, 247, 0.28)' : '1px solid rgba(168, 85, 247, 0.25)',
+                        color: isDark ? '#d8b4fe' : '#7c3aed',
                         letterSpacing: '0.01em',
                       }}
                     >
-                      <span style={{ color: '#c084fc', fontSize: 10 }}>✦</span>
+                      <span style={{ color: isDark ? '#c084fc' : '#9333ea', fontSize: 10 }}>✦</span>
                       <span>{msg.model || selectedModel}</span>
                       {msg.latencyMs ? (
                         <>
                           <span style={{ opacity: 0.45 }}>·</span>
-                          <span style={{ color: '#a5b4fc', fontFamily: 'monospace', fontSize: 9.5 }}>{msg.latencyMs}ms</span>
+                          <span style={{ color: isDark ? '#a5b4fc' : '#4f46e5', fontFamily: 'monospace', fontSize: 9.5 }}>{msg.latencyMs}ms</span>
                         </>
                       ) : null}
                     </span>
@@ -1908,7 +2494,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: copiedId === msg.id ? '#10b981' : '#64748b',
+                      color: copiedId === msg.id ? '#10b981' : 'var(--text-muted)',
                       fontSize: 11,
                       cursor: 'pointer',
                       display: 'flex',
@@ -1935,7 +2521,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: isSpeakingMessageId === msg.id ? '#a855f7' : '#64748b',
+                      color: isSpeakingMessageId === msg.id ? '#a855f7' : 'var(--text-muted)',
                       fontSize: 11,
                       cursor: 'pointer',
                       display: 'flex',
@@ -1992,7 +2578,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
         {/* Starter Prompt Suggestions */}
         {messages.length <= 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4, padding: '0 4px' }}>
-            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
               Quick prompts to get started:
             </span>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -2011,23 +2597,23 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                     }
                   }}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.85)',
+                    border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.12)'),
                     borderRadius: 12,
                     padding: '5px 10px',
                     fontSize: 11,
-                    color: '#e2e8f0',
+                    color: 'var(--text-primary)',
                     cursor: 'pointer',
                     textAlign: 'left',
                     transition: 'all 0.15s ease',
                   }}
                   onMouseEnter={e => {
-                    e.currentTarget.style.background = 'rgba(168, 85, 247, 0.2)';
+                    e.currentTarget.style.background = isDark ? 'rgba(168, 85, 247, 0.2)' : 'rgba(168, 85, 247, 0.12)';
                     e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.4)';
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+                    e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.85)';
+                    e.currentTarget.style.borderColor = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.12)';
                   }}
                 >
                   {prompt}
@@ -2039,9 +2625,9 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
 
         {/* Loading Indicator */}
         {isLoading && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', color: '#cbd5e1' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', color: 'var(--text-secondary)' }}>
             <Moon style={{ width: 14, height: 14, color: '#a855f7', animation: 'spin 3s linear infinite' }} />
-            <span style={{ fontSize: 12, fontStyle: 'italic', color: '#94a3b8' }}>
+            <span style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text-secondary)' }}>
               Moon Assistant is processing multimodal pipeline...
             </span>
           </div>
@@ -2119,8 +2705,8 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
           gap: 6,
           overflowX: 'auto',
           whiteSpace: 'nowrap',
-          borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-          background: 'rgba(255, 255, 255, 0.02)',
+          borderTop: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(15, 23, 42, 0.08)'),
+          background: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(255, 255, 255, 0.6)',
         }}
       >
         <button
@@ -2129,9 +2715,9 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             fontSize: 11,
             padding: '4px 9px',
             borderRadius: 10,
-            background: 'rgba(255, 255, 255, 0.06)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            color: '#e2e8f0',
+            background: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(15, 23, 42, 0.05)',
+            border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.12)'),
+            color: 'var(--text-primary)',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -2154,7 +2740,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             borderRadius: 10,
             background: 'rgba(168, 85, 247, 0.15)',
             border: '1px solid rgba(168, 85, 247, 0.35)',
-            color: '#d8b4fe',
+            color: isDark ? '#d8b4fe' : '#7c3aed',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -2177,7 +2763,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             borderRadius: 10,
             background: 'rgba(56, 189, 248, 0.15)',
             border: '1px solid rgba(56, 189, 248, 0.35)',
-            color: '#7dd3fc',
+            color: isDark ? '#7dd3fc' : '#0284c7',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -2196,7 +2782,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             borderRadius: 10,
             background: 'rgba(236, 72, 153, 0.15)',
             border: '1px solid rgba(236, 72, 153, 0.35)',
-            color: '#f472b6',
+            color: isDark ? '#f472b6' : '#db2777',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -2216,23 +2802,23 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             display: 'flex',
             flexWrap: 'wrap',
             gap: 6,
-            background: 'rgba(20, 16, 36, 0.9)',
-            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            background: isDark ? 'rgba(20, 16, 36, 0.9)' : 'rgba(241, 245, 249, 0.95)',
+            borderTop: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)'),
           }}
         >
           {attachments.map(att => (
             <div
               key={att.id}
               style={{
-                background: 'rgba(168, 85, 247, 0.2)',
-                border: '1px solid rgba(168, 85, 247, 0.4)',
+                background: isDark ? 'rgba(168, 85, 247, 0.2)' : 'rgba(168, 85, 247, 0.12)',
+                border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.4)' : 'rgba(168, 85, 247, 0.3)'),
                 borderRadius: 8,
                 padding: '3px 8px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
                 fontSize: 11,
-                color: '#e2e8f0',
+                color: 'var(--text-primary)',
               }}
             >
               <FileText style={{ width: 12, height: 12, color: '#c084fc' }} />
@@ -2244,7 +2830,7 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#94a3b8',
+                  color: 'var(--text-muted)',
                   cursor: 'pointer',
                   padding: 0,
                   display: 'flex',
@@ -2261,8 +2847,8 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
       <footer
         style={{
           padding: '10px 14px',
-          background: 'rgba(20, 16, 36, 0.95)',
-          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+          background: isDark ? 'rgba(20, 16, 36, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+          borderTop: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(15, 23, 42, 0.1)'),
           display: 'flex',
           alignItems: 'flex-end',
           gap: 8,
@@ -2277,9 +2863,9 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             width: 36,
             height: 36,
             borderRadius: 10,
-            background: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            color: '#cbd5e1',
+            background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.05)',
+            border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.1)'),
+            color: 'var(--text-secondary)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -2313,11 +2899,11 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             minHeight: 36,
             padding: '8px 12px',
             borderRadius: 10,
-            background: 'rgba(255, 255, 255, 0.06)',
+            background: isDark ? 'rgba(255, 255, 255, 0.06)' : '#f8fafc',
             border: isDictating
               ? '1px solid #ef4444'
-              : '1px solid rgba(255, 255, 255, 0.18)',
-            color: '#ffffff',
+              : '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(15, 23, 42, 0.15)'),
+            color: 'var(--text-primary)',
             fontSize: 13,
             outline: 'none',
             resize: 'none',
@@ -2337,9 +2923,11 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             borderRadius: 10,
             background: isDictating
               ? 'linear-gradient(135deg, #ef4444, #dc2626)'
-              : 'rgba(255, 255, 255, 0.08)',
-            border: isDictating ? '1px solid #f87171' : '1px solid rgba(255, 255, 255, 0.15)',
-            color: '#ffffff',
+              : isDark
+              ? 'rgba(255, 255, 255, 0.08)'
+              : 'rgba(15, 23, 42, 0.05)',
+            border: isDictating ? '1px solid #f87171' : '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.1)'),
+            color: isDictating ? '#ffffff' : 'var(--text-secondary)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -2363,9 +2951,11 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
             background:
               (input.trim() || attachments.length > 0) && !isLoading
                 ? 'linear-gradient(135deg, #a855f7, #6366f1)'
-                : 'rgba(255, 255, 255, 0.08)',
+                : isDark
+                ? 'rgba(255, 255, 255, 0.08)'
+                : 'rgba(15, 23, 42, 0.05)',
             border: 'none',
-            color: (input.trim() || attachments.length > 0) && !isLoading ? '#ffffff' : '#64748b',
+            color: (input.trim() || attachments.length > 0) && !isLoading ? '#ffffff' : 'var(--text-muted)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -2381,6 +2971,8 @@ export function FreeLLMAssistant({ isPhone = false }: { isPhone?: boolean }) {
           <Send style={{ width: 15, height: 15 }} />
         </button>
       </footer>
+        </div>
+      </div>
     </div>
   );
 }

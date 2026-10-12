@@ -271,7 +271,7 @@ export default function NightPlannerApp() {
           <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-xl border-2 border-purple-500/40 flex items-center justify-center shadow-[0_0_35px_rgba(168,85,247,0.4)] animate-pulse overflow-hidden">
             <img
               src="/icons/icon-192.png"
-              alt="Night Planner"
+              alt="Sam'Space"
               className="w-full h-full object-cover"
             />
           </div>
@@ -566,7 +566,7 @@ export default function NightPlannerApp() {
       />
 
       {/* ── 9. Independent FreeLLMAPI Assistant (Movable, Expandable AI Moon Button) ── */}
-      <FreeLLMAssistant isPhone={isPhone} />
+      <FreeLLMAssistant isPhone={isPhone} theme={theme} />
     </div>
   );
 }

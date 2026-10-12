@@ -1,6 +1,6 @@
 {
-  "name": "Night Planner",
-  "short_name": "NightPlanner",
+  "name": "Sam'Space",
+  "short_name": "Sam'Space",
   "description": "Intentional evening daily planner with offline-first sync and YouTube Studio style analytics.",
   "start_url": "/",
   "display": "standalone",
