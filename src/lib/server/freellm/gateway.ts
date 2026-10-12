@@ -65,7 +65,9 @@ export function getGatewayConfig(): FreeLLMGatewayConfig {
     process.env.FREELLM_API_URL ||
     process.env.FREE_LLM_GATEWAY_URL ||
     process.env.FREE_LLM_API_BASE_URL ||
-    'http://localhost:3001';
+    (process.env.NODE_ENV === 'production'
+      ? 'https://free-llm-api-7fue.onrender.com/v1'
+      : 'http://localhost:3001');
 
   // Normalize: remove trailing slash
   url = url.trim().replace(/\/+$/, '');
@@ -211,7 +213,8 @@ export async function sendChatCompletion(
   const config = getGatewayConfig();
   const targetBaseUrl = (options.customUrl || config.baseUrl).trim().replace(/\/+$/, '');
   const apiKey = options.customKey !== undefined ? options.customKey : config.apiKey;
-  const model = options.model || config.defaultModel;
+  const rawModel = options.model || config.defaultModel;
+  const model = !rawModel || rawModel === 'auto' ? 'gemini-3.6-flash' : rawModel;
 
   const endpoint = resolveChatCompletionsUrl(targetBaseUrl);
   const startTime = Date.now();
@@ -298,11 +301,12 @@ export async function sendChatCompletionWithFallback(
   options: SendChatOptions
 ): Promise<ChatCompletionResult & { providerUsed: string }> {
   const requestedModel = options.model || 'auto';
-  const modelInfo = getModelById(requestedModel);
+  const effectiveModel = !requestedModel || requestedModel === 'auto' ? 'gemini-3.6-flash' : requestedModel;
+  const modelInfo = getModelById(effectiveModel);
 
   // 1. Try FreeLLM Gateway first
   try {
-    const result = await sendChatCompletion(options);
+    const result = await sendChatCompletion({ ...options, model: effectiveModel });
     return { ...result, providerUsed: 'FreeLLMAPI Gateway' };
   } catch (gatewayErr: any) {
     console.warn(`[FreeLLM Gateway] Request failed (${gatewayErr.message}). Attempting capability-aware fallback...`);
@@ -320,8 +324,9 @@ export async function sendChatCompletionWithFallback(
       process.env.GEMINI_API_KEY;
 
     const isGoogleTarget =
+      effectiveModel === 'gemini-3.6-flash' ||
       modelInfo?.provider === 'Google' ||
-      /gemini|gemma/i.test(requestedModel);
+      /gemini|gemma/i.test(effectiveModel);
 
     // 2. Route directly to Google Gemini if requested model is Gemini/Google
     if (geminiKey && geminiKey.trim().length > 10 && (isGoogleTarget || !groqKey)) {
@@ -329,8 +334,8 @@ export async function sendChatCompletionWithFallback(
         const startTime = Date.now();
         const cleanKey = geminiKey.trim();
         const targetGeminiModel =
-          requestedModel.startsWith('gemini-') && !requestedModel.includes('preview')
-            ? requestedModel
+          effectiveModel.startsWith('gemini-') && !effectiveModel.includes('preview')
+            ? effectiveModel
             : 'gemini-2.5-flash';
 
         const geminiRes = await fetch(
