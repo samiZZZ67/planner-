@@ -205,6 +205,41 @@ export async function checkGatewayStatus(
 }
 
 /**
+ * Helper to safely extract response body whether in real fetch or mocked environment
+ */
+async function parseResponseBody(res: Response): Promise<{ text: string; json: any; isHtml: boolean }> {
+  let text = '';
+  let json: any = null;
+
+  if (typeof (res as any).text === 'function') {
+    text = await (res as any).text().catch(() => '');
+  } else if (typeof (res as any).json === 'function') {
+    try {
+      json = await (res as any).json();
+      text = typeof json === 'string' ? json : JSON.stringify(json);
+    } catch {
+      text = '';
+    }
+  }
+
+  const isHtml =
+    text.trim().startsWith('<') ||
+    /<!doctype/i.test(text) ||
+    /<html/i.test(text) ||
+    /<head/i.test(text);
+
+  if (!json && text && !isHtml) {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = null;
+    }
+  }
+
+  return { text, json, isHtml };
+}
+
+/**
  * Execute chat completion through the FreeLLMAPI Gateway
  */
 export async function sendChatCompletion(
@@ -247,16 +282,16 @@ export async function sendChatCompletion(
       signal: controller.signal,
     }).finally(() => clearTimeout(timeout));
 
-    const latencyMs = Date.now() - startTime;
+    const parsed = await parseResponseBody(res);
 
     if (!res.ok) {
-      const errBody = await res.text().catch(() => '');
       let parsedErr = '';
-      try {
-        const json = JSON.parse(errBody);
-        parsedErr = json.error?.message || json.message || errBody;
-      } catch {
-        parsedErr = errBody;
+      if (!parsed.isHtml && parsed.json) {
+        parsedErr = parsed.json.error?.message || parsed.json.message || parsed.text.slice(0, 200);
+      } else if (!parsed.isHtml && parsed.text) {
+        parsedErr = parsed.text.slice(0, 200);
+      } else {
+        parsedErr = `Service returned HTML (HTTP ${res.status}: ${res.statusText})`;
       }
 
       throw new Error(
@@ -264,20 +299,30 @@ export async function sendChatCompletion(
       );
     }
 
-    const data = await res.json();
+    if (parsed.isHtml) {
+      throw new Error(
+        `FreeLLMAPI Gateway returned an HTML page (${res.status} ${res.statusText}) instead of an API JSON response.`
+      );
+    }
+
+    const data = parsed.json;
+    if (!data) {
+      throw new Error('FreeLLMAPI Gateway response could not be parsed as JSON.');
+    }
+
     const messageContent =
       data.choices?.[0]?.message?.content ||
       data.choices?.[0]?.text ||
       '';
 
     if (!messageContent && !data.error) {
-      throw new Error('FreeLLMAPI Gateway returned an empty message content.');
+      throw new Error('FreeLLMAPI Gateway returned empty message content.');
     }
 
     return {
       content: messageContent,
       model: data.model || model,
-      latencyMs,
+      latencyMs: Date.now() - startTime,
       tokensUsed: {
         promptTokens: data.usage?.prompt_tokens,
         completionTokens: data.usage?.completion_tokens,
@@ -294,52 +339,47 @@ export async function sendChatCompletion(
 }
 
 /**
- * Executes chat completion with capability-aware, intelligent failover to Groq or Gemini
- * when the external gateway is cold-starting or returning auth/network errors.
+ * Execute direct fallback to Google Gemini AI Studio (730M+ token capacity)
  */
-export async function sendChatCompletionWithFallback(
-  options: SendChatOptions
-): Promise<ChatCompletionResult & { providerUsed: string }> {
-  const requestedModel = options.model || 'auto';
-  const effectiveModel = !requestedModel || requestedModel === 'auto' ? 'gemini-3.6-flash' : requestedModel;
-  const modelInfo = getModelById(effectiveModel);
+async function callGeminiDirect(
+  options: SendChatOptions,
+  preferredModel?: string
+): Promise<(ChatCompletionResult & { providerUsed: string }) | null> {
+  const geminiKeys = [
+    process.env.GEMINI_API_KEY_1,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY,
+  ].filter((k): k is string => Boolean(k && k.trim().length > 10));
 
-  // 1. Try FreeLLM Gateway first
-  try {
-    const result = await sendChatCompletion({ ...options, model: effectiveModel });
-    return { ...result, providerUsed: 'FreeLLMAPI Gateway' };
-  } catch (gatewayErr: any) {
-    console.warn(`[FreeLLM Gateway] Request failed (${gatewayErr.message}). Attempting capability-aware fallback...`);
+  if (geminiKeys.length === 0) return null;
 
-    const groqKey =
-      process.env.GROQ_API_KEY_1 ||
-      process.env.GROQ_API_KEY_2 ||
-      process.env.GROQ_API_KEY_3 ||
-      process.env.GROQ_API_KEY;
+  // Modern verified Gemini models in priority order
+  const validGeminiModels = [
+    'gemini-3.6-flash',
+    'gemini-3.8-flash',
+    'gemini-3.5-flash',
+  ];
 
-    const geminiKey =
-      process.env.GEMINI_API_KEY_1 ||
-      process.env.GEMINI_API_KEY_2 ||
-      process.env.GEMINI_API_KEY_3 ||
-      process.env.GEMINI_API_KEY;
+  const modelsToTry: string[] = [];
+  if (preferredModel && validGeminiModels.includes(preferredModel)) {
+    modelsToTry.push(preferredModel);
+  }
+  for (const m of validGeminiModels) {
+    if (!modelsToTry.includes(m)) modelsToTry.push(m);
+  }
 
-    const isGoogleTarget =
-      effectiveModel === 'gemini-3.6-flash' ||
-      modelInfo?.provider === 'Google' ||
-      /gemini|gemma/i.test(effectiveModel);
+  const promptText = options.messages
+    .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+    .join('\n\n');
 
-    // 2. Route directly to Google Gemini if requested model is Gemini/Google
-    if (geminiKey && geminiKey.trim().length > 10 && (isGoogleTarget || !groqKey)) {
+  for (const rawKey of geminiKeys) {
+    const cleanKey = rawKey.trim();
+    for (const model of modelsToTry) {
       try {
         const startTime = Date.now();
-        const cleanKey = geminiKey.trim();
-        const targetGeminiModel =
-          effectiveModel.startsWith('gemini-') && !effectiveModel.includes('preview')
-            ? effectiveModel
-            : 'gemini-2.5-flash';
-
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetGeminiModel)}:generateContent?key=${encodeURIComponent(cleanKey)}`,
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(cleanKey)}`,
           {
             method: 'POST',
             headers: {
@@ -347,75 +387,90 @@ export async function sendChatCompletionWithFallback(
               'x-goog-api-key': cleanKey,
             },
             body: JSON.stringify({
-              contents: [
-                {
-                  role: 'user',
-                  parts: [
-                    {
-                      text: options.messages
-                        .map(m => `${m.role.toUpperCase()}: ${m.content}`)
-                        .join('\n\n'),
-                    },
-                  ],
-                },
-              ],
+              contents: [{ role: 'user', parts: [{ text: promptText }] }],
               generationConfig: {
                 temperature: options.temperature ?? 0.7,
-                maxOutputTokens: 2500,
+                maxOutputTokens: 4096,
               },
             }),
           }
         );
 
-        if (geminiRes.ok) {
-          const data = await geminiRes.json();
-          const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          if (content) {
-            return {
-              content,
-              model: `${targetGeminiModel} (Google Direct Fallback)`,
-              latencyMs: Date.now() - startTime,
-              tokensUsed: {
-                promptTokens: data.usageMetadata?.promptTokenCount,
-                completionTokens: data.usageMetadata?.candidatesTokenCount,
-                totalTokens: data.usageMetadata?.totalTokenCount,
-              },
-              providerUsed: 'Google AI Studio (Direct Fallback)',
-            };
-          }
+        if (!res.ok) continue;
+
+        const parsed = await parseResponseBody(res);
+        if (parsed.isHtml || !parsed.json) continue;
+
+        const data = parsed.json;
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (text) {
+          return {
+            content: text,
+            model: `${model} (730M Token Provider)`,
+            latencyMs: Date.now() - startTime,
+            tokensUsed: {
+              promptTokens: data.usageMetadata?.promptTokenCount,
+              completionTokens: data.usageMetadata?.candidatesTokenCount,
+              totalTokens: data.usageMetadata?.totalTokenCount,
+            },
+            providerUsed: 'Google AI Studio (Fallback)',
+          };
         }
-      } catch (geminiErr) {
-        console.warn('[FreeLLM Fallback] Gemini attempt failed:', geminiErr);
+      } catch {
+        // Try next model/key
       }
     }
+  }
 
-    // 3. Route to Groq Cloud (Ultra-Fast)
-    if (groqKey && groqKey.trim().length > 10) {
+  return null;
+}
+
+/**
+ * Execute direct fallback to Groq Cloud (Ultra-Fast Inference)
+ */
+async function callGroqDirect(
+  options: SendChatOptions,
+  preferredModel?: string
+): Promise<(ChatCompletionResult & { providerUsed: string }) | null> {
+  const groqKeys = [
+    process.env.GROQ_API_KEY_1,
+    process.env.GROQ_API_KEY_2,
+    process.env.GROQ_API_KEY_3,
+    process.env.GROQ_API_KEY,
+  ].filter((k): k is string => Boolean(k && k.trim().length > 10));
+
+  if (groqKeys.length === 0) return null;
+
+  // Verified active Groq models
+  const validGroqModels = [
+    'openai/gpt-oss-20b',
+    'openai/gpt-oss-120b',
+    'qwen/qwen3.8-27b',
+    'allam-2-7b',
+    'llama-3.3-70b-versatile',
+  ];
+
+  const modelsToTry: string[] = [];
+  if (preferredModel && validGroqModels.includes(preferredModel)) {
+    modelsToTry.push(preferredModel);
+  }
+  for (const m of validGroqModels) {
+    if (!modelsToTry.includes(m)) modelsToTry.push(m);
+  }
+
+  for (const rawKey of groqKeys) {
+    const cleanKey = rawKey.trim();
+    for (const model of modelsToTry) {
       try {
         const startTime = Date.now();
-        const groqSupportedModels = [
-          'llama-3.3-70b-versatile',
-          'llama-3.1-8b-instant',
-          'deepseek-r1-distill-llama-70b',
-          'openai/gpt-oss-20b',
-          'openai/gpt-oss-120b',
-          'qwen/qwen3.8-27b',
-          'allam-2-7b',
-          'mixtral-8x7b-32768',
-        ];
-
-        const targetGroqModel = groqSupportedModels.includes(requestedModel)
-          ? requestedModel
-          : 'llama-3.3-70b-versatile';
-
-        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${groqKey.trim()}`,
+            Authorization: `Bearer ${cleanKey}`,
           },
           body: JSON.stringify({
-            model: targetGroqModel,
+            model,
             messages: options.messages.map(m => ({
               role: m.role === 'assistant' ? 'assistant' : m.role === 'system' ? 'system' : 'user',
               content: m.content,
@@ -424,85 +479,78 @@ export async function sendChatCompletionWithFallback(
           }),
         });
 
-        if (groqRes.ok) {
-          const data = await groqRes.json();
-          const content = data.choices?.[0]?.message?.content || '';
-          if (content) {
-            return {
-              content,
-              model: `${targetGroqModel} (Groq Ultra-Fast Fallback)`,
-              latencyMs: Date.now() - startTime,
-              tokensUsed: {
-                promptTokens: data.usage?.prompt_tokens,
-                completionTokens: data.usage?.completion_tokens,
-                totalTokens: data.usage?.total_tokens,
-              },
-              providerUsed: 'Groq Cloud (Fallback)',
-            };
-          }
-        }
-      } catch (groqErr) {
-        console.warn('[FreeLLM Fallback] Groq attempt failed:', groqErr);
-      }
-    }
+        if (!res.ok) continue;
 
-    // 4. Second pass with Gemini if Groq was tried first but failed
-    if (geminiKey && geminiKey.trim().length > 10 && !isGoogleTarget) {
-      try {
-        const startTime = Date.now();
-        const cleanKey = geminiKey.trim();
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(cleanKey)}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-goog-api-key': cleanKey,
+        const parsed = await parseResponseBody(res);
+        if (parsed.isHtml || !parsed.json) continue;
+
+        const data = parsed.json;
+        const text = data.choices?.[0]?.message?.content || '';
+        if (text) {
+          return {
+            content: text,
+            model: `${model} (Groq Ultra-Fast)`,
+            latencyMs: Date.now() - startTime,
+            tokensUsed: {
+              promptTokens: data.usage?.prompt_tokens,
+              completionTokens: data.usage?.completion_tokens,
+              totalTokens: data.usage?.total_tokens,
             },
-            body: JSON.stringify({
-              contents: [
-                {
-                  role: 'user',
-                  parts: [
-                    {
-                      text: options.messages
-                        .map(m => `${m.role.toUpperCase()}: ${m.content}`)
-                        .join('\n\n'),
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 2500,
-              },
-            }),
-          }
-        );
-
-        if (geminiRes.ok) {
-          const data = await geminiRes.json();
-          const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          if (content) {
-            return {
-              content,
-              model: 'gemini-2.5-flash (Google Direct Fallback)',
-              latencyMs: Date.now() - startTime,
-              tokensUsed: {
-                promptTokens: data.usageMetadata?.promptTokenCount,
-                completionTokens: data.usageMetadata?.candidatesTokenCount,
-                totalTokens: data.usageMetadata?.totalTokenCount,
-              },
-              providerUsed: 'Google AI Studio (Fallback)',
-            };
-          }
+            providerUsed: 'Groq Cloud (Fallback)',
+          };
         }
-      } catch (geminiErr2) {
-        console.warn('[FreeLLM Fallback] Final Gemini attempt failed:', geminiErr2);
+      } catch {
+        // Try next model/key
       }
     }
+  }
 
-    // If all providers and fallbacks fail, rethrow original error
-    throw gatewayErr;
+  return null;
+}
+
+/**
+ * Executes chat completion with capability-aware, intelligent failover to Google Gemini (730M tokens) or Groq
+ * when the external gateway is cold-starting or returning auth/HTML/network errors.
+ */
+export async function sendChatCompletionWithFallback(
+  options: SendChatOptions
+): Promise<ChatCompletionResult & { providerUsed: string }> {
+  const requestedModel = options.model || 'auto';
+  const effectiveModel = !requestedModel || requestedModel === 'auto' ? 'gemini-3.6-flash' : requestedModel;
+  const isGoogleTarget =
+    effectiveModel.startsWith('gemini-') ||
+    effectiveModel.includes('google') ||
+    effectiveModel.includes('deep-research') ||
+    effectiveModel === 'auto';
+
+  // 1. Try FreeLLM Gateway first (if configured with customUrl or default)
+  try {
+    const result = await sendChatCompletion({ ...options, model: effectiveModel });
+    return { ...result, providerUsed: 'FreeLLMAPI Gateway' };
+  } catch (gatewayErr: any) {
+    console.warn(`[FreeLLM Gateway] External gateway unavailable (${gatewayErr.message}). Routing to primary 730M token provider...`);
+
+    // 2. If it's a Google/Gemini target or Auto, run Gemini first (730M tokens!)
+    if (isGoogleTarget) {
+      const geminiResult = await callGeminiDirect(options, effectiveModel);
+      if (geminiResult) return geminiResult;
+
+      const groqResult = await callGroqDirect(options);
+      if (groqResult) return groqResult;
+    } else {
+      // 3. Otherwise try Groq first, then Gemini
+      const groqResult = await callGroqDirect(options, effectiveModel);
+      if (groqResult) return groqResult;
+
+      const geminiResult = await callGeminiDirect(options, 'gemini-3.6-flash');
+      if (geminiResult) return geminiResult;
+    }
+
+    // 4. Clean error message: NEVER expose unparsed <!doctype html> or raw JSON parser syntax errors
+    const sanitizedMsg = gatewayErr.message
+      ? gatewayErr.message.replace(/<!doctype[\s\S]*?>/gi, '').replace(/<html[\s\S]*?>/gi, '').slice(0, 250).trim()
+      : 'All FreeLLM providers are currently warming up. Please retry in a few moments.';
+
+    throw new Error(sanitizedMsg || 'FreeLLM service temporarily unavailable.');
   }
 }

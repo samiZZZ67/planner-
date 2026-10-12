@@ -57,11 +57,29 @@ export const VERIFIED_FREE_MODELS: CatalogModel[] = [
   // ── 2. Google AI Studio & Gemma (15 RPM / 1M TPM / 1.5K RPD) ──
   {
     id: 'gemini-3.6-flash',
-    name: 'Gemini 3.6 Flash',
+    name: 'Gemini 3.6 Flash (730M Tokens • High Speed)',
     provider: 'Google',
     capabilities: ['text', 'vision', 'reasoning', 'code'],
     contextWindow: 1048576,
-    description: 'Ultra-fast Google Gemini Flash generation (~2000–2500ms)',
+    description: 'Ultra-fast Google Gemini Flash generation with massive 730M token quota',
+    isPopular: true,
+  },
+  {
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash (Deep Reasoning & Research)',
+    provider: 'Google',
+    capabilities: ['text', 'vision', 'reasoning', 'code'],
+    contextWindow: 1048576,
+    description: 'Advanced deep research, thorough synthesis, and complex multi-step reasoning',
+    isPopular: true,
+  },
+  {
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash (Ultra Stable)',
+    provider: 'Google',
+    capabilities: ['text', 'vision', 'reasoning', 'code'],
+    contextWindow: 1048576,
+    description: 'Ultra-stable Google Gemini model with high throughput',
     isPopular: true,
   },
   {

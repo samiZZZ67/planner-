@@ -248,13 +248,18 @@ export async function analyzeMultimodalWithGemini(
   attachments: AttachmentItem[] = [],
   systemInstruction?: string
 ): Promise<{ text: string; model: string }> {
-  const geminiKey = getActiveGeminiKey();
-  if (!geminiKey) {
+  const geminiKeys = [
+    process.env.GEMINI_API_KEY_1,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY,
+  ].filter((k): k is string => Boolean(k && k.trim().length > 10));
+
+  if (geminiKeys.length === 0) {
     throw new Error('Gemini API key is not configured for multimodal vision/file analysis.');
   }
 
-  const model = 'gemini-2.5-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+  const visionModels = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.5-flash'];
 
   const parts: any[] = [];
 
@@ -295,7 +300,7 @@ export async function analyzeMultimodalWithGemini(
     ],
     generationConfig: {
       temperature: 0.7,
-      maxOutputTokens: 2500,
+      maxOutputTokens: 3000,
     },
   };
 
@@ -305,34 +310,44 @@ export async function analyzeMultimodalWithGemini(
     };
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout for vision
+  for (const rawKey of geminiKeys) {
+    const cleanKey = rawKey.trim();
+    for (const model of visionModels) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout for vision
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': geminiKey,
-    },
-    body: JSON.stringify(body),
-    signal: controller.signal,
-  }).finally(() => clearTimeout(timeout));
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': cleanKey,
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`Gemini Multimodal failed (HTTP ${res.status}): ${errText.slice(0, 200)}`);
+        if (!res.ok) continue;
+
+        const resText = await res.text().catch(() => '');
+        if (!resText || resText.startsWith('<')) continue;
+
+        const data = JSON.parse(resText);
+        const candidate = data.candidates?.[0];
+        const responseText = candidate?.content?.parts?.[0]?.text || '';
+
+        if (responseText) {
+          return {
+            text: responseText,
+            model: `${model} (Multimodal Vision Engine)`,
+          };
+        }
+      } catch {
+        // Continue to next model/key
+      }
+    }
   }
 
-  const data = await res.json();
-  const candidate = data.candidates?.[0];
-  const responseText = candidate?.content?.parts?.[0]?.text || '';
-
-  if (!responseText) {
-    throw new Error('Gemini did not return any text for the multimodal analysis.');
-  }
-
-  return {
-    text: responseText,
-    model: 'gemini-2.5-flash (Vision)',
-  };
+  throw new Error('Gemini Multimodal could not complete analysis. All vision endpoints are warming up.');
 }

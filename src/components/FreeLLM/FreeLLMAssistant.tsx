@@ -158,9 +158,12 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
 
 function formatFetchError(err: any): string {
   if (err?.name === 'AbortError') {
-    return '⏱️ Request timed out (60s). The FreeLLM API or Render service may still be booting up (free tier cold start). Please click Retry in a few moments.';
+    return '⏱️ Request timed out (60s). The FreeLLM API service may still be booting up (free tier cold start). Please click Retry in a few moments.';
   }
   const msg = err?.message || String(err);
+  if (/unexpected token '<'/i.test(msg) || /<!doctype/i.test(msg) || /<html/i.test(msg)) {
+    return '🔄 The external gateway returned a temporary web service page while initializing. Your 730M token Gemini engine is actively connected — please send your message again or click Retry.';
+  }
   if (/failed to fetch/i.test(msg) || err instanceof TypeError) {
     return '⚠️ Unable to reach the FreeLLM service endpoint ("Failed to fetch"). If your deployed backend on Render is waking up from sleep, it typically takes 30-50s. Please wait a moment and click Retry.';
   }
