@@ -74,6 +74,8 @@ export function getGatewayConfig(): FreeLLMGatewayConfig {
     process.env.FREE_LLM_API_KEY ||
     process.env.FREELLM_API_KEY ||
     process.env.FREE_LLM_GATEWAY_KEY ||
+    process.env.UNIFIED_API_KEY ||
+    process.env.FREEAPI_UNIFIED_KEY ||
     '';
 
   const defaultModel = process.env.FREE_LLM_MODEL || process.env.FREELLM_MODEL || 'auto';
