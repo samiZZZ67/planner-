@@ -188,8 +188,15 @@ export function resolvePingUrl(baseUrl: string): string {
   return `${clean}/api/ping`;
 }
 
+const lastReadyModelsByUrl = new Map<string, string[]>();
+
+export function getLastReadyModelIds(baseUrl?: string): string[] {
+  const key = (baseUrl || getGatewayConfig().baseUrl).trim().replace(/\/+$/, '');
+  return [...(lastReadyModelsByUrl.get(key) || [])];
+}
+
 /**
- * Check if the FreeLLMAPI Gateway is online and retrieve all available models dynamically
+ * Check if the FreeLLMAPI Gateway is online and retrieve all configured ready models dynamically
  */
 export async function checkGatewayStatus(
   customUrl?: string,
@@ -202,6 +209,9 @@ export async function checkGatewayStatus(
   const maskedKey = keyConfigured && apiKey ? `••••${apiKey.trim().slice(-4)}` : undefined;
 
   const modelsUrl = resolveModelsUrl(targetBaseUrl);
+  const readyModelsUrl = modelsUrl.includes('?')
+    ? `${modelsUrl}&execution_status=ready`
+    : `${modelsUrl}?execution_status=ready`;
   const startTime = Date.now();
 
   const headers: Record<string, string> = {
@@ -223,7 +233,7 @@ export async function checkGatewayStatus(
     // 15s timeout to accommodate cold starts on free cloud hosting
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const res = await fetch(modelsUrl, {
+    const res = await fetch(readyModelsUrl, {
       method: 'GET',
       headers,
       signal: controller.signal,
@@ -306,6 +316,10 @@ export async function checkGatewayStatus(
         error: `Model discovery at ${modelsUrl} returned an empty model list.`,
       };
     }
+    lastReadyModelsByUrl.set(
+      targetBaseUrl,
+      liveIds.filter(id => id !== 'auto')
+    );
     const liveCatalog = mergeDiscoveredModels(effectiveRawModels).filter(model => liveIds.includes(model.id));
 
     return {
@@ -740,7 +754,7 @@ async function callGroqDirect(
  */
 export async function sendChatCompletionWithFallback(
   options: SendChatOptions
-): Promise<ChatCompletionResult & { providerUsed: string }> {
+): Promise<ChatCompletionResult & { providerUsed: string; fallbackFrom?: string }> {
   const requestedModel = options.model || 'auto';
   const effectiveModel = !requestedModel || requestedModel === 'auto' ? 'gemini-3.6-flash' : requestedModel;
   const isGoogleTarget =
@@ -752,25 +766,70 @@ export async function sendChatCompletionWithFallback(
   // 1. Try FreeLLM Gateway first (if configured with customUrl or default)
   let gatewayErr: unknown;
   for (const gatewayKey of getGatewayKeys()) {
+    const keyOverride = gatewayKey !== undefined && options.customKey === undefined ? { customKey: gatewayKey } : {};
     try {
       const result = await sendChatCompletion({
         ...options,
         model: requestedModel || 'auto',
-        ...(gatewayKey !== undefined && options.customKey === undefined ? { customKey: gatewayKey } : {}),
+        ...keyOverride,
       });
       console.info(`[FreeLLM Fallback] Gateway succeeded with model ${result.model}.`);
       return { ...result, providerUsed: 'FreeLLMAPI Gateway' };
     } catch (error: any) {
       gatewayErr = error;
+      const errMsg = String(error?.message || error);
       if (
         requestedModel !== 'auto' &&
-        /model[^.]{0,40}(not found|unknown|invalid|unsupported)|model_(not_found|not_supported)/i.test(
-          String(error?.message || error)
-        )
+        /model[^.]{0,40}(not found|unknown|invalid|unsupported)|model_(not_found|not_supported)/i.test(errMsg)
       ) {
         throw new Error(
-          `Selected model '${requestedModel}' was rejected by the FreeLLM gateway: ${String(error?.message || error).slice(0, 220)}`
+          `Selected model '${requestedModel}' was rejected by the FreeLLM gateway: ${errMsg.slice(0, 220)}`
         );
+      }
+
+      // Automatic model switching across FreeLLMAPI's configured ready models (Playground behavior):
+      // 1) If a concrete model hit a rate limit / provider error, switch to 'auto' first.
+      // 2) Then iterate through the other configured ready models discovered from /v1/models?execution_status=ready.
+      let readyModels = getLastReadyModelIds(options.customUrl);
+      if (readyModels.length === 0 && !process.env.VITEST) {
+        try {
+          const status = await checkGatewayStatus(options.customUrl, gatewayKey);
+          if (status.online && status.models.length > 0) {
+            readyModels = status.models.filter(id => id !== 'auto');
+          }
+        } catch {
+          // Ignore discovery error during failover
+        }
+      }
+
+      const switchCandidates: string[] = [];
+      if (requestedModel !== 'auto') {
+        switchCandidates.push('auto');
+      }
+      for (const readyId of readyModels) {
+        if (readyId !== requestedModel && !switchCandidates.includes(readyId)) {
+          switchCandidates.push(readyId);
+        }
+      }
+
+      for (const candidateModel of switchCandidates) {
+        try {
+          const switchedResult = await sendChatCompletion({
+            ...options,
+            model: candidateModel,
+            ...keyOverride,
+          });
+          console.info(
+            `[FreeLLM Auto-Switch] Switched from '${requestedModel}' to '${switchedResult.model}' via FreeLLMAPI Gateway.`
+          );
+          return {
+            ...switchedResult,
+            providerUsed: 'FreeLLMAPI Gateway (Auto-Switched)',
+            fallbackFrom: requestedModel,
+          };
+        } catch (switchErr: any) {
+          gatewayErr = switchErr;
+        }
       }
     }
   }
@@ -800,3 +859,4 @@ export async function sendChatCompletionWithFallback(
   }
   throw new Error('The AI assistant is temporarily unavailable. Please try again shortly.');
 }
+

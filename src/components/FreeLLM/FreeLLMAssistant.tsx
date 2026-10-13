@@ -438,14 +438,30 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     setKeyConfigured(Boolean(data.keyConfigured));
     setMaskedKey(data.maskedKey || null);
 
+    let readyCatalog: CatalogModel[] = [];
     if (Array.isArray(data.catalog) && data.catalog.length > 0) {
-      setCatalogModels(data.catalog);
-      setAvailableModels(data.catalog.map((m: CatalogModel) => m.id));
+      readyCatalog = data.catalog.filter((m: CatalogModel) => m && m.id && m.id !== 'auto');
     } else if (Array.isArray(data.models) && data.models.length > 0) {
-      const merged = mergeDiscoveredModels(data.models);
-      setCatalogModels(merged);
-      setAvailableModels(merged.map(m => m.id));
+      const liveIds = data.models.filter((id: string) => typeof id === 'string' && id.length > 0 && id !== 'auto');
+      readyCatalog = mergeDiscoveredModels(liveIds).filter(m => liveIds.includes(m.id));
     }
+
+    if (readyCatalog.length > 0) {
+      setCatalogModels(readyCatalog);
+      const readyIds = readyCatalog.map(m => m.id);
+      setAvailableModels(['auto', ...readyIds]);
+      setSelectedModel(prev => {
+        if (prev === 'auto' || readyIds.includes(prev)) return prev;
+        try {
+          localStorage.setItem(STORAGE_KEY_MODEL, 'auto');
+        } catch {}
+        return 'auto';
+      });
+    } else if (data.online === false) {
+      setCatalogModels([]);
+      setAvailableModels(['auto']);
+    }
+
     if (data.error && !data.online) {
       setGatewayError(data.error);
     } else {
@@ -1999,7 +2015,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                   type="text"
                   value={modelSearch}
                   onChange={e => setModelSearch(e.target.value)}
-                  placeholder="Filter 94+ models..."
+                  placeholder="Filter configured models..."
                   autoFocus
                   style={{
                     width: '100%',
@@ -2033,7 +2049,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             ) : (
               <button
                 onClick={() => setShowModelSearch(true)}
-                title="Search & filter 94+ free models"
+                title="Filter configured ready models from your FreeLLMAPI"
                 style={{
                   background: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(15, 23, 42, 0.05)',
                   border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.1)'),
@@ -2048,7 +2064,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                 }}
               >
                 <Search style={{ width: 11, height: 11 }} />
-                <span>{catalogModels.length} models</span>
+                <span>{catalogModels.length} ready</span>
               </button>
             )}
 
@@ -2067,8 +2083,13 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                 maxWidth: isPhone ? '160px' : '260px',
               }}
             >
+              <optgroup label="⚡ Automatic Switching (Playground Mode)">
+                <option value="auto" style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
+                  ⚡ Auto (Smart Switch — Configured Models)
+                </option>
+              </optgroup>
+
               {modelSearch.trim() ? (
-                // Filtered search results
                 <optgroup label={`Search Matches (${catalogModels.filter(m => m.name.toLowerCase().includes(modelSearch.toLowerCase()) || m.id.toLowerCase().includes(modelSearch.toLowerCase()) || m.provider.toLowerCase().includes(modelSearch.toLowerCase())).length})`}>
                   {catalogModels
                     .filter(m =>
@@ -2082,110 +2103,15 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                       </option>
                     ))}
                 </optgroup>
-              ) : (
-                // Grouped by Category & Capability
-                <>
-                  <optgroup label="⭐ Recommended & Auto Routers">
-                    {catalogModels
-                      .filter(m => m.isPopular)
-                      .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
-                          {m.name}
-                        </option>
-                      ))}
-                  </optgroup>
-
-                  <optgroup label="👁️ Vision & Multimodal">
-                    {catalogModels
-                      .filter(m => m.capabilities.includes('vision') && !m.isPopular)
-                      .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
-                          {m.name}
-                        </option>
-                      ))}
-                  </optgroup>
-
-                  <optgroup label="💻 Coding Specialists">
-                    {catalogModels
-                      .filter(m => m.capabilities.includes('code') && !m.isPopular && !m.capabilities.includes('vision'))
-                      .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
-                          {m.name}
-                        </option>
-                      ))}
-                  </optgroup>
-
-                  <optgroup label="🧠 Deep Reasoning & Math">
-                    {catalogModels
-                      .filter(m => m.capabilities.includes('reasoning') && !m.isPopular && !m.capabilities.includes('vision'))
-                      .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
-                          {m.name}
-                        </option>
-                      ))}
-                  </optgroup>
-
-                  <optgroup label="🎨 Image & Video Generation">
-                    {catalogModels
-                      .filter(m => (m.capabilities.includes('image_gen') || m.capabilities.includes('video_gen')) && !m.isPopular)
-                      .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
-                          {m.name}
-                        </option>
-                      ))}
-                  </optgroup>
-
-                  <optgroup label="⚡ Ultra-Fast LPUs & Wafer-Scale (Cerebras & Groq)">
-                    {catalogModels
-                      .filter(m => (m.provider === 'Cerebras' || m.provider === 'Groq') && !m.isPopular && !m.capabilities.includes('reasoning'))
-                      .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
-                          {m.name}
-                        </option>
-                      ))}
-                  </optgroup>
-
-                  <optgroup label="🌐 Google Gemini & Gemma">
-                    {catalogModels
-                      .filter(m => m.provider === 'Google' && !m.isPopular && !m.capabilities.includes('vision'))
-                      .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
-                          {m.name}
-                        </option>
-                      ))}
-                  </optgroup>
-
-                  <optgroup label="🌐 Mistral AI (European Open Weights)">
-                    {catalogModels
-                      .filter(m => m.provider === 'Mistral AI' && !m.isPopular && !m.capabilities.includes('vision') && !m.capabilities.includes('code'))
-                      .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
-                          {m.name}
-                        </option>
-                      ))}
-                  </optgroup>
-
-                  <optgroup label="🌐 OpenRouter Free Models">
-                    {catalogModels
-                      .filter(m => m.provider === 'OpenRouter' && !m.isPopular)
-                      .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
-                          {m.name}
-                        </option>
-                      ))}
-                  </optgroup>
-
-                  <optgroup label="🌐 Cohere, NVIDIA, Zhipu & Others">
-                    {catalogModels
-                      .filter(m => !['FreeLLM Router', 'Google', 'Groq', 'Cerebras', 'Mistral AI', 'OpenRouter'].includes(m.provider) && !m.isPopular && !m.capabilities.includes('image_gen') && !m.capabilities.includes('video_gen'))
-                      .map(m => (
-                        <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
-                          {m.name} ({m.provider})
-                        </option>
-                      ))}
-                  </optgroup>
-                </>
-              )}
+              ) : catalogModels.length > 0 ? (
+                <optgroup label={`✅ Configured Ready Models (${catalogModels.length})`}>
+                  {catalogModels.map(m => (
+                    <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
+                      {m.name} ({m.provider})
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </select>
           </div>
         </div>
@@ -2214,7 +2140,9 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ color: isDark ? '#d8b4fe' : '#7c3aed', fontWeight: 600 }}>
-                  {activeModelObj?.provider || 'FreeLLM Gateway'}
+                  {selectedModel === 'auto'
+                    ? `FreeLLM Auto Router (${catalogModels.length} ready models)`
+                    : activeModelObj?.provider || 'FreeLLM Gateway'}
                 </span>
                 {activeModelObj?.contextWindow && (
                   <span style={{ background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)', color: 'var(--text-secondary)', padding: '1px 5px', borderRadius: 4, fontSize: 9 }}>
@@ -2688,7 +2616,12 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                     >
                       <span style={{ color: isDark ? '#c084fc' : '#9333ea', fontSize: 10 }}>✦</span>
                       <span>{msg.model || selectedModel}</span>
-                      {msg.provider && <span style={{ opacity: 0.7 }}>via {msg.provider}{msg.fallbackFrom ? ` ? fallback from ${msg.fallbackFrom}` : ''}</span>}
+                      {msg.provider && (
+                        <span style={{ opacity: 0.7 }}>
+                          via {msg.provider}
+                          {msg.fallbackFrom ? ` · ⚡ Auto-switched from ${msg.fallbackFrom}` : ''}
+                        </span>
+                      )}
                       {msg.latencyMs ? (
                         <>
                           <span style={{ opacity: 0.45 }}>·</span>

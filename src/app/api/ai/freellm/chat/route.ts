@@ -194,6 +194,7 @@ export async function POST(req: NextRequest) {
         },
         model: result.model,
         provider: result.providerUsed,
+        fallbackFrom: result.fallbackFrom,
         latencyMs: result.latencyMs,
         tokensUsed: result.tokensUsed,
       },

@@ -167,5 +167,51 @@ describe('FreeLLMAPI Gateway Client Suite', () => {
       expect(result.tokensUsed?.totalTokens).toBe(25);
       expect(result.latencyMs).toBeGreaterThanOrEqual(0);
     });
+
+    it('should automatically switch to auto / ready models when a selected model hits rate limits (429)', async () => {
+      const fetchMock = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: { message: 'Rate limit exceeded on provider', type: 'rate_limit_error' },
+            }),
+            { status: 429, headers: { 'content-type': 'application/json' } }
+          )
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              id: 'chatcmpl-switched-456',
+              object: 'chat.completion',
+              model: 'llama-3.3-70b-versatile',
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: 'assistant',
+                    content: 'Automatically switched to working configured model!',
+                  },
+                  finish_reason: 'stop',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } }
+          )
+        );
+
+      const result = await sendChatCompletionWithFallback({
+        model: 'gemini-2.5-flash',
+        messages: [{ role: 'user', content: 'Test rate limit switch' }],
+        customUrl: 'https://gateway-autoswitch.example/v1',
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.content).toBe('Automatically switched to working configured model!');
+      expect(result.model).toBe('llama-3.3-70b-versatile');
+      expect(result.fallbackFrom).toBe('gemini-2.5-flash');
+      expect(result.providerUsed).toContain('Auto-Switched');
+    });
   });
 });
+
