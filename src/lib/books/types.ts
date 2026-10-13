@@ -66,5 +66,6 @@ export interface BookPageRecord {
   warnings: string[];
   requiresReview: boolean;
   reviewedByUser?: boolean;
+  visualPreview?: { filename: string; mimeType: 'image/jpeg'; width: number; height: number };
   updatedAt: number;
 }

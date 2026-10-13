@@ -45,10 +45,12 @@ async function ensureBookSchema(sql: NonNullable<ReturnType<typeof getDb>>) {
         warnings JSONB NOT NULL DEFAULT '[]'::jsonb,
         requires_review BOOLEAN NOT NULL DEFAULT FALSE,
         reviewed_by_user BOOLEAN NOT NULL DEFAULT FALSE,
+        visual_preview JSONB,
         updated_at BIGINT NOT NULL,
         PRIMARY KEY(book_id, pdf_page)
       )`;
       await sql`ALTER TABLE book_pages ADD COLUMN IF NOT EXISTS reviewed_by_user BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE book_pages ADD COLUMN IF NOT EXISTS visual_preview JSONB`;
       await sql`CREATE INDEX IF NOT EXISTS idx_book_pages_owner ON book_pages(user_id, book_id, pdf_page)`;
       // Preserve book metadata and extracted pages from the pre-Neon JSON fallback.
       for (const record of readRecords()) {
@@ -57,11 +59,11 @@ async function ensureBookSchema(sql: NonNullable<ReturnType<typeof getDb>>) {
           ON CONFLICT (id) DO NOTHING`;
         const localPages = (record as BookRecord & { extractedPages?: BookPageRecord[] }).extractedPages || [];
         if (localPages.length) {
-          const serialized = JSON.stringify(localPages.map(page => ({ pdfPage: page.pdfPage, text: page.text, method: page.method, confidence: page.confidence, warnings: page.warnings, requiresReview: page.requiresReview, reviewedByUser: page.reviewedByUser || false, updatedAt: page.updatedAt })));
-          await sql`INSERT INTO book_pages (book_id, user_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, updated_at)
+          const serialized = JSON.stringify(localPages.map(page => ({ pdfPage: page.pdfPage, text: page.text, method: page.method, confidence: page.confidence, warnings: page.warnings, requiresReview: page.requiresReview, reviewedByUser: page.reviewedByUser || false, visualPreview: page.visualPreview || null, updatedAt: page.updatedAt })));
+          await sql`INSERT INTO book_pages (book_id, user_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, visual_preview, updated_at)
             SELECT ${record.id}, ${record.userId}, (item->>'pdfPage')::integer, item->>'text', item->>'method',
               NULLIF(item->>'confidence', 'null')::numeric, COALESCE(item->'warnings', '[]'::jsonb),
-              COALESCE((item->>'requiresReview')::boolean, false), COALESCE((item->>'reviewedByUser')::boolean, false), (item->>'updatedAt')::bigint
+              COALESCE((item->>'requiresReview')::boolean, false), COALESCE((item->>'reviewedByUser')::boolean, false), NULLIF(item->'visualPreview', 'null'::jsonb), (item->>'updatedAt')::bigint
             FROM jsonb_array_elements(${serialized}::jsonb) AS item
             ON CONFLICT (book_id, pdf_page) DO NOTHING`;
         }
@@ -142,13 +144,13 @@ export async function saveBookPages(book: BookRecord, pages: BookPageRecord[]) {
     await ensureBookSchema(sql);
     if (pages.length) {
       const serialized = JSON.stringify(pages.map(page => ({ ...page, bookId: undefined, reviewedByUser: page.reviewedByUser || false })));
-      await sql`INSERT INTO book_pages (book_id, user_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, updated_at)
+      await sql`INSERT INTO book_pages (book_id, user_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, visual_preview, updated_at)
         SELECT ${book.id}, ${book.userId}, (item->>'pdfPage')::integer, item->>'text', item->>'method',
           NULLIF(item->>'confidence', 'null')::numeric, COALESCE(item->'warnings', '[]'::jsonb),
-          COALESCE((item->>'requiresReview')::boolean, false), COALESCE((item->>'reviewedByUser')::boolean, false), (item->>'updatedAt')::bigint
+          COALESCE((item->>'requiresReview')::boolean, false), COALESCE((item->>'reviewedByUser')::boolean, false), NULLIF(item->'visualPreview', 'null'::jsonb), (item->>'updatedAt')::bigint
         FROM jsonb_array_elements(${serialized}::jsonb) AS item
         ON CONFLICT (book_id, pdf_page) DO UPDATE SET text = EXCLUDED.text, method = EXCLUDED.method,
-          confidence = EXCLUDED.confidence, warnings = EXCLUDED.warnings, requires_review = EXCLUDED.requires_review, reviewed_by_user = FALSE, updated_at = EXCLUDED.updated_at`;
+          confidence = EXCLUDED.confidence, warnings = EXCLUDED.warnings, requires_review = EXCLUDED.requires_review, reviewed_by_user = FALSE, visual_preview = EXCLUDED.visual_preview, updated_at = EXCLUDED.updated_at`;
     }
   }
   const records = readRecords();
@@ -166,12 +168,12 @@ export async function listBookPages(userId: string, bookId: string, fromPage?: n
   if (sql) {
     await ensureBookSchema(sql);
     const rows = fromPage !== undefined && toPage !== undefined
-      ? await sql`SELECT book_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, updated_at FROM book_pages WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page BETWEEN ${fromPage} AND ${toPage} ORDER BY pdf_page`
-      : await sql`SELECT book_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, updated_at FROM book_pages WHERE book_id = ${bookId} AND user_id = ${userId} ORDER BY pdf_page`;
+      ? await sql`SELECT book_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, visual_preview, updated_at FROM book_pages WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page BETWEEN ${fromPage} AND ${toPage} ORDER BY pdf_page`
+      : await sql`SELECT book_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, visual_preview, updated_at FROM book_pages WHERE book_id = ${bookId} AND user_id = ${userId} ORDER BY pdf_page`;
     return rows.map((row: any) => ({
       bookId: row.book_id, pdfPage: Number(row.pdf_page), text: row.text, method: row.method,
       confidence: row.confidence === null ? null : Number(row.confidence),
-      warnings: Array.isArray(row.warnings) ? row.warnings : [], requiresReview: Boolean(row.requires_review), reviewedByUser: Boolean(row.reviewed_by_user), updatedAt: Number(row.updated_at),
+      warnings: Array.isArray(row.warnings) ? row.warnings : [], requiresReview: Boolean(row.requires_review), reviewedByUser: Boolean(row.reviewed_by_user), visualPreview: row.visual_preview || undefined, updatedAt: Number(row.updated_at),
     }));
   }
   const record = readRecords().find(book => book.id === bookId && book.userId === userId) as (BookRecord & { extractedPages?: BookPageRecord[] }) | undefined;
@@ -205,4 +207,26 @@ export async function markBookPageReviewed(userId: string, bookId: string, pdfPa
 export async function getBookPdfPath(userId: string, id: string) {
   const record = await getBook(userId, id);
   return record ? path.join(DATA_DIR, record.storedFilename) : null;
+}
+
+export async function getBookPagePreviewPath(userId: string, id: string, pdfPage: number) {
+  const page = (await listBookPages(userId, id, pdfPage, pdfPage))[0];
+  const book = page ? await getBook(userId, id) : null;
+  if (!book || !page?.visualPreview) return null;
+  return path.join(DATA_DIR, id, 'page-previews', page.visualPreview.filename);
+}
+
+export async function deleteBook(userId: string, id: string) {
+  const book = await getBook(userId, id);
+  if (!book) return false;
+  const sql = getDb();
+  if (sql) {
+    await ensureBookSchema(sql);
+    await sql`DELETE FROM books WHERE id = ${id} AND user_id = ${userId}`;
+  }
+  const records = readRecords().filter(item => !(item.id === id && item.userId === userId));
+  writeRecords(records);
+  fs.rmSync(path.join(DATA_DIR, book.storedFilename), { force: true });
+  fs.rmSync(path.join(DATA_DIR, id), { recursive: true, force: true });
+  return true;
 }

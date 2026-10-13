@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       originalFilename: file.name.slice(0, 255), storedFilename: `${id}.pdf`, fileSize: file.size,
       startPage, endPage, durationDays, startDate, studyMinutes, postingTime, timezone, currentPage,
       status: 'draft', extractionStatus: 'pending',
-      extractionMessage: 'PDF saved privately. Exact page extraction is unavailable until a PDF text and image extraction engine is configured; no reading text or plan has been fabricated.',
+      extractionMessage: 'PDF saved privately. Start extraction to review page text and visual previews before creating a reading plan.',
       createdAt: now, updatedAt: now,
     };
     await saveBook(record, bytes);

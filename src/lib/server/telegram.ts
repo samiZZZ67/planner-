@@ -256,3 +256,12 @@ export async function publishApprovedAssignment(userId: string, book: BookRecord
     throw Object.assign(new Error(err.message), { delivery });
   }
 }
+
+export async function deleteBookDeliveries(userId: string, bookId: string) {
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    await sql`DELETE FROM telegram_deliveries WHERE book_id = ${bookId} AND user_id = ${userId}`;
+  }
+  writeDeliveries(readDeliveries().filter(item => !(item.bookId === bookId && item.userId === userId)));
+}

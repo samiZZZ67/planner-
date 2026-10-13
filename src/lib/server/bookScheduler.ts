@@ -235,3 +235,12 @@ export async function updateBookPublishJob(job: BookPublishJob) {
   if (index >= 0) { all[index] = updated; writeJson(JOBS_PATH, all); }
   return updated;
 }
+
+export async function deleteBookPublishJobs(userId: string, bookId: string) {
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    await sql`DELETE FROM book_publish_jobs WHERE book_id = ${bookId} AND user_id = ${userId}`;
+  }
+  writeJson(JOBS_PATH, readJobs().filter(item => !(item.bookId === bookId && item.userId === userId)));
+}

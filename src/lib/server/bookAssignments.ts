@@ -92,3 +92,12 @@ export async function updateBookAssignment(assignment: BookAssignmentRecord) {
   }
   return assignment;
 }
+
+export async function deleteBookAssignments(userId: string, bookId: string) {
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    await sql`DELETE FROM book_assignments WHERE book_id = ${bookId} AND user_id = ${userId}`;
+  }
+  writeAll(readAll().filter(item => !(item.bookId === bookId && item.userId === userId)));
+}

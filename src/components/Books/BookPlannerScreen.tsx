@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { BookOpen, Clock3, FileUp, LockKeyhole, TriangleAlert } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { BookOpen, ChevronDown, ChevronUp, Clock3, FileUp, LockKeyhole, Pencil, Save, Trash2, TriangleAlert, X } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
 import type { BookAssignmentRecord, BookPageRecord, BookRecord, BookStudyNotes } from '@/lib/books/types';
 
@@ -27,6 +27,27 @@ export function BookPlannerScreen() {
   const [assignmentsByBook, setAssignmentsByBook] = useState<Record<string, BookAssignmentRecord[]>>({});
   const [assignmentDetails, setAssignmentDetails] = useState<Record<string, AssignmentDetail>>({});
   const [notesDrafts, setNotesDrafts] = useState<Record<string, BookStudyNotes>>({});
+  const [collapsedBooks, setCollapsedBooks] = useState<Set<string>>(new Set());
+  const [editingBookId, setEditingBookId] = useState<string | null>(null);
+  const [bookDraft, setBookDraft] = useState<Partial<BookRecord>>({});
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+  const previewUrlsRef = useRef<Record<string, string>>({});
+
+  useEffect(() => { previewUrlsRef.current = previewUrls; }, [previewUrls]);
+  useEffect(() => () => Object.values(previewUrlsRef.current).forEach(url => URL.revokeObjectURL(url)), []);
+
+  async function loadPagePreviews(bookId: string, pages: BookPageRecord[]) {
+    const entries = await Promise.all(pages.filter(page => page.visualPreview).map(async page => {
+      const response = await apiFetch(`/api/books/${encodeURIComponent(bookId)}/pages/${page.pdfPage}/preview`);
+      if (!response.ok) return null;
+      return [`${bookId}:${page.pdfPage}`, URL.createObjectURL(await response.blob())] as const;
+    }));
+    const next = Object.fromEntries(entries.filter((item): item is NonNullable<typeof item> => item !== null));
+    setPreviewUrls(current => {
+      Object.keys(next).forEach(key => { if (current[key]) URL.revokeObjectURL(current[key]); });
+      return { ...current, ...next };
+    });
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -76,6 +97,7 @@ export function BookPlannerScreen() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not retrieve extracted pages.');
       setPagesByBook(current => ({ ...current, [book.id]: data.pages || [] }));
+      await loadPagePreviews(book.id, data.pages || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not retrieve extracted pages.');
     }
@@ -138,6 +160,7 @@ export function BookPlannerScreen() {
       if (!response.ok) throw new Error(data.error || 'Could not load this assignment.');
       const detail = data as AssignmentDetail;
       setAssignmentDetails(current => ({ ...current, [assignment.id]: detail }));
+      await loadPagePreviews(book.id, detail.originalPages || []);
       if (detail.assignment.studyNotes) setNotesDrafts(current => ({ ...current, [assignment.id]: detail.assignment.studyNotes! }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load this assignment.');
@@ -180,7 +203,7 @@ export function BookPlannerScreen() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not save study notes.');
       updateAssignmentState(book.id, data.assignment);
-      setNotice(status === 'approved' ? `Day ${assignment.dayNumber} is approved. It is not published yet.` : 'Study-note edits saved as a draft.');
+      setNotice(status === 'approved' ? `Day ${assignment.dayNumber} is approved and queued for Telegram publishing.` : 'Study-note edits saved as a draft.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save study notes.');
     }
@@ -198,6 +221,7 @@ export function BookPlannerScreen() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not save this book.');
       setBooks(current => [data.book, ...current]);
+      setCollapsedBooks(current => { const next = new Set(current); next.delete(data.book.id); return next; });
       setNotice('PDF saved privately as a draft. It has not been extracted or scheduled.');
       formElement.reset();
       setStartPage(1);
@@ -206,6 +230,41 @@ export function BookPlannerScreen() {
       setError(err instanceof Error ? err.message : 'Could not save this book.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  function beginEdit(book: BookRecord) {
+    setEditingBookId(book.id);
+    setBookDraft({ title: book.title, author: book.author, metadata: book.metadata, startDate: book.startDate, durationDays: book.durationDays, studyMinutes: book.studyMinutes, postingTime: book.postingTime, timezone: book.timezone, currentPage: book.currentPage });
+  }
+
+  async function saveBookEdit(book: BookRecord) {
+    setError('');
+    try {
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bookDraft) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not update this book.');
+      setBooks(current => current.map(item => item.id === book.id ? data.book : item));
+      setEditingBookId(null);
+      setNotice(`Updated “${data.book.title}”.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update this book.');
+    }
+  }
+
+  async function removeBook(book: BookRecord) {
+    if (!window.confirm(`Delete “${book.title}” and its extracted pages, plans, and saved delivery records? This cannot be undone.`)) return;
+    setError('');
+    try {
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not delete this book.');
+      setBooks(current => current.filter(item => item.id !== book.id));
+      setPagesByBook(current => { const next = { ...current }; delete next[book.id]; return next; });
+      setAssignmentsByBook(current => { const next = { ...current }; delete next[book.id]; return next; });
+      setNotice(`Deleted “${book.title}”.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete this book.');
     }
   }
 
@@ -222,7 +281,7 @@ export function BookPlannerScreen() {
       <div className="v-card" style={{ padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start', borderColor: 'rgba(251,191,36,.45)' }}>
         <TriangleAlert size={19} color="#fbbf24" style={{ flexShrink: 0, marginTop: 2 }} />
         <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
-          <strong style={{ color: 'var(--text-primary)' }}>PDF text extraction and OCR are available.</strong> Selectable text is extracted directly from PDF pages. Scanned pages use OCR and are marked as estimates that must be checked against the source before they can be used in study material.
+          <strong style={{ color: 'var(--text-primary)' }}>Review text and the original page image together.</strong> Selectable text is extracted directly. Scanned pages use OCR; every extracted page also has a visual preview so you can check pictures, diagrams, layout, and OCR against the PDF.
         </div>
       </div>
 
@@ -256,11 +315,32 @@ export function BookPlannerScreen() {
       <div className="v-card" style={{ padding: 18, display: 'grid', gap: 14 }}>
         <h3 style={{ margin: 0 }}>Saved books</h3>
         {loading ? <p style={{ color: 'var(--text-muted)' }}>Loading…</p> : books.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>No books saved yet.</p> : books.map(book => (
-          <article key={book.id} style={{ padding: 14, borderRadius: 14, border: '1px solid var(--v-glass-border)', display: 'grid', gap: 9 }}>
+          <article key={book.id} style={{ padding: 16, borderRadius: 16, border: '1px solid var(--v-glass-border)', display: 'grid', gap: 14, marginBottom: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <div><strong>{book.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{book.author}</div></div>
               <span style={{ fontSize: 12, color: book.extractionStatus === 'completed' ? '#86efac' : book.extractionStatus === 'failed' ? '#fca5a5' : '#fbbf24' }}>{book.status === 'processing' ? 'Extracting…' : `${book.status} · extraction ${book.extractionStatus.replace('_', ' ')}`}</span>
             </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="v-pill-btn" aria-expanded={!collapsedBooks.has(book.id)} onClick={() => setCollapsedBooks(current => { const next = new Set(current); if (next.has(book.id)) next.delete(book.id); else next.add(book.id); return next; })} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center' }}>{collapsedBooks.has(book.id) ? <><ChevronDown size={15} /> Expand</> : <><ChevronUp size={15} /> Collapse</>}</button>
+              <button type="button" className="v-pill-btn" onClick={() => beginEdit(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center' }}><Pencil size={14} /> Edit</button>
+              <button type="button" className="v-pill-btn" onClick={() => void removeBook(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center', color: '#fca5a5' }}><Trash2 size={14} /> Delete</button>
+            </div>
+            {!collapsedBooks.has(book.id) && <>
+            {editingBookId === book.id && <section style={{ display: 'grid', gap: 12, padding: 14, borderRadius: 12, background: 'var(--v-glass-bg-subtle)', border: '1px solid var(--v-glass-border)' }}>
+              <strong>Edit this book</strong>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(190px,1fr))', gap: 12 }}>
+                {(['title', 'author', 'metadata'] as const).map(key => <label key={key} style={fieldStyle}>{key === 'metadata' ? 'Optional metadata' : key === 'title' ? 'Title' : 'Author'}<input style={inputStyle} value={String(bookDraft[key] ?? '')} onChange={event => setBookDraft(current => ({ ...current, [key]: event.target.value }))} /></label>)}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12 }}>
+                <label style={fieldStyle}>Plan start date<input type="date" style={inputStyle} value={String(bookDraft.startDate || '')} onChange={event => setBookDraft(current => ({ ...current, startDate: event.target.value }))} /></label>
+                <label style={fieldStyle}>Reading days<input type="number" min={1} max={365} style={inputStyle} value={Number(bookDraft.durationDays || 1)} onChange={event => setBookDraft(current => ({ ...current, durationDays: Number(event.target.value) }))} /></label>
+                <label style={fieldStyle}>Study minutes/day<input type="number" min={5} max={1440} style={inputStyle} value={Number(bookDraft.studyMinutes || 60)} onChange={event => setBookDraft(current => ({ ...current, studyMinutes: Number(event.target.value) }))} /></label>
+                <label style={fieldStyle}>Posting time<input type="time" style={inputStyle} value={String(bookDraft.postingTime || '08:00')} onChange={event => setBookDraft(current => ({ ...current, postingTime: event.target.value }))} /></label>
+                <label style={fieldStyle}>Timezone<input style={inputStyle} value={String(bookDraft.timezone || '')} onChange={event => setBookDraft(current => ({ ...current, timezone: event.target.value }))} /></label>
+                <label style={fieldStyle}>Current PDF page<input type="number" min={book.startPage} max={book.endPage} style={inputStyle} value={Number(bookDraft.currentPage || book.startPage)} onChange={event => setBookDraft(current => ({ ...current, currentPage: Number(event.target.value) }))} /></label>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="v-pill-btn" onClick={() => void saveBookEdit(book)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center' }}><Save size={14} /> Save changes</button><button type="button" className="v-pill-btn" onClick={() => setEditingBookId(null)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center' }}><X size={14} /> Cancel</button></div>
+            </section>}
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', color: 'var(--text-secondary)', fontSize: 12 }}>
               <span>PDF pages {book.startPage}–{book.endPage}</span><span>Current page {book.currentPage}</span><span>{book.durationDays} days</span><span><Clock3 size={13} style={{ verticalAlign: 'middle' }} /> {book.postingTime} · {book.timezone}</span><span><LockKeyhole size={13} style={{ verticalAlign: 'middle' }} /> Private server file</span>
             </div>
@@ -273,6 +353,7 @@ export function BookPlannerScreen() {
             {pagesByBook[book.id]?.map(page => (
               <section key={page.pdfPage} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 12, padding: 12 }}>
                 <strong style={{ fontSize: 13 }}>Original PDF page {page.pdfPage} · {page.method === 'ocr' ? `OCR estimate (${page.confidence?.toFixed(1) ?? '—'}%)${page.reviewedByUser ? ' · visually checked' : ''}` : page.method === 'empty' ? 'Unreadable / no text' : 'Selectable PDF text'}</strong>
+                {previewUrls[`${book.id}:${page.pdfPage}`] && <figure style={{ margin: '10px 0', display: 'grid', gap: 5 }}><img src={previewUrls[`${book.id}:${page.pdfPage}`]} alt={`Visual preview of original PDF page ${page.pdfPage}, including its images and diagrams`} style={{ display: 'block', width: '100%', maxHeight: 720, objectFit: 'contain', borderRadius: 8, background: '#fff' }} /><figcaption style={{ color: 'var(--text-muted)', fontSize: 11 }}>Original page image · includes embedded pictures, diagrams, and layout</figcaption></figure>}
                 {page.warnings.map(warning => <p key={warning} style={{ margin: '6px 0', color: '#fbbf24', fontSize: 12 }}>{warning}</p>)}
                 <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 360, overflow: 'auto', margin: '10px 0 0', font: '13px/1.6 ui-monospace,Consolas,monospace', color: 'var(--text-primary)' }}>{page.text || '[No text extracted from this page]'}</pre>
                 {page.requiresReview && page.text && !page.reviewedByUser && <button type="button" className="v-pill-btn" onClick={() => void markPageReviewed(book, page.pdfPage)} style={{ marginTop: 10, padding: '8px 12px' }}>I checked this page against the PDF</button>}
@@ -296,6 +377,7 @@ export function BookPlannerScreen() {
                     <h4 style={{ margin: 0 }}>Complete original reading · PDF pages {assignment.startPdfPage}–{assignment.endPdfPage}</h4>
                     {detail.originalPages.map(page => <section key={page.pdfPage} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 10, padding: 10 }}>
                       <strong style={{ fontSize: 12 }}>Original PDF page {page.pdfPage}{page.method === 'ocr' ? ' · OCR, visually reviewed' : ''}</strong>
+                      {previewUrls[`${book.id}:${page.pdfPage}`] && <img src={previewUrls[`${book.id}:${page.pdfPage}`]} alt={`Visual preview of original PDF page ${page.pdfPage}`} style={{ display: 'block', width: '100%', maxHeight: 600, objectFit: 'contain', marginTop: 8, borderRadius: 8, background: '#fff' }} />}
                       <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflow: 'auto', margin: '8px 0 0', font: '13px/1.6 ui-monospace,Consolas,monospace' }}>{page.text}</pre>
                     </section>)}
                     <h4 style={{ margin: '8px 0 0' }}>AI-generated supplementary study notes</h4>
@@ -323,10 +405,10 @@ export function BookPlannerScreen() {
                 })()}
               </section>
             ))}
+            </>}
           </article>
         ))}
       </div>
-      <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5 }}>Telegram bot/channel, Mind Improves, and book image extraction are not connected in this project. No credentials or API documentation for those services were found. Existing generic AI/image features are not used to reproduce source text.</p>
     </section>
   );
 }

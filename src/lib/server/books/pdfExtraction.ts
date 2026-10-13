@@ -48,6 +48,19 @@ async function recognizePage(page: any, canvasModule: any, worker: any) {
   return { text: String(result.data.text || '').trim(), confidence: Number(result.data.confidence || 0) };
 }
 
+async function renderPagePreview(page: any, canvasModule: any, filePath: string, bookId: string, pdfPage: number) {
+  const baseViewport = page.getViewport({ scale: 1 });
+  const scale = Math.min(1.5, 1600 / Math.max(baseViewport.width, baseViewport.height));
+  const viewport = page.getViewport({ scale });
+  const canvas = canvasModule.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+  await page.render({ canvas, viewport, background: '#ffffff' }).promise;
+  const filename = `page-${pdfPage}.jpg`;
+  const previewDir = path.join(path.dirname(filePath), bookId, 'page-previews');
+  await fs.mkdir(previewDir, { recursive: true });
+  await fs.writeFile(path.join(previewDir, filename), canvas.toBuffer('image/jpeg', 82));
+  return { filename, mimeType: 'image/jpeg' as const, width: canvas.width, height: canvas.height };
+}
+
 export async function extractPdfRange(options: PdfExtractionOptions) {
   const bytes = await fs.readFile(options.filePath);
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -67,7 +80,7 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
   const totalPages = options.endPage - options.startPage + 1;
   const scannedPages: number[] = [];
   let worker: any = null;
-  let canvasModule: any = null;
+  const canvasModule: any = await import('@napi-rs/canvas');
   let completedPages = 0;
   const results: BookPageRecord[] = [];
   const tessLanguages = (process.env.PDF_OCR_LANGS || 'eng').trim();
@@ -75,6 +88,7 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
   try {
     for (let pdfPage = options.startPage; pdfPage <= options.endPage; pdfPage += 1) {
       const page = await document.getPage(pdfPage);
+      const visualPreview = await renderPagePreview(page, canvasModule, options.filePath, options.bookId, pdfPage);
       const textContent = await page.getTextContent({ includeMarkedContent: false });
       const items = textContent.items.filter((item: any) => typeof item.str === 'string');
       const nativeText = reconstructText(items);
@@ -88,7 +102,6 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
         scannedPages.push(pdfPage);
         if (!worker) {
           const tesseract = await import('tesseract.js');
-          canvasModule = await import('@napi-rs/canvas');
           const cachePath = path.join(process.env.BOOK_DATA_DIR?.trim() || path.join(process.cwd(), '.data'), 'tessdata');
           await fs.mkdir(cachePath, { recursive: true });
           worker = await tesseract.createWorker(tessLanguages, undefined, {
@@ -132,6 +145,7 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
         confidence,
         warnings,
         requiresReview,
+        visualPreview,
         updatedAt: Date.now(),
       };
       results.push(record);
