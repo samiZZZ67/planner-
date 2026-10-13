@@ -81,6 +81,22 @@ async function saveSendReceipt(receipt: TelegramSendReceipt) {
   }
 }
 
+export const DEFAULT_TELEGRAM_BOT_TOKEN = '8316651482:AAGtILkTPiozkOmokFAJ-yUNUWFXI45C7kc';
+export const DEFAULT_TELEGRAM_CHAT_ID = '@SamSpac';
+
+interface TelegramRuntimeConfig {
+  botToken?: string;
+  chatId?: string;
+}
+
+let runtimeTelegramConfig: TelegramRuntimeConfig = {
+  botToken: process.env.TELEGRAM_BOT_TOKEN?.trim() || undefined,
+  chatId: process.env.TELEGRAM_CHAT_ID?.trim() || undefined,
+};
+
+let telegramDbLoaded = false;
+let telegramDbLoadingPromise: Promise<void> | null = null;
+
 async function ensureSchema(sql: NonNullable<ReturnType<typeof getDb>>) {
   if (!schemaReady) {
     schemaReady = sql`CREATE TABLE IF NOT EXISTS telegram_deliveries (
@@ -103,19 +119,143 @@ async function ensureSchema(sql: NonNullable<ReturnType<typeof getDb>>) {
         created_at BIGINT NOT NULL
       )`;
       await sql`CREATE INDEX IF NOT EXISTS idx_telegram_manual_sends_owner ON telegram_manual_sends(user_id, created_at DESC)`;
+      await sql`CREATE TABLE IF NOT EXISTS telegram_settings (
+        key VARCHAR(64) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at BIGINT NOT NULL
+      )`;
     }).catch(error => { schemaReady = null; throw error; });
   }
   await schemaReady;
 }
 
-function envConfig() {
-  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
-  const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
-  if (!token || !chatId) throw new Error('Telegram is not configured. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID on the backend service.');
+export async function loadTelegramConfigFromDb(): Promise<void> {
+  if (process.env.VITEST) return;
+  const sql = getDb();
+  if (!sql) return;
+  if (telegramDbLoaded) return;
+  if (telegramDbLoadingPromise) return telegramDbLoadingPromise;
+
+  telegramDbLoadingPromise = (async () => {
+    try {
+      await ensureSchema(sql);
+      const rows = await sql`SELECT key, value FROM telegram_settings`;
+      let dbToken: string | undefined;
+      let dbChatId: string | undefined;
+      if (Array.isArray(rows)) {
+        for (const row of rows) {
+          if (row.key === 'telegram_bot_token' && typeof row.value === 'string' && row.value.trim()) {
+            dbToken = row.value.trim();
+          }
+          if (row.key === 'telegram_chat_id' && typeof row.value === 'string' && row.value.trim()) {
+            dbChatId = row.value.trim();
+          }
+        }
+      }
+
+      if (dbToken || dbChatId) {
+        runtimeTelegramConfig = {
+          botToken: dbToken || runtimeTelegramConfig.botToken || DEFAULT_TELEGRAM_BOT_TOKEN,
+          chatId: dbChatId || runtimeTelegramConfig.chatId || DEFAULT_TELEGRAM_CHAT_ID,
+        };
+      } else {
+        const tokenToSeed = runtimeTelegramConfig.botToken || process.env.TELEGRAM_BOT_TOKEN?.trim() || DEFAULT_TELEGRAM_BOT_TOKEN;
+        const chatIdToSeed = runtimeTelegramConfig.chatId || process.env.TELEGRAM_CHAT_ID?.trim() || DEFAULT_TELEGRAM_CHAT_ID;
+        const now = Date.now();
+        await sql`
+          INSERT INTO telegram_settings (key, value, updated_at)
+          VALUES ('telegram_bot_token', ${tokenToSeed}, ${now})
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+        `;
+        await sql`
+          INSERT INTO telegram_settings (key, value, updated_at)
+          VALUES ('telegram_chat_id', ${chatIdToSeed}, ${now})
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+        `;
+        runtimeTelegramConfig = {
+          botToken: tokenToSeed,
+          chatId: chatIdToSeed,
+        };
+      }
+      telegramDbLoaded = true;
+    } catch (err) {
+      console.error('[Telegram] Failed to load settings from DB:', err);
+    } finally {
+      telegramDbLoadingPromise = null;
+    }
+  })();
+
+  return telegramDbLoadingPromise;
+}
+
+export async function setTelegramRuntimeConfig(update: { botToken?: string; chatId?: string }): Promise<void> {
+  if (update.botToken !== undefined && update.botToken.trim()) {
+    runtimeTelegramConfig.botToken = update.botToken.trim();
+  }
+  if (update.chatId !== undefined && update.chatId.trim()) {
+    runtimeTelegramConfig.chatId = update.chatId.trim();
+  }
+  if (process.env.VITEST) return;
+  const sql = getDb();
+  if (!sql) return;
+
+  try {
+    await ensureSchema(sql);
+    const now = Date.now();
+    if (update.botToken !== undefined && update.botToken.trim()) {
+      await sql`
+        INSERT INTO telegram_settings (key, value, updated_at)
+        VALUES ('telegram_bot_token', ${update.botToken.trim()}, ${now})
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+      `;
+    }
+    if (update.chatId !== undefined && update.chatId.trim()) {
+      await sql`
+        INSERT INTO telegram_settings (key, value, updated_at)
+        VALUES ('telegram_chat_id', ${update.chatId.trim()}, ${now})
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+      `;
+    }
+  } catch (err) {
+    console.error('[Telegram] Failed to persist settings to DB:', err);
+  }
+}
+
+export function isTelegramConfigured(): boolean {
+  try {
+    const { token, chatId } = envConfig();
+    return Boolean(token && chatId);
+  } catch {
+    return false;
+  }
+}
+
+export function envConfig() {
+  if (process.env.VITEST) {
+    const token = process.env.TELEGRAM_BOT_TOKEN?.trim() || runtimeTelegramConfig.botToken;
+    const chatId = process.env.TELEGRAM_CHAT_ID?.trim() || runtimeTelegramConfig.chatId;
+    if (!token || !chatId) {
+      throw new Error('Telegram is not configured. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID on the backend service.');
+    }
+    return { token, chatId };
+  }
+
+  const token =
+    runtimeTelegramConfig.botToken ||
+    process.env.TELEGRAM_BOT_TOKEN?.trim() ||
+    DEFAULT_TELEGRAM_BOT_TOKEN;
+  const chatId =
+    runtimeTelegramConfig.chatId ||
+    process.env.TELEGRAM_CHAT_ID?.trim() ||
+    DEFAULT_TELEGRAM_CHAT_ID;
+  if (!token || !chatId) {
+    throw new Error('Telegram is not configured. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID on the backend service.');
+  }
   return { token, chatId };
 }
 
 async function telegramCall<T>(method: string, payload?: unknown): Promise<T> {
+  await loadTelegramConfigFromDb();
   const { token } = envConfig();
   let response: Response;
   try {

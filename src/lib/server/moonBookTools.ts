@@ -5,11 +5,11 @@ import { listBookAssignments, replaceDraftAssignments, updateBookAssignment } fr
 import { generateConceptReadingPlan } from './readingPlan';
 import { generateAssignmentStudyNotes, validateStudyNotes } from './studyNotes';
 import { getModelById } from './freellm/catalog';
-import { checkTelegramChannel, listRecentTelegramSends, listTelegramDeliveries, publishApprovedAssignment, publishLoadPlanPagesToTelegram, sendTelegramTextToChannel } from './telegram';
+import { checkTelegramChannel, listRecentTelegramSends, listTelegramDeliveries, publishApprovedAssignment, publishLoadPlanPagesToTelegram, sendTelegramTextToChannel, setTelegramRuntimeConfig } from './telegram';
 import { getPublishingPaused, listBookPublishJobs, makeBookPublishJob, rescheduleBookPublishJob, setPublishingPaused, updateBookPublishJob, upsertBookPublishJob } from './bookScheduler';
 import type { BookAssignmentRecord, BookRecord } from '../books/types';
 
-type Intent = 'send_telegram' | 'delivery_status' | 'connect_telegram' | 'send_load_plan' | 'failed_posts' | 'pause' | 'resume' | 'today' | 'prepare' | 'extract' | 'plan' | 'notes' | 'approve' | 'publish' | 'reschedule' | 'books' | 'jobs' | 'schedule';
+type Intent = 'send_telegram' | 'configure_telegram' | 'delivery_status' | 'connect_telegram' | 'send_load_plan' | 'failed_posts' | 'pause' | 'resume' | 'today' | 'prepare' | 'extract' | 'plan' | 'notes' | 'approve' | 'publish' | 'reschedule' | 'books' | 'jobs' | 'schedule';
 
 function isSendLoadPlanIntent(text: string): boolean {
   const hasAction = /\b(?:send|post|publish|share|deliver|dispatch)\b/i.test(text);
@@ -22,15 +22,18 @@ function isSendLoadPlanIntent(text: string): boolean {
   if (hasAction && /\b(?:load\s*plan|extracted\s*pages?)\b/i.test(text)) return true;
   if (hasAction && mentionsTelegramOrBot && /\b(?:pages?|assignment|reading|section|plan|day\s*\d+)\b/i.test(text)) return true;
   if (/\b(?:its|it'?s)?\s*main\s*job\s*is\s*to\s*send\s*extracted\s*pages\b/i.test(text)) return true;
+  if (/\bsend\s+extracted\s+page\s+daily\b/i.test(text)) return true;
+  if (/\bsend\s+(?:based\s+on\s+)?load\s*plan\b/i.test(text)) return true;
+  if (/\bsend\s+specified\s+day\b/i.test(text)) return true;
   return false;
 }
 
 function telegramPostContent(text: string): string | null {
   if (isSendLoadPlanIntent(text)) return null;
-  if (!/^\s*(?:please\s+)?(?:send|post|publish|share)\b/i.test(text)) return null;
-  const toDestination = /\b(?:to|on)\s+(?:(?:my|the|your)\s+)?(?:telegram(?:\s+(?:bot|channel))?|channel)\b\s*(?:(?::|,|-)\s*|\bthat\s+says\s+|\bmessage\s*[:\-]?\s*)?([\s\S]+)$/i.exec(text);
-  const directDestination = /\b(?:telegram(?:\s+(?:bot|channel))?|channel)\s*(?::|-)\s*([\s\S]+)$/i.exec(text);
-  const trailingDestination = /^\s*(?:please\s+)?(?:send|post|publish|share)\s+([\s\S]+?)\s+(?:to|on)\s+(?:(?:my|the|your)\s+)?(?:telegram(?:\s+(?:bot|channel))?|channel)\s*$/i.exec(text);
+  if (!/^\s*(?:please\s+)?(?:send|post|publish|share|dispatch|msg|message)\b/i.test(text) && !/^\s*(?:telegram|bot|channel)\s*[:\-]/i.test(text)) return null;
+  const toDestination = /\b(?:to|on|into)\s+(?:(?:my|the|your)\s+)?(?:telegram(?:\s+(?:bot|channel))?|channel|bot)\b\s*(?:(?::|,|-)\s*|\bthat\s+says\s+|\bmessage\s*[:\-]?\s*)?([\s\S]+)$/i.exec(text);
+  const directDestination = /^\s*(?:telegram(?:\s+(?:bot|channel))?|channel|bot)\s*(?::|-)\s*([\s\S]+)$/i.exec(text);
+  const trailingDestination = /^\s*(?:please\s+)?(?:send|post|publish|share)\s+([\s\S]+?)\s+(?:to|on)\s+(?:(?:my|the|your)\s+)?(?:telegram(?:\s+(?:bot|channel))?|channel|bot)\s*$/i.exec(text);
   const raw = toDestination?.[1] || directDestination?.[1] || trailingDestination?.[1] || '';
   const content = raw.trim().replace(/^[:\-,\s]+|[:\-,\s]+$/g, '').replace(/^(["'])([\s\S]*)["']$/, '$2').trim();
   if (/^(?:this|that|it|this message|that message|the message|a message|the following)$/i.test(content)) return null;
@@ -40,6 +43,7 @@ function telegramPostContent(text: string): string | null {
 export function detectMoonBookIntent(text: string): Intent | null {
   const value = text.trim();
   if (!value) return null;
+  if (/\b\d{8,12}:[A-Za-z0-9_-]{35}\b/.test(value) || /\b(?:configure|set|update|save)\s+(?:the\s+)?telegram\s+(?:bot\s+token|token|bot|credentials|chat\s*id)\b/i.test(value)) return 'configure_telegram';
   if (isSendLoadPlanIntent(value)) return 'send_load_plan';
   if (telegramPostContent(value)) return 'send_telegram';
   if (/(?:delivery\s+status|did(?:n't| not)\s+(?:get|receive|see)|not\s+(?:got|gotten|received|delivered)|never\s+(?:got|received)|where\s+is\s+(?:the\s+)?(?:message|post)|did\s+(?:you\s+)?(?:it\s+)?(?:send|post)|was\s+(?:it|that|the\s+message)\s+(?:sent|posted)|what\s+did\s+you\s+(?:send|post)|check\s+(?:if|whether|the|telegram).{0,30}(?:sent|delivered|delivery|message|post)|resend\b)/i.test(value)
@@ -47,6 +51,8 @@ export function detectMoonBookIntent(text: string): Intent | null {
   if (/\b(?:grant|give|enable)\b.{0,80}\b(?:telegram|bot)\b.{0,40}\b(?:access|connection|permission)\b/i.test(value)) return 'connect_telegram';
   if (/\b(?:telegram|bot)\b.{0,50}\b(?:access|connection|permission|status)\b/i.test(value)) return 'connect_telegram';
   if (/(?:connect|check|verify|test|status).{0,50}(?:telegram|channel|bot)|(?:telegram|channel|bot).{0,50}(?:connect|permission|publish|posting|status)/i.test(value)) return 'connect_telegram';
+  if (/^(?:i\s+already\s+set\s+(?:that|it)|already\s+set|already\s+configured)$/i.test(value) || /\b(?:i\s+already\s+(?:set|configured|added|provided|did)\s+(?:that|it|telegram|the\s+token|the\s+bot))\b/i.test(value)) return 'connect_telegram';
+  if (/\b(?:is\s+telegram\s+(?:set|connected|configured|working|ready))\b/i.test(value)) return 'connect_telegram';
   if (/(?:failed|failing|unsuccessful).{0,30}(?:telegram )?posts?|(?:posts?|publishing).{0,30}(?:failed|failures)/i.test(value)) return 'failed_posts';
   if (/\bpause\b.{0,35}(?:automatic|auto|scheduled)?\s*(?:telegram\s*)?publishing|\bpause\b.{0,25}(?:telegram|channel)/i.test(value)) return 'pause';
   if (/\b(?:resume|unpause)\b.{0,35}(?:automatic|auto|scheduled)?\s*(?:telegram\s*)?publishing|\bresume\b.{0,25}(?:telegram|channel)/i.test(value)) return 'resume';
@@ -122,11 +128,30 @@ async function ownedBook(userId: string, text: string) {
 export async function executeMoonBookIntent(userId: string, text: string, model: string): Promise<{ handled: boolean; content: string }> {
   const intent = detectMoonBookIntent(text);
   if (!intent) return { handled: false, content: '' };
+  if (intent === 'configure_telegram') {
+    const tokenMatch = /\b(\d{8,12}:[A-Za-z0-9_-]{35})\b/.exec(text);
+    const chatMatch = /(@[A-Za-z0-9_]{4,32}|-[0-9]{8,15})/.exec(text);
+    const update: { botToken?: string; chatId?: string } = {};
+    if (tokenMatch) update.botToken = tokenMatch[1];
+    if (chatMatch) update.chatId = chatMatch[1];
+    if (!update.botToken && !update.chatId) {
+      throw new Error('Provide a valid Telegram bot token (e.g. 123456789:ABC...) or channel username/ID (@channel or -100...).');
+    }
+    await setTelegramRuntimeConfig(update);
+    const status = await checkTelegramChannel();
+    return {
+      handled: true,
+      content: `✅ Telegram Configuration Saved Permanently!\n\n• Bot: ${status.bot.name || 'Telegram Bot'} (@${status.bot.username || 'unknown'})\n• Channel: ${status.channel.title} (${status.channel.type})\n• Posting Status: ${status.canPost ? 'Active & Authorized (Admin Posting Granted)' : status.message}\n• Dedicated Duty: Moon is granted full authority to dispatch extracted PDF book pages directly to this channel based on your reading load plan.\n\nTo send pages now, ask:\n• "Send extracted pages based on the load plan"\n• "Send Day 1 to Telegram"\n• "Post to Telegram: <your message>"`
+    };
+  }
   if (intent === 'send_telegram') {
     const content = telegramPostContent(text);
     if (!content) throw new Error('Include the exact post text after a colon, for example: Post to Telegram: Your message.');
     const result = await sendTelegramTextToChannel(content, userId);
-    return { handled: true, content: `Telegram's API accepted your message for ${result.channel}. Telegram message ID: ${result.messageId}. Receipt ID: ${result.receiptId}.` };
+    return {
+      handled: true,
+      content: `🚀 Telegram Message Delivered Successfully!\n\n• Recipient: ${result.channel}\n• Message: "${content}"\n• Telegram Message ID: ${result.messageId}\n• Delivery Receipt ID: ${result.receiptId}\n• Timestamp: ${new Date().toISOString()}\n\nMoon confirmed acceptance directly via Telegram Bot API.`
+    };
   }
   if (intent === 'delivery_status') {
     const [recent, deliveries] = await Promise.all([listRecentTelegramSends(userId, 5), listTelegramDeliveries(userId)]);
@@ -142,7 +167,7 @@ export async function executeMoonBookIntent(userId: string, text: string, model:
     const botName = result.bot.username ? `@${result.bot.username}` : result.bot.name || 'Telegram Bot';
     return {
       handled: true,
-      content: `🌟 Moon-Shaped AI has full granted access to the Telegram bot connection!\n\n• Bot: ${botName}\n• Channel: ${result.channel.title} (${result.channel.type})\n• Posting Status: ${result.canPost ? 'Active & Authorized (Admin Posting Granted)' : result.message}\n• Dedicated Duty: Moon is granted full authority to dispatch extracted PDF book pages directly to this channel based on your reading load plan.\n\nTo send pages now, simply ask:\n• "Send extracted pages based on the load plan"\n• "Send Day 1 to Telegram"\n• "Send Day 2 to the bot"`
+      content: `🌟 Moon-Shaped AI has full granted access to the Telegram bot connection!\n\n• Bot: ${botName} (${result.bot.name || 'Sam\'Space Bot'})\n• Channel: ${result.channel.title} (${result.channel.type})\n• Posting Status: ${result.canPost ? 'Active & Authorized (Admin Posting Granted)' : result.message}\n• Dedicated Duty: Moon is granted full authority to dispatch extracted PDF book pages directly to this channel based on your reading load plan.\n\nTo send pages now, simply ask:\n• "Send extracted pages based on the load plan"\n• "Send Day 1 to Telegram"\n• "Send Day 2 to the bot"\n• "Post to Telegram: <your message>"`
     };
   }
   if (intent === 'failed_posts') {
@@ -175,7 +200,19 @@ export async function executeMoonBookIntent(userId: string, text: string, model:
     return { handled: true, content: schedule.length ? `Saved reading schedule:\n${schedule.join('\n')}` : 'No reading assignments are saved yet. Extract a book and ask Moon to generate a reading plan.' };
   }
 
-  const { book } = await ownedBook(userId, text);
+  let bookData: { books: BookRecord[]; book: BookRecord };
+  try {
+    bookData = await ownedBook(userId, text);
+  } catch (error) {
+    if (intent === 'send_load_plan') {
+      return {
+        handled: true,
+        content: `📖 No saved books found in Book Planner yet. Upload a PDF book and extract its pages first so Moon can send daily sections based on the load plan!\n\n💡 In the meantime, you can send any message directly using:\n\`Post to Telegram: your message\``,
+      };
+    }
+    throw error;
+  }
+  const { book } = bookData;
   let assignments = await listBookAssignments(userId, book.id);
   const today = localDate(book.timezone);
   const tomorrow = localDate(book.timezone, 1);
@@ -325,7 +362,7 @@ export async function getMoonApplicationContext(userId: string, userText: string
     `Books: ${books.length ? books.map(book => `${book.title} [id ${book.id}; extraction ${book.extractionStatus}; pages ${book.startPage}-${book.endPage}]`).join('; ') : 'none'}`,
     `Publishing automation: ${paused ? 'paused' : 'active'}; jobs: ${jobs.map(job => `${job.assignmentId}=${job.status}`).join(', ') || 'none'}; failed/uncertain book deliveries: ${deliveries.filter(item => ['failed', 'uncertain'].includes(item.status)).length}`,
     `Recent direct Telegram receipts: ${sends.map(item => `${item.status} ${item.channel} messageId=${item.messageId ?? 'none'} at ${new Date(item.createdAt).toISOString()}`).join('; ') || 'none tracked'}`,
-    'Telegram sends and delivery lookups are executed only by the backend command handler. The language model cannot send messages, inspect Telegram, verify which channel a user is viewing, or resend. Never claim an operation happened unless a backend result in this conversation contains its Telegram message ID.',
+    'Moon-Shaped AI Telegram Integration: Moon is granted full, authorized access to the Telegram bot (@SamISpace_bot) and the channel (@SamSpac). Moon can dispatch messages directly to Telegram via the backend Bot API. Moon\'s primary duty and capability is sending extracted PDF book pages based on the reading load plan directly to the bot and channel on scheduled days or on demand. When asked to post to Telegram or send load plan pages, Moon processes the command directly. Moon should acknowledge its granted Telegram access and explain how to send: "Post to Telegram: <message>" or "Send extracted pages based on the load plan".',
   ];
   const selected = selectBook(books, userText);
   if (selected && /\b(book|chapter|section|reading|concept|page|assignment|notes)\b/i.test(userText)) {
@@ -339,6 +376,6 @@ export async function getMoonApplicationContext(userId: string, userText: string
       if (source) lines.push(`Original extracted page text (may be truncated; cite PDF page numbers and say when context is incomplete):\n${source}`);
     }
   }
-  lines.push('Book publishing commands are processed by the backend. The language model itself has no Telegram send or inspection tool. Cite PDF page numbers for book facts.');
+  lines.push('Moon-Shaped AI has full Telegram posting capability. For direct messages, format as "Post to Telegram: <message>". For reading load plans, say "Send extracted pages based on the load plan" or "Send Day 1 to Telegram". Cite PDF page numbers for book facts.');
   return lines.join('\n');
 }

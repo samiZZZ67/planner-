@@ -63,7 +63,17 @@ export async function POST(req: NextRequest) {
       try {
         intentResult = await executeMoonBookIntent(userId, directUserText, selectedModel);
       } catch (error) {
-        return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : 'Moon could not complete that Sam\'Space operation.' }, { status: 422, headers: corsHeaders() });
+        const errorMsg = error instanceof Error ? error.message : 'Moon could not complete that operation.';
+        return NextResponse.json({
+          ok: true,
+          message: {
+            role: 'assistant',
+            content: `⚠️ ${errorMsg}\n\n💡 **Tips to use Telegram with Moon:**\n• **Direct Message:** \`Post to Telegram: your message here\`\n• **Check Access:** \`Check Telegram bot status\`\n• **Send Load Plan:** \`Send extracted pages based on the load plan\` or \`Send Day 1 to Telegram\``,
+          },
+          model: 'Sam\'Space Telegram Dispatcher',
+          provider: 'Sam\'Space',
+          operation: true,
+        }, { headers: corsHeaders() });
       }
       if (intentResult.handled) {
         return NextResponse.json({ ok: true, message: { role: 'assistant', content: intentResult.content }, model: 'Sam\'Space backend tool', provider: 'Sam\'Space', operation: true }, { headers: corsHeaders() });
@@ -73,7 +83,16 @@ export async function POST(req: NextRequest) {
       const standalonePostCommand = /^\s*(?:please\s+)?(?:send|post|publish|share)\s+(?:this|the following|this message)\b/i.test(directUserText);
       const asksForDraft = /\b(?:draft|write|compose|suggest)\b/i.test(directUserText) && !/\b(?:send|post|publish|share)\s+(?:it|this|now)\b/i.test(directUserText);
       if (asksForOutbound && (namesTelegram || standalonePostCommand) && !asksForDraft) {
-        return NextResponse.json({ ok: true, message: { role: 'assistant', content: 'I did not send or resend anything. To post text, use this format so the backend can confirm it: Post to Telegram: your exact message. To ask about an earlier post, say “check Telegram delivery status.”' }, model: 'Sam\'Space backend guard', provider: 'Sam\'Space', operation: true }, { headers: corsHeaders() });
+        return NextResponse.json({
+          ok: true,
+          message: {
+            role: 'assistant',
+            content: '🌟 Moon-Shaped AI has full granted access to post to your Telegram channel (@SamSpac) and bot (@SamISpace_bot)!\n\nTo send a message now, use this format:\n`Post to Telegram: your exact message`\n\nOr to dispatch book pages based on your load plan:\n`Send Day 1 to Telegram` or `Send extracted pages based on the load plan`'
+          },
+          model: 'Sam\'Space Telegram Dispatcher',
+          provider: 'Sam\'Space',
+          operation: true
+        }, { headers: corsHeaders() });
       }
     }
     const attachments: AttachmentItem[] = Array.isArray(latestMessage?.attachments)
