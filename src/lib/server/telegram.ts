@@ -24,8 +24,20 @@ export interface TelegramDeliveryRecord {
   updatedAt: number;
 }
 
+export interface TelegramSendReceipt {
+  id: string;
+  userId: string;
+  status: 'sent' | 'uncertain' | 'failed';
+  channel: string;
+  chatId: string;
+  messageId: number | null;
+  detail: string;
+  createdAt: number;
+}
+
 const DATA_ROOT = process.env.BOOK_DATA_DIR?.trim() || path.join(process.cwd(), '.data');
 const DELIVERY_PATH = path.join(DATA_ROOT, 'telegram-deliveries.json');
+const SEND_RECEIPTS_PATH = path.join(DATA_ROOT, 'telegram-send-receipts.json');
 let schemaReady: Promise<void> | null = null;
 
 function readDeliveries(): TelegramDeliveryRecord[] {
@@ -42,6 +54,33 @@ function writeDeliveries(records: TelegramDeliveryRecord[]) {
   fs.renameSync(temp, DELIVERY_PATH);
 }
 
+function readSendReceipts(): TelegramSendReceipt[] {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(SEND_RECEIPTS_PATH, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+async function saveSendReceipt(receipt: TelegramSendReceipt) {
+  try {
+    const sql = getDb();
+    if (sql) {
+      await ensureSchema(sql);
+      await sql`INSERT INTO telegram_manual_sends (id, user_id, status, data, created_at)
+        VALUES (${receipt.id}, ${receipt.userId}, ${receipt.status}, ${JSON.stringify(receipt)}::jsonb, ${receipt.createdAt})`;
+    }
+    const records = readSendReceipts();
+    records.push(receipt);
+    fs.mkdirSync(path.dirname(SEND_RECEIPTS_PATH), { recursive: true });
+    const temp = `${SEND_RECEIPTS_PATH}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify(records.slice(-500), null, 2), 'utf8');
+    fs.renameSync(temp, SEND_RECEIPTS_PATH);
+  } catch (error) {
+    // A logging failure must not turn Telegram's confirmed response into a false send failure.
+    console.error('[Telegram] Could not save the direct-send receipt:', error);
+  }
+}
+
 async function ensureSchema(sql: NonNullable<ReturnType<typeof getDb>>) {
   if (!schemaReady) {
     schemaReady = sql`CREATE TABLE IF NOT EXISTS telegram_deliveries (
@@ -56,6 +95,14 @@ async function ensureSchema(sql: NonNullable<ReturnType<typeof getDb>>) {
       UNIQUE(user_id, assignment_id)
     )`.then(async () => {
       await sql`CREATE INDEX IF NOT EXISTS idx_telegram_deliveries_owner ON telegram_deliveries(user_id, updated_at DESC)`;
+      await sql`CREATE TABLE IF NOT EXISTS telegram_manual_sends (
+        id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(64) NOT NULL,
+        status VARCHAR(20) NOT NULL,
+        data JSONB NOT NULL,
+        created_at BIGINT NOT NULL
+      )`;
+      await sql`CREATE INDEX IF NOT EXISTS idx_telegram_manual_sends_owner ON telegram_manual_sends(user_id, created_at DESC)`;
     }).catch(error => { schemaReady = null; throw error; });
   }
   await schemaReady;
@@ -111,18 +158,36 @@ export async function checkTelegramChannel() {
   };
 }
 
-export async function sendTelegramTextToChannel(text: string) {
+export async function sendTelegramTextToChannel(text: string, userId = 'owner') {
   if (!text.trim()) throw new Error('Type a message before sending it.');
   if (Array.from(text).length > 3500) throw new Error('Keep the message under 3,500 characters so it fits in one Telegram post.');
   const connection = await checkTelegramChannel();
   if (!connection.canPost) throw new Error(connection.message);
   const { chatId } = envConfig();
-  const sent = await telegramCall<{ message_id: number }>('sendMessage', {
-    chat_id: chatId,
-    text,
-    disable_web_page_preview: true,
-  });
-  return { channel: connection.channel.title, messageId: sent.message_id };
+  const receiptBase = { id: randomUUID(), userId, channel: connection.channel.title, chatId, createdAt: Date.now() };
+  try {
+    const sent = await telegramCall<{ message_id: number }>('sendMessage', {
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: true,
+    });
+    await saveSendReceipt({ ...receiptBase, status: 'sent', messageId: sent.message_id, detail: 'Telegram API accepted the message.' });
+    return { channel: connection.channel.title, messageId: sent.message_id, receiptId: receiptBase.id };
+  } catch (error) {
+    const err = error as Error & { uncertain?: boolean };
+    await saveSendReceipt({ ...receiptBase, status: err.uncertain ? 'uncertain' : 'failed', messageId: null, detail: err.message });
+    throw error;
+  }
+}
+
+export async function listRecentTelegramSends(userId: string, limit = 10): Promise<TelegramSendReceipt[]> {
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    const rows = await sql`SELECT data FROM telegram_manual_sends WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT ${limit}`;
+    return rows.map((row: any) => row.data as TelegramSendReceipt);
+  }
+  return readSendReceipts().filter(item => item.userId === userId).sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
 }
 
 export async function sendTelegramMediaToChannel(text: string, media: File) {

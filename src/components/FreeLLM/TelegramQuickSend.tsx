@@ -55,7 +55,7 @@ export function TelegramQuickSend({
       if (!response.ok) throw new Error(data.error || 'Telegram could not send this message.');
       setText('');
       setMedia(null);
-      setNotice(`Sent ${data.kind === 'photo' ? 'image' : data.kind === 'voice' ? 'voice message' : 'message'} to ${data.channel} through your bot.`);
+      setNotice(`Telegram accepted the ${data.kind === 'photo' ? 'image' : data.kind === 'voice' ? 'voice message' : 'message'} for ${data.channel}. Message ID: ${data.messageId}${data.receiptId ? ` · Receipt: ${data.receiptId}` : ''}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Telegram could not send this message.');
     } finally {
