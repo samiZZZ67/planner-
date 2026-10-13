@@ -20,6 +20,10 @@ export interface BookRecord {
   extractionMessage: string;
   extractionProgress?: { completedPages: number; totalPages: number };
   totalPdfPages?: number;
+  autoPublish?: boolean;
+  automationStatus?: 'queued' | 'processing' | 'ready' | 'needs_review' | 'failed';
+  automationAttempts?: number;
+  automationRetryAt?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -50,7 +54,7 @@ export interface BookStudyNotes {
   summary: string;
   keyConcepts: string[];
   definitions: Array<{ term: string; explanation: string; pdfPage: number }>;
-  example: { situation: string; conceptInAction: string; lesson: string; sourceDisclosure: string };
+  example: { situation: string; conceptInAction: string; lesson: string; sourceDisclosure: string; kind?: 'source' | 'illustrative'; pdfPage?: number };
   questions: Array<{ question: string; answer: string; pdfPages: number[] }>;
   notes: string;
   generatedByModel: string;

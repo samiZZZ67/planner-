@@ -14,6 +14,9 @@ export interface TelegramDeliveryRecord {
   messageParts: string[];
   nextPart: number;
   telegramMessageIds: number[];
+  imageFilename?: string;
+  imagePage?: number;
+  imageSent?: boolean;
   lastError: string;
   safeToRetry: boolean;
   retryAfterAt: number | null;
@@ -186,13 +189,16 @@ export function splitTelegramText(text: string, max = 3500): string[] {
   return parts.length ? parts : [''];
 }
 
-export function formatReadingAssignment(book: BookRecord, assignment: BookAssignmentRecord, pages: BookPageRecord[]): string[] {
+export function formatReadingAssignment(book: BookRecord, assignment: BookAssignmentRecord, pages: BookPageRecord[], previousAssignment?: BookAssignmentRecord): string[] {
   if (assignment.status !== 'approved' || !assignment.studyNotes) throw new Error('Only assignments with approved study notes can be published.');
   const orderedPages = [...pages].sort((a, b) => a.pdfPage - b.pdfPage);
   if (orderedPages.length !== assignment.endPdfPage - assignment.startPdfPage + 1 || orderedPages.some((page, index) => page.pdfPage !== assignment.startPdfPage + index || page.method === 'empty' || !page.text.trim() || (page.requiresReview && !page.reviewedByUser))) {
     throw new Error('The source pages are incomplete, unreadable, or still need OCR review.');
   }
   const notes = assignment.studyNotes;
+  const continuity = previousAssignment?.studyNotes
+    ? `Connection to yesterday's post (Day ${previousAssignment.dayNumber})\nYesterday's takeaway: ${previousAssignment.studyNotes.summary}\nToday builds on: ${assignment.concepts.map(item => item.title).join(', ')}`
+    : '';
   const pageChunks = orderedPages.flatMap(page => {
     const parts = splitTelegramText(page.text, 3200);
     return parts.map((part, index) => `\n[PDF page ${page.pdfPage}${parts.length > 1 ? `, part ${index + 1}/${parts.length}` : ''}]\n${part}`);
@@ -202,7 +208,8 @@ export function formatReadingAssignment(book: BookRecord, assignment: BookAssign
     ...pageChunks,
     `\nStudy summary\n${notes.summary}\n\nKey concepts\n${notes.keyConcepts.map(item => `• ${item}`).join('\n')}`,
     `Definitions\n${notes.definitions.map(item => `• ${item.term} (PDF p. ${item.pdfPage}): ${item.explanation}`).join('\n')}`,
-    `Illustrative example (hypothetical)\n${notes.example.situation}\n${notes.example.conceptInAction}\nLesson: ${notes.example.lesson}\n${notes.example.sourceDisclosure}`,
+    `${notes.example.kind === 'source' ? `Real-world example from the book (PDF p. ${notes.example.pdfPage})` : 'Practical application (illustrative)'}\n${notes.example.situation}\n${notes.example.conceptInAction}\nLesson: ${notes.example.lesson}\n${notes.example.sourceDisclosure}`,
+    ...(continuity ? [continuity] : []),
     `Revision questions\n${notes.questions.map((item, index) => `${index + 1}. ${item.question}\nAnswer: ${item.answer}\nSource: PDF page${item.pdfPages.length === 1 ? '' : 's'} ${item.pdfPages.join(', ')}`).join('\n\n')}\n\nStudy notes\n${notes.notes}`,
   ];
   return chunks.flatMap(chunk => splitTelegramText(chunk));
@@ -243,10 +250,10 @@ async function saveDelivery(delivery: TelegramDeliveryRecord) {
   return delivery;
 }
 
-async function createDelivery(userId: string, bookId: string, assignmentId: string, parts: string[]) {
+async function createDelivery(userId: string, bookId: string, assignmentId: string, parts: string[], image?: { filename: string; page: number }) {
   const sql = getDb();
   const now = Date.now();
-  const item: TelegramDeliveryRecord = { id: randomUUID(), userId, bookId, assignmentId, status: 'pending', messageParts: parts, nextPart: 0, telegramMessageIds: [], lastError: '', safeToRetry: false, retryAfterAt: null, createdAt: now, updatedAt: now };
+  const item: TelegramDeliveryRecord = { id: randomUUID(), userId, bookId, assignmentId, status: 'pending', messageParts: parts, nextPart: 0, telegramMessageIds: [], ...(image ? { imageFilename: image.filename, imagePage: image.page, imageSent: false } : {}), lastError: '', safeToRetry: false, retryAfterAt: null, createdAt: now, updatedAt: now };
   if (sql) {
     await ensureSchema(sql);
     const rows = await sql`INSERT INTO telegram_deliveries (id, user_id, book_id, assignment_id, status, data, created_at, updated_at)
@@ -280,15 +287,47 @@ async function claimDelivery(delivery: TelegramDeliveryRecord): Promise<Telegram
   return claimed;
 }
 
-export async function publishApprovedAssignment(userId: string, book: BookRecord, assignment: BookAssignmentRecord, pages: BookPageRecord[]) {
-  const parts = formatReadingAssignment(book, assignment, pages);
+async function sendPageImage(bookId: string, filename: string, caption: string) {
+  const imagePath = path.join(DATA_ROOT, 'books', bookId, 'page-previews', path.basename(filename));
+  const image = fs.readFileSync(imagePath);
+  if (image.length > 10 * 1024 * 1024) throw new Error('The rendered page image exceeds Telegram\'s 10 MB photo limit.');
+  const connection = await checkTelegramChannel();
+  if (!connection.canPost) throw new Error(connection.message);
+  const { token, chatId } = envConfig();
+  const form = new FormData();
+  form.set('chat_id', chatId);
+  form.set('caption', caption.slice(0, 1024));
+  form.set('photo', new Blob([image], { type: 'image/jpeg' }), filename);
+  let response: Response;
+  try {
+    response = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: form, signal: AbortSignal.timeout(60_000), cache: 'no-store' });
+  } catch {
+    throw Object.assign(new Error('Telegram image upload timed out or could not connect. Check the channel before retrying.'), { uncertain: true });
+  }
+  const data = await response.json().catch(() => null) as { ok?: boolean; result?: { message_id: number }; description?: string; error_code?: number; parameters?: { retry_after?: number } } | null;
+  if (!response.ok || !data?.ok) {
+    const code = data?.error_code ?? response.status;
+    if (code === 429 && data?.parameters?.retry_after) throw Object.assign(new Error(`Telegram rate limited the image; retry after ${data.parameters.retry_after} seconds.`), { retryAfter: data.parameters.retry_after });
+    if (code >= 500) throw Object.assign(new Error('Telegram is temporarily unavailable while uploading the page image.'), { transient: true });
+    throw new Error(data?.description || `Telegram image upload failed (${code}).`);
+  }
+  return data.result!.message_id;
+}
+
+export async function publishApprovedAssignment(userId: string, book: BookRecord, assignment: BookAssignmentRecord, pages: BookPageRecord[], previousAssignment?: BookAssignmentRecord) {
+  const previousDelivery = previousAssignment ? await getAssignmentDelivery(userId, previousAssignment.id) : null;
+  const postedPrevious = previousDelivery?.status === 'completed' ? previousAssignment : undefined;
+  const parts = formatReadingAssignment(book, assignment, pages, postedPrevious);
   let delivery = await getAssignmentDelivery(userId, assignment.id);
   if (delivery?.status === 'completed') throw new Error('This assignment has already been published successfully.');
   if (delivery && delivery.status !== 'pending') {
     if (delivery.status === 'uncertain' || !delivery.safeToRetry) throw Object.assign(new Error('A previous delivery may have sent part of this assignment. Check the Telegram channel and delivery record before retrying.'), { delivery });
     if (delivery.retryAfterAt && delivery.retryAfterAt > Date.now()) throw Object.assign(new Error(`Telegram asked us to retry after ${new Date(delivery.retryAfterAt).toISOString()}.`), { delivery });
   }
-  if (!delivery) delivery = await createDelivery(userId, book.id, assignment.id, parts);
+  if (!delivery) {
+    const imagePage = pages.find(page => page.visualPreview?.filename);
+    delivery = await createDelivery(userId, book.id, assignment.id, parts, imagePage?.visualPreview ? { filename: imagePage.visualPreview.filename, page: imagePage.pdfPage } : undefined);
+  }
   const claimed = await claimDelivery(delivery);
   if (!claimed) throw new Error('Another request is already processing this Telegram delivery, or the saved delivery can no longer be retried.');
   delivery = claimed;
@@ -300,6 +339,12 @@ export async function publishApprovedAssignment(userId: string, book: BookRecord
       sendingStarted = true;
       const message = await telegramCall<{ message_id: number }>('sendMessage', { chat_id: envConfig().chatId, text: delivery.messageParts[delivery.nextPart], disable_web_page_preview: true });
       delivery = await saveDelivery({ ...delivery, nextPart: delivery.nextPart + 1, telegramMessageIds: [...delivery.telegramMessageIds, message.message_id], updatedAt: Date.now() });
+      sendingStarted = false;
+    }
+    if (delivery.imageFilename && !delivery.imageSent) {
+      sendingStarted = true;
+      const messageId = await sendPageImage(book.id, delivery.imageFilename, `${book.title} · Day ${assignment.dayNumber} · original PDF page ${delivery.imagePage}`);
+      delivery = await saveDelivery({ ...delivery, imageSent: true, telegramMessageIds: [...delivery.telegramMessageIds, messageId], updatedAt: Date.now() });
       sendingStarted = false;
     }
     return await saveDelivery({ ...delivery, status: 'completed', lastError: '', safeToRetry: false, retryAfterAt: null, updatedAt: Date.now() });

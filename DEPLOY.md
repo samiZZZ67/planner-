@@ -72,17 +72,17 @@ To connect Telegram, open Render **Dashboard â†’ your NightPlanner web service â
 
 ### Scheduled Telegram publishing on Render
 
-Approved assignments create persistent publishing jobs using the book's configured local posting time and timezone. To run them without leaving the site open, create a **Cron Job** in Render using the same repository and deploy environment, set its schedule to `*/5 * * * *`, and use this command:
+New uploads and older saved books are queued for automatic processing by default. The web service extracts the selected pages, creates a concept based daily plan, then prepares that day's summary, definitions, illustrative example, questions, and previous lesson connection when the scheduled time arrives. Posts include the original source text and a rendered page image. To run this without leaving the site open, create a **Cron Job** in Render using the same repository and deploy environment, set its schedule to `*/5 * * * *`, and use this command:
 
 ```bash
-curl -fsS -X POST "$NIGHTPLANNER_URL/api/cron/books" -H "Authorization: Bearer $BOOKS_CRON_SECRET"
+curl --max-time 600 -fsS -X POST "$NIGHTPLANNER_URL/api/cron/books" -H "Authorization: Bearer $BOOKS_CRON_SECRET"
 ```
 
 Set `NIGHTPLANNER_URL` to the deployed web service origin (for example `https://your-service.onrender.com`). Set `BOOKS_CRON_SECRET` on both services to the same random secret. The Cron service does not need the Telegram token; it calls the authenticated web service, which reads the token and sends the message. Render cron schedules use UTC; the scheduler compares stored UTC timestamps computed from each book's configured timezone. Render Cron Jobs cannot use a persistent disk, so use Neon (`DATABASE_URL`) for durable jobs and delivery history. If using the local JSON fallback, the web service needs its own persistent disk mounted at `/var/data`; that disk is only accessed by the web service. Render documents Cron Jobs' UTC schedules and lack of persistent-disk access [here](https://render.com/docs/cronjobs) and [here](https://render.com/docs/disks).
 
 Set these on the **Cron service**: `NIGHTPLANNER_URL`, `BOOKS_CRON_SECRET` (same as the web service), and no Telegram token. Use Neon (`DATABASE_URL`) for the web service job/delivery tables; the Cron trigger reaches them through the web service API.
 
-The protected trigger is `POST /api/cron/books`. `GET/POST /api/telegram/automation` reports or pauses/resumes automation. `PATCH /api/books/{bookId}/assignments/{assignmentId}/schedule` reschedules an approved assignment using its book timezone. Automatic sends require an approved assignment with reviewed, readable source pages. Only Telegram's explicit rate-limit response is retried automatically; delivery timeouts or ambiguous partial sends require checking the channel and delivery history to avoid duplicate posts.
+The protected trigger is `POST /api/cron/books`. `GET/POST /api/telegram/automation` reports or pauses/resumes automation. `PATCH /api/books/{bookId}/assignments/{assignmentId}/schedule` reschedules an approved assignment using its book timezone. Automatic sends require readable source pages. Pages flagged by OCR or right-to-left text ordering wait for visual review in the Book Planner before posting. Preparation failures retry automatically up to five times; Telegram rate limits are retried. Delivery timeouts or ambiguous partial sends stop for a manual status check to avoid duplicate posts. Keep the Render web service online and configure the disk, Neon database, Telegram variables, and cron above; without the cron job, scheduled posts will not run.
 
 ---
 

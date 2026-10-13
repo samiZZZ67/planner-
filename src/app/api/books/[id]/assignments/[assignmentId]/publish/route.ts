@@ -16,7 +16,8 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
   if (assignment.status !== 'approved' || !assignment.studyNotes) return NextResponse.json({ error: 'Approve this assignment and its study notes before publishing.' }, { status: 409 });
   try {
     const pages = await listBookPages(session.userId, id, assignment.startPdfPage, assignment.endPdfPage);
-    const delivery = await publishApprovedAssignment(session.userId, book, assignment, pages);
+    const previous = (await listBookAssignments(session.userId, id)).find(item => item.dayNumber === assignment.dayNumber - 1);
+    const delivery = await publishApprovedAssignment(session.userId, book, assignment, pages, previous);
     const job = (await listBookPublishJobs(session.userId)).find(item => item.assignmentId === assignmentId);
     if (job) await updateBookPublishJob({ ...job, status: 'completed', lastError: '' });
     return NextResponse.json({ delivery });

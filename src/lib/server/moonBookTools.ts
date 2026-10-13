@@ -5,15 +5,23 @@ import { listBookAssignments, replaceDraftAssignments, updateBookAssignment } fr
 import { generateConceptReadingPlan } from './readingPlan';
 import { generateAssignmentStudyNotes, validateStudyNotes } from './studyNotes';
 import { getModelById } from './freellm/catalog';
-import { checkTelegramChannel, listTelegramDeliveries, publishApprovedAssignment } from './telegram';
+import { checkTelegramChannel, listTelegramDeliveries, publishApprovedAssignment, sendTelegramTextToChannel } from './telegram';
 import { getPublishingPaused, listBookPublishJobs, makeBookPublishJob, rescheduleBookPublishJob, setPublishingPaused, updateBookPublishJob, upsertBookPublishJob } from './bookScheduler';
 import type { BookAssignmentRecord, BookRecord } from '../books/types';
 
-type Intent = 'connect_telegram' | 'failed_posts' | 'pause' | 'resume' | 'today' | 'prepare' | 'extract' | 'plan' | 'notes' | 'approve' | 'publish' | 'reschedule' | 'books' | 'jobs' | 'schedule';
+type Intent = 'send_telegram' | 'connect_telegram' | 'failed_posts' | 'pause' | 'resume' | 'today' | 'prepare' | 'extract' | 'plan' | 'notes' | 'approve' | 'publish' | 'reschedule' | 'books' | 'jobs' | 'schedule';
+
+function telegramPostContent(text: string): string | null {
+  if (!/^\s*(?:please\s+)?(?:send|post|publish|share)\b/i.test(text)) return null;
+  const destination = /\b(?:telegram(?:\s+(?:bot|channel))?|channel)\s*(?::|[-–—])\s*([\s\S]+)$/i.exec(text);
+  const content = destination?.[1]?.trim();
+  return content || null;
+}
 
 export function detectMoonBookIntent(text: string): Intent | null {
   const value = text.trim();
   if (!value) return null;
+  if (telegramPostContent(value)) return 'send_telegram';
   if (/(?:connect|check|verify|test).{0,40}(?:telegram|channel|bot)|(?:telegram|channel|bot).{0,40}(?:connect|permission|publish|posting)/i.test(value)) return 'connect_telegram';
   if (/(?:failed|failing|unsuccessful).{0,30}(?:telegram )?posts?|(?:posts?|publishing).{0,30}(?:failed|failures)/i.test(value)) return 'failed_posts';
   if (/\bpause\b.{0,35}(?:automatic|auto|scheduled)?\s*(?:telegram\s*)?publishing|\bpause\b.{0,25}(?:telegram|channel)/i.test(value)) return 'pause';
@@ -70,6 +78,12 @@ async function ownedBook(userId: string, text: string) {
 export async function executeMoonBookIntent(userId: string, text: string, model: string): Promise<{ handled: boolean; content: string }> {
   const intent = detectMoonBookIntent(text);
   if (!intent) return { handled: false, content: '' };
+  if (intent === 'send_telegram') {
+    const content = telegramPostContent(text);
+    if (!content) throw new Error('Include the exact post text after a colon, for example: Post to Telegram: Your message.');
+    const result = await sendTelegramTextToChannel(content);
+    return { handled: true, content: `Telegram confirms your message was posted to ${result.channel}. Telegram message ID: ${result.messageId}.` };
+  }
   if (intent === 'connect_telegram') {
     const result = await checkTelegramChannel();
     return { handled: true, content: `${result.message} Bot: ${result.bot.username ? `@${result.bot.username}` : result.bot.name}. Channel: ${result.channel.title}.` };
@@ -197,7 +211,8 @@ export async function executeMoonBookIntent(userId: string, text: string, model:
   if (intent === 'publish') {
     if (assignment.status !== 'approved') throw new Error('I cannot publish this assignment because it is not approved.');
     const pages = await listBookPages(userId, book.id, assignment.startPdfPage, assignment.endPdfPage);
-    const delivery = await publishApprovedAssignment(userId, book, assignment, pages);
+    const previous = assignments.find(item => item.dayNumber === assignment!.dayNumber - 1);
+    const delivery = await publishApprovedAssignment(userId, book, assignment, pages, previous);
     const job = (await listBookPublishJobs(userId)).find(item => item.assignmentId === assignment!.id);
     if (job) await updateBookPublishJob({ ...job, status: 'completed', lastError: '' });
     return { handled: true, content: `Telegram confirms this assignment was published. Delivery ${delivery.id}; message IDs ${delivery.telegramMessageIds.join(', ')}.` };

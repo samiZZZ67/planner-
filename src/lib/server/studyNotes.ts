@@ -24,6 +24,8 @@ export function validateStudyNotes(raw: any, assignment: BookAssignmentRecord): 
     conceptInAction: String(raw?.example?.conceptInAction || '').trim(),
     lesson: String(raw?.example?.lesson || '').trim(),
     sourceDisclosure: String(raw?.example?.sourceDisclosure || '').trim(),
+    kind: raw?.example?.kind === 'source' ? 'source' as const : 'illustrative' as const,
+    ...(Number.isInteger(Number(raw?.example?.pdfPage)) ? { pdfPage: Number(raw.example.pdfPage) } : {}),
   };
   const questions: BookStudyNotes['questions'] = Array.isArray(raw?.questions) ? raw.questions.map((item: any) => ({
     question: String(item?.question || '').trim(), answer: String(item?.answer || '').trim(),
@@ -36,8 +38,8 @@ export function validateStudyNotes(raw: any, assignment: BookAssignmentRecord): 
   if (definitions.some((item: any) => !item.term || !item.explanation || !inRange(item.pdfPage))) {
     throw new Error('FreeLLM returned a definition with an invalid page citation. No notes were saved.');
   }
-  if (!example.situation || !example.conceptInAction || !example.lesson || !/hypothetical/i.test(example.sourceDisclosure)) {
-    throw new Error('The example must be complete and clearly disclosed as hypothetical. No notes were saved.');
+  if (!example.situation || !example.conceptInAction || !example.lesson || (example.kind === 'source' ? !inRange(example.pdfPage) || !/source|book|pdf page/i.test(example.sourceDisclosure) : !/hypothetical|illustrative/i.test(example.sourceDisclosure))) {
+    throw new Error('Use a page-cited real example from the book, or clearly label a practical application as illustrative. No notes were saved.');
   }
   if (questions.length < 2 || questions.length > 3 || questions.some(item => !item.question || !item.answer || !item.pdfPages.length || item.pdfPages.some(page => !inRange(page)))) {
     throw new Error('FreeLLM returned review questions without valid source page citations. No notes were saved.');
@@ -62,7 +64,7 @@ export async function generateAssignmentStudyNotes(options: {
     model,
     temperature: 0.2,
     messages: [
-      { role: 'system', content: 'Write supplemental study material grounded only in the supplied original page text. Never replace, rewrite, quote extensively from, or insert content into the source reading. Return only valid JSON: {"summary":"concise concept summary","keyConcepts":["..."],"definitions":[{"term":"...","explanation":"...","pdfPage":number}],"example":{"situation":"...","conceptInAction":"...","lesson":"...","sourceDisclosure":"Hypothetical scenario, not a verified event."},"questions":[{"question":"...","answer":"...","pdfPages":[number]}],"notes":"concise study notes"}. Include 2 or 3 answerable review questions with source PDF pages. Any invented real-life example must be explicitly hypothetical. Cite only supplied PDF page numbers.' },
+      { role: 'system', content: 'Write supplemental study material grounded only in the supplied original page text. Never replace, rewrite, quote extensively from, or insert content into the source reading. Return only valid JSON: {"summary":"concise concept summary","keyConcepts":["..."],"definitions":[{"term":"...","explanation":"...","pdfPage":number}],"example":{"kind":"source or illustrative","situation":"...","conceptInAction":"...","lesson":"...","sourceDisclosure":"...","pdfPage":number},"questions":[{"question":"...","answer":"...","pdfPages":[number]}],"notes":"concise study notes"}. Prefer a real-world case or example explicitly described in the supplied book pages; set kind to source, include its supplied PDF page in pdfPage, and identify it as an example from the source. Never invent details or present an unverified event as fact. If the supplied text has no real case, give a useful practical application of the concept, set kind to illustrative, and disclose that it is hypothetical/illustrative. Include 2 or 3 answerable review questions with source PDF pages. Cite only supplied PDF page numbers.' },
       { role: 'user', content: JSON.stringify({ book: { title: book.title, author: book.author }, assignment: { day: assignment.dayNumber, date: assignment.scheduledDate, pageRange: [assignment.startPdfPage, assignment.endPdfPage], concepts: assignment.concepts }, sourcePages: pages.map(page => ({ pdfPage: page.pdfPage, text: page.text })) }) },
     ],
   });

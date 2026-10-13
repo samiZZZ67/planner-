@@ -109,6 +109,16 @@ export async function listBooks(userId: string): Promise<BookRecord[]> {
   return readRecords().filter(book => book.userId === userId).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+export async function listAllBooks(): Promise<BookRecord[]> {
+  const sql = getDb();
+  if (sql) {
+    await ensureBookSchema(sql);
+    const rows = await sql`SELECT data FROM books ORDER BY updated_at ASC`;
+    return rows.map((row: any) => row.data as BookRecord);
+  }
+  return readRecords().sort((a, b) => a.updatedAt - b.updatedAt);
+}
+
 export async function getBook(userId: string, id: string): Promise<BookRecord | null> {
   const sql = getDb();
   if (sql) {

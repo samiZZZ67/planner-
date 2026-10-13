@@ -4,7 +4,23 @@ import { useState } from 'react';
 import { Image as ImageIcon, Mic, Send, X } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
 
-export function TelegramQuickSend({ isPhone = false, theme = 'dark' }: { isPhone?: boolean; theme?: 'dark' | 'light' }) {
+export function TelegramQuickSend({
+  isPhone = false,
+  theme = 'dark',
+  anchor,
+  showTrigger = true,
+  isDragging = false,
+  onTriggerPointerDown,
+  shouldSuppressTriggerClick,
+}: {
+  isPhone?: boolean;
+  theme?: 'dark' | 'light';
+  anchor?: { x: number; y: number } | null;
+  showTrigger?: boolean;
+  isDragging?: boolean;
+  onTriggerPointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
+  shouldSuppressTriggerClick?: () => boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [media, setMedia] = useState<File | null>(null);
@@ -12,6 +28,8 @@ export function TelegramQuickSend({ isPhone = false, theme = 'dark' }: { isPhone
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const isDark = theme !== 'light';
+  const viewportHeight = typeof window === 'undefined' ? 800 : window.innerHeight;
+  const panelAboveAnchor = Boolean(anchor && anchor.y > viewportHeight * 0.55);
 
   async function sendMessage() {
     if ((!text.trim() && !media) || sending) return;
@@ -52,12 +70,19 @@ export function TelegramQuickSend({ isPhone = false, theme = 'dark' }: { isPhone
         aria-label="Send a message to the Telegram channel"
         style={{
           position: 'fixed',
-          right: isPhone ? 12 : 20,
-          bottom: isPhone ? 154 : 88,
+          ...(anchor
+            ? {
+                left: Math.max(12, Math.min(anchor.x + 52 - 380, (typeof window === 'undefined' ? 0 : window.innerWidth) - 392)),
+                ...(panelAboveAnchor
+                  ? { bottom: Math.max(12, viewportHeight - anchor!.y + 8), maxHeight: Math.max(180, anchor!.y - 20) }
+                  : { top: anchor.y + 60, maxHeight: Math.max(180, viewportHeight - anchor.y - 72) }),
+              }
+            : { right: isPhone ? 12 : 20, bottom: isPhone ? 154 : 88 }),
           zIndex: 91,
           width: isPhone ? 'min(360px, calc(100vw - 24px))' : 'min(380px, calc(100vw - 40px))',
           padding: 14,
           display: 'grid',
+          overflowY: 'auto',
           gap: 10,
           borderRadius: 18,
           color: 'var(--text-primary)',
@@ -99,29 +124,35 @@ export function TelegramQuickSend({ isPhone = false, theme = 'dark' }: { isPhone
         {notice && <p role="status" style={{ margin: 0, color: '#22c55e', fontSize: 12 }}>{notice}</p>}
         {error && <p role="alert" style={{ margin: 0, color: '#f87171', fontSize: 12 }}>{error}</p>}
       </section>}
-      <button
+      {showTrigger && <button
         type="button"
-        onClick={() => { setOpen(value => !value); setError(''); }}
+        onPointerDown={onTriggerPointerDown}
+        onClick={event => { if (isDragging || shouldSuppressTriggerClick?.()) { event.preventDefault(); return; } setOpen(value => !value); setError(''); }}
         aria-label={open ? 'Close Telegram message button' : 'Open Telegram message button'}
         aria-expanded={open}
         title="Send a message to Telegram"
         style={{
           position: 'fixed',
-          right: isPhone ? 12 : 20,
-          bottom: isPhone ? 92 : 24,
+          ...(anchor
+            ? { left: anchor.x + 29, top: anchor.y + 28 }
+            : { right: isPhone ? 98 : 110, bottom: isPhone ? 106 : 50 }),
           zIndex: 90,
-          width: 46,
-          height: 46,
+          width: 21,
+          height: 21,
           borderRadius: '50%',
-          border: `1px solid ${isDark ? 'rgba(192, 132, 252, 0.6)' : 'rgba(124, 58, 237, 0.45)'}`,
+          border: `1px solid ${isDark ? 'rgba(192, 132, 252, 0.75)' : 'rgba(124, 58, 237, 0.65)'}`,
           background: isDark ? 'linear-gradient(145deg,#211432,#100d1d)' : 'linear-gradient(145deg,#fff,#f3e8ff)',
           color: isDark ? '#e9d5ff' : '#6d28d9',
-          boxShadow: '0 7px 22px rgba(0,0,0,.28)',
-          fontSize: 22,
+          boxShadow: '0 2px 8px rgba(0,0,0,.35)',
+          fontSize: 12,
           fontWeight: 800,
-          cursor: 'pointer',
+          cursor: isDragging ? 'grabbing' : 'pointer',
+          padding: 0,
+          display: 'grid',
+          placeItems: 'center',
+          touchAction: 'none',
         }}
-      >T</button>
+      >T</button>}
     </>
   );
 }

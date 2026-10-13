@@ -62,7 +62,9 @@ export async function POST(request: Request) {
       originalFilename: file.name.slice(0, 255), storedFilename: `${id}.pdf`, fileSize: file.size,
       startPage, endPage, durationDays, startDate, studyMinutes, postingTime, timezone, currentPage,
       status: 'draft', extractionStatus: 'pending',
-      extractionMessage: 'PDF saved privately. Start extraction to review page text and visual previews before creating a reading plan.',
+      extractionMessage: 'PDF saved privately. Automatic extraction, daily summaries, examples, questions, and Telegram scheduling are queued.',
+      autoPublish: true,
+      automationStatus: 'queued',
       createdAt: now, updatedAt: now,
     };
     await saveBook(record, bytes);

@@ -63,6 +63,12 @@ export function BookPlannerScreen() {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  const automationPending = books.some(book => book.autoPublish !== false && (book.automationStatus === 'queued' || book.automationStatus === 'processing' || (!book.automationStatus && book.extractionStatus !== 'completed')));
+  useEffect(() => {
+    if (!automationPending) return;
+    const timer = window.setInterval(() => { void refresh(); }, 5000);
+    return () => window.clearInterval(timer);
+  }, [automationPending, refresh]);
   useEffect(() => {
     if (!processingId) return;
     const timer = window.setInterval(() => { void refresh(); }, 2000);
@@ -222,7 +228,7 @@ export function BookPlannerScreen() {
       if (!response.ok) throw new Error(data.error || 'Could not save this book.');
       setBooks(current => [data.book, ...current]);
       setCollapsedBooks(current => { const next = new Set(current); next.delete(data.book.id); return next; });
-      setNotice('PDF saved privately as a draft. It has not been extracted or scheduled.');
+      setNotice('PDF saved privately. Automatic extraction, daily study posts, and Telegram scheduling are queued.');
       formElement.reset();
       setStartPage(1);
       setCurrentPage(1);
@@ -274,14 +280,14 @@ export function BookPlannerScreen() {
         <BookOpen size={24} color="var(--accent-color)" />
         <div>
           <h2 style={{ margin: 0 }}>Book Reading Planner</h2>
-          <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>Save a book and configure its intended reading window.</p>
+          <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>Upload a book once; Moon prepares its daily Telegram lessons at your chosen time.</p>
         </div>
       </header>
 
       <div className="v-card" style={{ padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start', borderColor: 'rgba(251,191,36,.45)' }}>
         <TriangleAlert size={19} color="#fbbf24" style={{ flexShrink: 0, marginTop: 2 }} />
         <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
-          <strong style={{ color: 'var(--text-primary)' }}>Review text and the original page image together.</strong> Selectable text is extracted directly. Scanned pages use OCR; every extracted page also has a visual preview so you can check pictures, diagrams, layout, and OCR against the PDF.
+          <strong style={{ color: 'var(--text-primary)' }}>Daily Telegram lessons run automatically.</strong> Each post includes the original reading, a summary, concepts, definitions, an illustrative example, revision questions, and a page image. Scanned or uncertain right-to-left pages pause for a quick visual review before publishing.
         </div>
       </div>
 
@@ -306,7 +312,7 @@ export function BookPlannerScreen() {
           <label style={fieldStyle}>Current PDF page<input name="currentPage" type="number" min={startPage} value={currentPage} onChange={event => setCurrentPage(Math.max(startPage, Number(event.target.value) || startPage))} required style={inputStyle} /></label>
         </div>
         <button className="v-pill-btn" type="submit" disabled={busy} style={{ minHeight: 44, display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 8, cursor: busy ? 'wait' : 'pointer' }}>
-          <FileUp size={17} /> {busy ? 'Saving PDF…' : 'Save book as draft'}
+          <FileUp size={17} /> {busy ? 'Saving PDF…' : 'Queue daily Telegram delivery'}
         </button>
         {notice && <p role="status" style={{ margin: 0, color: '#86efac', fontSize: 13 }}>{notice}</p>}
         {error && <p role="alert" style={{ margin: 0, color: '#fca5a5', fontSize: 13 }}>{error}</p>}
@@ -318,7 +324,7 @@ export function BookPlannerScreen() {
           <article key={book.id} style={{ padding: 16, borderRadius: 16, border: '1px solid var(--v-glass-border)', display: 'grid', gap: 14, marginBottom: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <div><strong>{book.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{book.author}</div></div>
-              <span style={{ fontSize: 12, color: book.extractionStatus === 'completed' ? '#86efac' : book.extractionStatus === 'failed' ? '#fca5a5' : '#fbbf24' }}>{book.status === 'processing' ? 'Extracting…' : `${book.status} · extraction ${book.extractionStatus.replace('_', ' ')}`}</span>
+              <span style={{ fontSize: 12, color: book.automationStatus === 'failed' || book.extractionStatus === 'failed' ? '#fca5a5' : book.automationStatus === 'ready' ? '#86efac' : '#fbbf24' }}>{book.automationStatus === 'processing' ? 'Preparing daily posts…' : book.automationStatus === 'needs_review' ? 'Waiting for page review' : book.automationStatus === 'failed' ? 'Automation needs attention' : book.automationStatus === 'ready' ? 'Daily Telegram posts active' : 'Daily Telegram posts queued'}</span>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className="v-pill-btn" aria-expanded={!collapsedBooks.has(book.id)} onClick={() => setCollapsedBooks(current => { const next = new Set(current); if (next.has(book.id)) next.delete(book.id); else next.add(book.id); return next; })} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center' }}>{collapsedBooks.has(book.id) ? <><ChevronDown size={15} /> Expand</> : <><ChevronUp size={15} /> Collapse</>}</button>
@@ -385,7 +391,7 @@ export function BookPlannerScreen() {
                       <label style={fieldStyle}>Concept summary<textarea style={{ ...inputStyle, minHeight: 90 }} value={draft.summary} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, summary: event.target.value } }))} /></label>
                       <label style={fieldStyle}>Key concepts, one per line<textarea style={{ ...inputStyle, minHeight: 90 }} value={draft.keyConcepts.join('\n')} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, keyConcepts: event.target.value.split('\n') } }))} /></label>
                       <div className="v-card" style={{ padding: 12, display: 'grid', gap: 8 }}>
-                        <strong>Real-life example · hypothetical</strong>
+                        <strong>{draft.example.kind === 'source' ? `Real-world example · PDF page ${draft.example.pdfPage}` : 'Practical application · illustrative'}</strong>
                         <label style={fieldStyle}>Situation<textarea style={{ ...inputStyle, minHeight: 60 }} value={draft.example.situation} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, example: { ...draft.example, situation: event.target.value } } }))} /></label>
                         <label style={fieldStyle}>Concept in action<textarea style={{ ...inputStyle, minHeight: 60 }} value={draft.example.conceptInAction} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, example: { ...draft.example, conceptInAction: event.target.value } } }))} /></label>
                         <label style={fieldStyle}>Lesson<textarea style={{ ...inputStyle, minHeight: 60 }} value={draft.example.lesson} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, example: { ...draft.example, lesson: event.target.value } } }))} /></label>

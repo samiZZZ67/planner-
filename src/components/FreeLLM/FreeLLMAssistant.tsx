@@ -42,6 +42,7 @@ import {
   Edit2,
 } from 'lucide-react';
 import { FormattedMessage } from '@/components/Chat/FormattedMessage';
+import { TelegramQuickSend } from './TelegramQuickSend';
 import { apiFetch } from '@/lib/api/apiClient';
 import {
   CatalogModel,
@@ -221,7 +222,9 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     origX: number;
     origY: number;
     moved: boolean;
+    shouldOpen: boolean;
   } | null>(null);
+  const ignoreNextTelegramTriggerClickRef = useRef(false);
 
   // ── 4. Chat Messages & Input ──
   const [messages, setMessages] = useState<FreeLLMMessage[]>([]);
@@ -739,14 +742,14 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   };
 
   // ── Drag Handlers for Floating AI Moon Button ──
-  const handlePointerDown = (e: React.PointerEvent) => {
+  const handlePointerDown = (e: React.PointerEvent, shouldOpen = true) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
 
     const currentPos =
       btnPos ||
       clampPosition(
-        window.innerWidth - (isPhone ? 80 : 96),
-        window.innerHeight - (isPhone ? 144 : 96)
+        window.innerWidth - (isPhone ? 76 : 88) - 52,
+        window.innerHeight - (isPhone ? 84 : 28) - 52
       );
 
     dragInfoRef.current = {
@@ -755,6 +758,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       origX: currentPos.x,
       origY: currentPos.y,
       moved: false,
+      shouldOpen,
     };
 
     const handlePointerMove = (moveEvt: PointerEvent) => {
@@ -779,7 +783,11 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       setIsDragging(false);
 
       if (dragInfoRef.current) {
-        if (!dragInfoRef.current.moved) {
+        if (!dragInfoRef.current.shouldOpen && dragInfoRef.current.moved) {
+          ignoreNextTelegramTriggerClickRef.current = true;
+          window.setTimeout(() => { ignoreNextTelegramTriggerClickRef.current = false; }, 0);
+        }
+        if (!dragInfoRef.current.moved && dragInfoRef.current.shouldOpen) {
           setWindowState('expanded');
         } else if (btnPos) {
           try {
@@ -1398,6 +1406,19 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   // ─────────────────────────────────────────────────────────────
   if (windowState === 'collapsed') {
     return (
+      <>
+      <TelegramQuickSend
+        isPhone={isPhone}
+        theme={isDark ? 'dark' : 'light'}
+        anchor={btnPos}
+        isDragging={isDragging}
+        onTriggerPointerDown={event => handlePointerDown(event, false)}
+        shouldSuppressTriggerClick={() => {
+          if (!ignoreNextTelegramTriggerClickRef.current) return false;
+          ignoreNextTelegramTriggerClickRef.current = false;
+          return true;
+        }}
+      />
       <button
         onPointerDown={handlePointerDown}
         className="freellm-moon-button"
@@ -1486,6 +1507,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
           />
         </div>
       </button>
+      </>
     );
   }
 
@@ -1495,6 +1517,13 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   const isMax = windowState === 'maximized';
 
   return (
+    <>
+    <TelegramQuickSend
+      isPhone={isPhone}
+      theme={isDark ? 'dark' : 'light'}
+      anchor={btnPos}
+      showTrigger={false}
+    />
     <div
       role="dialog"
       aria-label="FreeLLM Multimodal Assistant Window"
@@ -3327,5 +3356,6 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         </div>
       </div>
     </div>
+    </>
   );
 }
