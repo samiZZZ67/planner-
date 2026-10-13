@@ -102,7 +102,7 @@ export function getDefaultGreeting(): FreeLLMMessage {
     id: 'msg-greeting',
     role: 'assistant',
     content:
-      '👋 Hello! I am your multimodal **FreeLLM Moon Assistant**.\n\nNow equipped with full multimodal power:\n• 🎙️ **Voice dictation & real-time voice conversation**\n• 👁️ **Visual question answering & photo analysis**\n• 📄 **PDF, document, and source code understanding**\n• 🎨 **High-resolution image generation (Flux)**\n• 🎬 **Text & prompt video generation**\n• 🔊 **Voice response narration**\n\nHow can I help you today?',
+      '👋 Hello! I am your multimodal **FreeLLM Moon Assistant**.\n\nNow equipped with full multimodal power:\n• 🎙️ **Voice dictation and spoken replies**\n• 👁️ **Visual question answering & photo analysis**\n• 📄 **PDF, document, and source code understanding**\n• 🎨 **High-resolution image generation (Flux)**\n• 🎬 **Text & prompt video generation**\n• 🔊 **Neural speech when configured, with browser voice fallback**\n\nHow can I help you today?',
     timestamp: Date.now(),
     model: 'auto',
   };
@@ -244,8 +244,20 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const speechQueueRef = useRef<Array<{ text: string; messageId: string | null; generation: number }>>([]);
+  const speechQueueRunningRef = useRef(false);
+  const speechGenerationRef = useRef(0);
+  const speechAbortRef = useRef<AbortController | null>(null);
+  const speechAudioRef = useRef<HTMLAudioElement | null>(null);
+  const speechPlaybackStopRef = useRef<(() => void) | null>(null);
+  const speechObjectUrlRef = useRef<string | null>(null);
+  const voiceSpeechEnabledRef = useRef(false);
+  const voiceTranscriptRef = useRef('');
+  const voiceEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceSubmitRef = useRef<(text: string) => void>(() => {});
+  const voiceModeActiveRef = useRef(false);
 
-  // ── 6. Real-Time Interactive Voice Mode ──
+  // ── 6. Voice Mode ──
   const [isVoiceModeActive, setIsVoiceModeActive] = useState(false);
   const [voiceModeStatus, setVoiceModeStatus] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
   const [isMicMuted, setIsMicMuted] = useState(false);
@@ -869,7 +881,23 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
           }
 
           if (final) {
-            setInput(prev => (prev ? `${prev} ${final}` : final).trim());
+            if (voiceModeActiveRef.current) {
+              voiceTranscriptRef.current = `${voiceTranscriptRef.current} ${final}`.trim();
+              setVoiceSubtitle(voiceTranscriptRef.current);
+              if (voiceEndTimerRef.current) clearTimeout(voiceEndTimerRef.current);
+              voiceEndTimerRef.current = setTimeout(() => {
+                const spokenPrompt = voiceTranscriptRef.current.trim();
+                if (!spokenPrompt) return;
+                voiceTranscriptRef.current = '';
+                recognitionRef.current?.stop();
+                recognitionRef.current = null;
+                setVoiceModeStatus('thinking');
+                setVoiceSubtitle('Thinking about what you said...');
+                voiceSubmitRef.current(spokenPrompt);
+              }, 900);
+            } else {
+              setInput(prev => (prev ? `${prev} ${final}` : final).trim());
+            }
           }
           setDictationInterim(interim);
         };
@@ -919,6 +947,12 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
           }, 30000);
           const data = await res.json().catch(() => null);
           if (data?.ok && data?.text) {
+            if (voiceModeActiveRef.current) {
+              setVoiceModeStatus('thinking');
+              setVoiceSubtitle('Transcription complete. Preparing a reply...');
+              voiceSubmitRef.current(data.text);
+              return;
+            }
             setInput(prev => (prev ? `${prev} ${data.text}` : data.text).trim());
           } else if (data?.error) {
             console.warn('[Transcription Warning]:', data.error);
@@ -933,6 +967,9 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       mediaRecorderRef.current = recorder;
       recorder.start();
       setIsDictating(true);
+      if (voiceModeActiveRef.current) {
+        setVoiceSubtitle('Speak, then tap Mute to transcribe and send your turn.');
+      }
     } catch (err) {
       alert('Microphone permission was denied or is unavailable.');
       setIsDictating(false);
@@ -959,6 +996,13 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     }
   };
 
+  useEffect(() => {
+    if (isVoiceModeActive && !isMicMuted && voiceModeStatus === 'listening' && !isDictating) {
+      startDictation();
+    }
+    if ((!isVoiceModeActive || isMicMuted) && isDictating) stopDictation();
+  }, [isVoiceModeActive, isMicMuted, voiceModeStatus, isDictating]);
+
   // ── Text-to-Speech Response Playback ──
   const cleanMarkdownForSpeech = (text: string): string => {
     return text
@@ -972,28 +1016,131 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       .trim();
   };
 
-  const handleSpeakMessage = (msg: FreeLLMMessage) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  const stopSpeechPlayback = () => {
+    speechGenerationRef.current += 1;
+    speechQueueRef.current = [];
+    speechAbortRef.current?.abort();
+    speechAbortRef.current = null;
+    if (speechAudioRef.current) {
+      speechAudioRef.current.pause();
+      speechAudioRef.current.src = '';
+      speechAudioRef.current = null;
+    }
+    speechPlaybackStopRef.current?.();
+    if (speechObjectUrlRef.current) URL.revokeObjectURL(speechObjectUrlRef.current);
+    speechObjectUrlRef.current = null;
+    if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
+    setIsSpeakingMessageId(null);
+  };
 
-    if (isSpeakingMessageId === msg.id) {
-      window.speechSynthesis.cancel();
-      setIsSpeakingMessageId(null);
-      return;
+  const playSpeechChunk = async (text: string, messageId: string | null, generation: number) => {
+    if (typeof window === 'undefined' || generation !== speechGenerationRef.current) return;
+    const controller = new AbortController();
+    speechAbortRef.current = controller;
+    let neuralAudio: Blob | null = null;
+    try {
+      const response = await fetch('/api/ai/freellm/speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        signal: controller.signal,
+        body: JSON.stringify({ text }),
+      });
+      if (!response.ok) throw new Error(`Neural speech returned ${response.status}`);
+      neuralAudio = await response.blob();
+    } catch (error) {
+      if (controller.signal.aborted || generation !== speechGenerationRef.current) return;
+      console.info('[Voice] Neural speech unavailable; using the browser voice fallback.', error);
+    }
+    if (generation !== speechGenerationRef.current) return;
+    speechAbortRef.current = null;
+
+    if (neuralAudio?.size) {
+      const url = URL.createObjectURL(neuralAudio);
+      speechObjectUrlRef.current = url;
+      const audio = new Audio(url);
+      speechAudioRef.current = audio;
+      setIsSpeakingMessageId(messageId);
+      if (isVoiceModeActive) {
+        setVoiceModeStatus('speaking');
+        setVoiceSubtitle('Speaking with an AI generated voice...');
+      }
+      let playbackStarted = false;
+      await new Promise<void>(resolve => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          audio.onended = null;
+          audio.onerror = null;
+          if (speechAudioRef.current === audio) speechAudioRef.current = null;
+          if (speechObjectUrlRef.current === url) {
+            URL.revokeObjectURL(url);
+            speechObjectUrlRef.current = null;
+          }
+          if (speechPlaybackStopRef.current === finish) speechPlaybackStopRef.current = null;
+          resolve();
+        };
+        speechPlaybackStopRef.current = finish;
+        audio.onended = finish;
+        audio.onerror = finish;
+        audio.play().then(() => { playbackStarted = true; }).catch(finish);
+      });
+      if (generation !== speechGenerationRef.current) return;
+      if (playbackStarted) return;
     }
 
-    window.speechSynthesis.cancel();
-    const cleanText = cleanMarkdownForSpeech(msg.content);
-    if (!cleanText) return;
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return;
+    await new Promise<void>(resolve => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.onstart = () => {
+        if (generation !== speechGenerationRef.current) return;
+        setIsSpeakingMessageId(messageId);
+        if (isVoiceModeActive) {
+          setVoiceModeStatus('speaking');
+          setVoiceSubtitle('Speaking with a synthetic browser voice...');
+        }
+      };
+      utterance.onend = () => resolve();
+      utterance.onerror = () => resolve();
+      window.speechSynthesis.speak(utterance);
+    });
+  };
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
+  const drainSpeechQueue = async () => {
+    if (speechQueueRunningRef.current) return;
+    speechQueueRunningRef.current = true;
+    try {
+      while (speechQueueRef.current.length) {
+        const item = speechQueueRef.current.shift()!;
+        if (item.generation !== speechGenerationRef.current) continue;
+        await playSpeechChunk(item.text, item.messageId, item.generation);
+      }
+    } finally {
+      speechQueueRunningRef.current = false;
+      if (!speechQueueRef.current.length) {
+        setIsSpeakingMessageId(null);
+        if (isVoiceModeActive) setVoiceModeStatus(isMicMuted ? 'idle' : 'listening');
+      }
+    }
+  };
 
-    utterance.onstart = () => setIsSpeakingMessageId(msg.id);
-    utterance.onend = () => setIsSpeakingMessageId(null);
-    utterance.onerror = () => setIsSpeakingMessageId(null);
+  const queueSpeech = (text: string, messageId: string | null = null, generation = speechGenerationRef.current) => {
+    const cleanText = cleanMarkdownForSpeech(text);
+    if (!cleanText || generation !== speechGenerationRef.current) return;
+    speechQueueRef.current.push({ text: cleanText, messageId, generation });
+    void drainSpeechQueue();
+  };
 
-    window.speechSynthesis.speak(utterance);
+  const handleSpeakMessage = (msg: FreeLLMMessage) => {
+    if (isSpeakingMessageId === msg.id) {
+      stopSpeechPlayback();
+      return;
+    }
+    stopSpeechPlayback();
+    queueSpeech(msg.content, msg.id, speechGenerationRef.current);
   };
 
   // ── Send Message to FreeLLMAPI Gateway & Multimodal Router ──
@@ -1014,6 +1161,13 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     if (!customPrompt) setInput('');
     setAttachments([]);
     setIsLoading(true);
+    const speakThisResponse = isVoiceModeActive;
+    if (speakThisResponse) {
+      stopSpeechPlayback();
+      voiceSpeechEnabledRef.current = true;
+      setVoiceModeStatus('thinking');
+      setVoiceSubtitle('Preparing a spoken reply...');
+    }
     const requestController = new AbortController();
     activeRequestRef.current = requestController;
 
@@ -1057,6 +1211,8 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         streamedMessageId = `asst-${Date.now()}`;
         let streamedContent = '';
         let streamedModel = selectedModel;
+        let pendingSpeechText = '';
+        const responseSpeechGeneration = speechGenerationRef.current;
         updateMessages(prev => [...prev, {
           id: streamedMessageId!, role: 'assistant', content: '', timestamp: Date.now(), model: streamedModel,
         }]);
@@ -1074,6 +1230,22 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             const delta = event.choices?.[0]?.delta?.content;
             if (typeof delta === 'string' && delta) {
               streamedContent += delta;
+              if (speakThisResponse && voiceSpeechEnabledRef.current) {
+                pendingSpeechText += delta;
+                let sentenceMatch: RegExpMatchArray | null;
+                while ((sentenceMatch = pendingSpeechText.match(/^([\s\S]*?[.!?])(?:\s+|$)/))) {
+                  const sentence = sentenceMatch[1].trim();
+                  pendingSpeechText = pendingSpeechText.slice(sentenceMatch[0].length);
+                  if (sentence) queueSpeech(sentence, streamedMessageId, responseSpeechGeneration);
+                }
+                if (pendingSpeechText.length > 240) {
+                  const splitAt = pendingSpeechText.lastIndexOf(' ', 220);
+                  if (splitAt > 80) {
+                    queueSpeech(pendingSpeechText.slice(0, splitAt), streamedMessageId, responseSpeechGeneration);
+                    pendingSpeechText = pendingSpeechText.slice(splitAt + 1);
+                  }
+                }
+              }
               updateMessages(prev => prev.map(message => message.id === streamedMessageId
                 ? { ...message, content: streamedContent, model: streamedModel }
                 : message));
@@ -1096,6 +1268,9 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         if (buffer.trim()) handleLine(buffer);
         if (requestController.signal.aborted) throw new DOMException('Request cancelled', 'AbortError');
         if (!streamedContent) throw new Error('The gateway stream ended without assistant text.');
+        if (pendingSpeechText.trim() && speakThisResponse && voiceSpeechEnabledRef.current) {
+          queueSpeech(pendingSpeechText, streamedMessageId, responseSpeechGeneration);
+        }
         data = { ok: true, message: { content: streamedContent }, model: streamedModel, provider: 'FreeLLMAPI Gateway' };
       } else {
         data = await response.json().catch(() => null);
@@ -1127,10 +1302,9 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       if (data.latencyMs) setGatewayLatency(data.latencyMs);
 
       // If in Voice Mode, automatically speak out the response
-      if (isVoiceModeActive) {
-        handleSpeakMessage(assistantMsg);
-        setVoiceSubtitle(assistantMsg.content.slice(0, 100) + '...');
-        setVoiceModeStatus('speaking');
+      if (speakThisResponse && !streamedMessageId) {
+        setVoiceSubtitle(assistantMsg.content.slice(0, 120));
+        queueSpeech(assistantMsg.content, assistantMsg.id);
       }
     } catch (err: any) {
       if (requestController.signal.aborted) return;
@@ -1174,6 +1348,28 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       } catch {}
     }
   };
+
+  const toggleVoiceMode = () => {
+    if (isVoiceModeActive) {
+      voiceModeActiveRef.current = false;
+      voiceSpeechEnabledRef.current = false;
+      if (voiceEndTimerRef.current) clearTimeout(voiceEndTimerRef.current);
+      voiceTranscriptRef.current = '';
+      stopSpeechPlayback();
+      stopDictation();
+      setVoiceModeStatus('idle');
+      setIsVoiceModeActive(false);
+      return;
+    }
+    voiceModeActiveRef.current = true;
+    voiceTranscriptRef.current = '';
+    setIsMicMuted(false);
+    setVoiceSubtitle('Listening for your next phrase...');
+    setVoiceModeStatus('listening');
+    setIsVoiceModeActive(true);
+  };
+
+  voiceSubmitRef.current = handleSendMessage;
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -1441,11 +1637,11 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
 
         {/* Window Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Real-Time Voice Mode Toggle */}
+          {/* Voice Mode Toggle */}
           <button
-            onClick={() => setIsVoiceModeActive(prev => !prev)}
+            onClick={toggleVoiceMode}
             aria-label="Toggle Voice Mode"
-            title="Toggle Hands-Free Real-Time Voice Mode"
+            title="Toggle Voice Mode"
             style={{
               background: isVoiceModeActive
                 ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.5), rgba(56, 189, 248, 0.5))'
@@ -2232,7 +2428,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         })()}
       </div>
 
-      {/* ── Real-Time Voice Mode Overlay ── */}
+      {/* ── Voice Mode Overlay ── */}
       {isVoiceModeActive && (
         <div
           style={{
@@ -2280,7 +2476,9 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                 ? 'Moon Assistant is speaking...'
                 : voiceModeStatus === 'thinking'
                 ? 'Thinking...'
-                : 'Hands-Free Voice Active'}
+                : isDictating
+                ? 'Listening for your voice...'
+                : 'Voice Mode Ready'}
             </div>
             <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2, maxWidth: 360, fontStyle: 'italic' }}>
               {dictationInterim || voiceSubtitle}
@@ -2288,9 +2486,12 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
           </div>
 
           {/* Voice Mode Action Controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap', maxWidth: '100%' }}>
             <button
-              onClick={() => setIsMicMuted(prev => !prev)}
+              onClick={() => {
+                const muted = !isMicMuted;
+                setIsMicMuted(muted);
+              }}
               style={{
                 background: isMicMuted ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.1)',
                 border: isMicMuted ? '1px solid #ef4444' : '1px solid rgba(255, 255, 255, 0.2)',
@@ -2311,11 +2512,11 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             {/* Interrupt Button */}
             <button
               onClick={() => {
-                if (typeof window !== 'undefined' && window.speechSynthesis) {
-                  window.speechSynthesis.cancel();
-                }
-                setIsSpeakingMessageId(null);
-                setVoiceModeStatus('idle');
+                voiceSpeechEnabledRef.current = false;
+                stopSpeechPlayback();
+                activeRequestRef.current?.abort();
+                setVoiceSubtitle('Reply interrupted. Listening again...');
+                setVoiceModeStatus(isVoiceModeActive ? 'listening' : 'idle');
               }}
               style={{
                 background: 'rgba(255, 255, 255, 0.1)',
@@ -2336,7 +2537,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
 
             {/* Exit Voice Mode */}
             <button
-              onClick={() => setIsVoiceModeActive(false)}
+              onClick={toggleVoiceMode}
               style={{
                 background: 'rgba(168, 85, 247, 0.2)',
                 border: '1px solid rgba(168, 85, 247, 0.4)',
@@ -2927,7 +3128,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         </button>
 
         <button
-          onClick={() => setIsVoiceModeActive(prev => !prev)}
+          onClick={toggleVoiceMode}
           style={{
             fontSize: 11,
             padding: '4px 9px',

@@ -59,6 +59,7 @@ Add the following environment variables in your Render Web Service dashboard und
 | `GEMINI_MODEL` | Optional | `gemini-3.5-flash` | Gemini model name (`gemini-3.5-flash`, `gemini-3.8-flash`). |
 | `GROQ_API_KEY_1` | Optional | `gsk_...` | Primary Groq API key for zero-latency AI fallback. |
 | `GROQ_MODEL` | Optional | `openai/gpt-oss-20b` | Groq model name (`openai/gpt-oss-20b`, `openai/gpt-oss-120b`). |
+| `OPENAI_API_KEY` | Optional | (secret) | Enables neural Moon voice output (`gpt-4o-mini-tts`, with `tts-1-hd` fallback). Keep server-side only. If unset or unavailable, playback falls back to the browser's installed speech voice. Speech API usage may incur charges. |
 | `BOOK_DATA_DIR` | Recommended for book uploads | `/var/data` | Directory for private uploaded PDFs and cached OCR language data. Mount a persistent disk at the same path in Render. |
 | `TELEGRAM_BOT_TOKEN` | For Telegram publishing | *(BotFather token)* | Secret backend environment variable. Do not use a `NEXT_PUBLIC_` name or paste the token into chat. |
 | `TELEGRAM_CHAT_ID` | For Telegram publishing | `@your_channel` or numeric ID | Backend environment variable for the destination channel. The bot must be an administrator with permission to post. |
