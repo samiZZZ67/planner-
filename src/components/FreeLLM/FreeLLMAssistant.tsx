@@ -1031,6 +1031,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
           method: 'POST',
           signal: requestController.signal,
           headers: chatHeaders,
+          credentials: 'include',
           body: JSON.stringify({
             messages: updated
               .filter(m => m.id !== 'msg-greeting' && !m.id.startsWith('err-'))
