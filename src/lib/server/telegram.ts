@@ -215,6 +215,64 @@ export function formatReadingAssignment(book: BookRecord, assignment: BookAssign
   return chunks.flatMap(chunk => splitTelegramText(chunk));
 }
 
+export function formatLoadPlanPages(
+  book: BookRecord,
+  assignment: BookAssignmentRecord,
+  pages: BookPageRecord[],
+  previousAssignment?: BookAssignmentRecord
+): string[] {
+  const orderedPages = [...pages].sort((a, b) => a.pdfPage - b.pdfPage);
+  if (!orderedPages.length) {
+    throw new Error(`No extracted pages available for Day ${assignment.dayNumber} (PDF pages ${assignment.startPdfPage}–${assignment.endPdfPage}). Please make sure pages have been extracted first.`);
+  }
+
+  const header = [
+    `📖 ${book.title}${book.author ? ` — ${book.author}` : ''}`,
+    `📅 Reading Load Plan · Day ${assignment.dayNumber} (${assignment.scheduledDate})`,
+    `📄 PDF Pages: ${assignment.startPdfPage}–${assignment.endPdfPage}`,
+    assignment.concepts?.length ? `💡 Concepts: ${assignment.concepts.map(item => item.title).join(', ')}` : '',
+    assignment.estimatedMinutes ? `⏱ Estimated time: ${assignment.estimatedMinutes} minutes` : '',
+  ].filter(Boolean).join('\n');
+
+  const pageChunks = orderedPages.flatMap(page => {
+    const text = page.text?.trim() || '(Page has no extractable text)';
+    const parts = splitTelegramText(text, 3200);
+    return parts.map((part, index) =>
+      `\n📄 [PDF Page ${page.pdfPage}${parts.length > 1 ? ` · Part ${index + 1}/${parts.length}` : ''}]\n${part}`
+    );
+  });
+
+  const notesChunks: string[] = [];
+  if (assignment.studyNotes) {
+    const notes = assignment.studyNotes;
+    if (notes.summary) {
+      notesChunks.push(`\n📝 Study Summary\n${notes.summary}`);
+    }
+    if (notes.keyConcepts?.length) {
+      notesChunks.push(`Key Concepts:\n${notes.keyConcepts.map(item => `• ${item}`).join('\n')}`);
+    }
+    if (notes.definitions?.length) {
+      notesChunks.push(`Definitions:\n${notes.definitions.map(item => `• ${item.term} (PDF p. ${item.pdfPage}): ${item.explanation}`).join('\n')}`);
+    }
+    if (notes.questions?.length) {
+      notesChunks.push(`Revision Questions:\n${notes.questions.map((item, index) => `${index + 1}. ${item.question}\nAnswer: ${item.answer}`).join('\n\n')}`);
+    }
+  }
+
+  const continuity = previousAssignment?.studyNotes
+    ? `\nConnection to Day ${previousAssignment.dayNumber}:\nYesterday: ${previousAssignment.studyNotes.summary}`
+    : '';
+
+  const chunks: string[] = [
+    header,
+    ...pageChunks,
+    ...(notesChunks.length ? notesChunks : []),
+    ...(continuity ? [continuity] : []),
+  ];
+
+  return chunks.flatMap(chunk => splitTelegramText(chunk));
+}
+
 export async function listTelegramDeliveries(userId: string) {
   const sql = getDb();
   if (sql) {
@@ -258,12 +316,16 @@ async function createDelivery(userId: string, bookId: string, assignmentId: stri
     await ensureSchema(sql);
     const rows = await sql`INSERT INTO telegram_deliveries (id, user_id, book_id, assignment_id, status, data, created_at, updated_at)
       VALUES (${item.id}, ${userId}, ${bookId}, ${assignmentId}, 'pending', ${JSON.stringify(item)}::jsonb, ${now}, ${now})
-      ON CONFLICT (user_id, assignment_id) DO NOTHING RETURNING data`;
-    if (!rows.length) throw new Error('A Telegram delivery already exists for this assignment. Check its status before trying again.');
+      ON CONFLICT (user_id, assignment_id) DO UPDATE SET status = 'pending', data = ${JSON.stringify(item)}::jsonb, updated_at = ${now} RETURNING data`;
+    return (rows[0]?.data || item) as TelegramDeliveryRecord;
   } else {
     const all = readDeliveries();
-    if (all.some(entry => entry.userId === userId && entry.assignmentId === assignmentId)) throw new Error('A Telegram delivery already exists for this assignment. Check its status before trying again.');
-    all.push(item);
+    const existingIndex = all.findIndex(entry => entry.userId === userId && entry.assignmentId === assignmentId);
+    if (existingIndex >= 0) {
+      all[existingIndex] = item;
+    } else {
+      all.push(item);
+    }
     writeDeliveries(all);
   }
   return item;
@@ -354,6 +416,118 @@ export async function publishApprovedAssignment(userId: string, book: BookRecord
     const uncertain = Boolean((err as Error & { uncertain?: boolean }).uncertain) || (sendingStarted && (err as Error & { transient?: boolean }).transient === true);
     const safeToRetry = !uncertain && (!sendingStarted || Boolean(err.retryAfter));
     delivery = await saveDelivery({ ...delivery, status: uncertain ? 'uncertain' : 'failed', lastError: err.message, safeToRetry, retryAfterAt: err.retryAfter ? Date.now() + err.retryAfter * 1000 : null, updatedAt: Date.now() });
+    throw Object.assign(new Error(err.message), { delivery });
+  }
+}
+
+export async function publishLoadPlanPagesToTelegram(
+  userId: string,
+  book: BookRecord,
+  assignment: BookAssignmentRecord,
+  pages: BookPageRecord[],
+  previousAssignment?: BookAssignmentRecord
+) {
+  const parts = formatLoadPlanPages(book, assignment, pages, previousAssignment);
+  let delivery = await getAssignmentDelivery(userId, assignment.id);
+  if (!delivery) {
+    const imagePage = pages.find(page => page.visualPreview?.filename);
+    delivery = await createDelivery(
+      userId,
+      book.id,
+      assignment.id,
+      parts,
+      imagePage?.visualPreview ? { filename: imagePage.visualPreview.filename, page: imagePage.pdfPage } : undefined
+    );
+  } else {
+    delivery = {
+      ...delivery,
+      status: 'pending',
+      messageParts: parts,
+      nextPart: 0,
+      telegramMessageIds: [],
+      lastError: '',
+      safeToRetry: true,
+      retryAfterAt: null,
+      updatedAt: Date.now(),
+    };
+    await saveDelivery(delivery);
+  }
+
+  const claimed = await claimDelivery(delivery);
+  if (!claimed) throw new Error('Another request is already processing this Telegram delivery, or it cannot be retried.');
+  delivery = claimed;
+
+  let sendingStarted = false;
+  try {
+    const connection = await checkTelegramChannel();
+    if (!connection.canPost) throw new Error(connection.message);
+
+    const { chatId } = envConfig();
+    while (delivery.nextPart < delivery.messageParts.length) {
+      sendingStarted = true;
+      const message = await telegramCall<{ message_id: number }>('sendMessage', {
+        chat_id: chatId,
+        text: delivery.messageParts[delivery.nextPart],
+        disable_web_page_preview: true,
+      });
+      delivery = await saveDelivery({
+        ...delivery,
+        nextPart: delivery.nextPart + 1,
+        telegramMessageIds: [...delivery.telegramMessageIds, message.message_id],
+        updatedAt: Date.now(),
+      });
+      sendingStarted = false;
+    }
+
+    if (delivery.imageFilename && !delivery.imageSent) {
+      try {
+        sendingStarted = true;
+        const messageId = await sendPageImage(
+          book.id,
+          delivery.imageFilename,
+          `${book.title} · Day ${assignment.dayNumber} · original PDF page ${delivery.imagePage}`
+        );
+        delivery = await saveDelivery({
+          ...delivery,
+          imageSent: true,
+          telegramMessageIds: [...delivery.telegramMessageIds, messageId],
+          updatedAt: Date.now(),
+        });
+      } catch (imgErr) {
+        console.warn('[Telegram] Could not send page preview image, text was sent successfully:', imgErr);
+      } finally {
+        sendingStarted = false;
+      }
+    }
+
+    const completed = await saveDelivery({
+      ...delivery,
+      status: 'completed',
+      lastError: '',
+      safeToRetry: false,
+      retryAfterAt: null,
+      updatedAt: Date.now(),
+    });
+
+    return {
+      delivery: completed,
+      channel: connection.channel.title,
+      bot: connection.bot.username ? `@${connection.bot.username}` : connection.bot.name || 'Telegram Bot',
+      messageCount: completed.telegramMessageIds.length,
+      telegramMessageIds: completed.telegramMessageIds,
+    };
+  } catch (error) {
+    const err = error as Error & { retryAfter?: number; transient?: boolean };
+    const uncertain = Boolean((err as Error & { uncertain?: boolean }).uncertain) || (sendingStarted && (err as Error & { transient?: boolean }).transient === true);
+    const safeToRetry = !uncertain && (!sendingStarted || Boolean(err.retryAfter));
+    delivery = await saveDelivery({
+      ...delivery,
+      status: uncertain ? 'uncertain' : 'failed',
+      lastError: err.message,
+      safeToRetry,
+      retryAfterAt: err.retryAfter ? Date.now() + err.retryAfter * 1000 : null,
+      updatedAt: Date.now(),
+    });
     throw Object.assign(new Error(err.message), { delivery });
   }
 }

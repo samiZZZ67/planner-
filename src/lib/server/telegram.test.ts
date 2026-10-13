@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { checkTelegramChannel, formatReadingAssignment, splitTelegramText } from './telegram';
+import { checkTelegramChannel, formatLoadPlanPages, formatReadingAssignment, splitTelegramText } from './telegram';
 import type { BookAssignmentRecord, BookPageRecord, BookRecord } from '../books/types';
 
 const book: BookRecord = {
@@ -38,6 +38,22 @@ describe('Telegram reading assignment formatting', () => {
   it('refuses draft assignments and pages awaiting OCR review', () => {
     expect(() => formatReadingAssignment(book, { ...approved, status: 'draft' }, [page])).toThrow(/approved/i);
     expect(() => formatReadingAssignment(book, approved, [{ ...page, method: 'ocr', requiresReview: true }])).toThrow(/OCR review/i);
+  });
+
+  it('formats load plan pages without requiring approved notes status', () => {
+    const draftAssignment: BookAssignmentRecord = {
+      ...approved,
+      status: 'draft',
+      studyNotes: undefined,
+      concepts: [{ title: 'Core Insight', concept: 'Read actively.', estimatedMinutes: 20 }],
+    };
+    const parts = formatLoadPlanPages(book, draftAssignment, [page]);
+    const joined = parts.join('');
+    expect(joined).toContain('Reading Load Plan · Day 1');
+    expect(joined).toContain('PDF Pages: 1–1');
+    expect(joined).toContain('[PDF Page 1]');
+    expect(joined).toContain('Exact source\ntext — with punctuation.');
+    expect(joined).toContain('Core Insight');
   });
 
   it('checks bot identity, configured channel, and admin posting permission without exposing the token', async () => {

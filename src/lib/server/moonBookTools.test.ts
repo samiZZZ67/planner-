@@ -5,6 +5,13 @@ describe('Moon book operation intent detection', () => {
   it.each([
     ['Connect my Telegram channel.', 'connect_telegram'],
     ['Check whether my bot can publish to the channel.', 'connect_telegram'],
+    ['give moon full grant access for telegram bot connection', 'connect_telegram'],
+    ['telegram bot access', 'connect_telegram'],
+    ['send extracted pages based on the load plan', 'send_load_plan'],
+    ['send based on load plan', 'send_load_plan'],
+    ['send Day 1 to telegram', 'send_load_plan'],
+    ['send Day 2 to the bot', 'send_load_plan'],
+    ['post extracted pages based on the load plan', 'send_load_plan'],
     ["Prepare tomorrow's reading assignment.", 'prepare'],
     ["Show me today's assigned book section.", 'today'],
     ["Publish today's approved reading assignment.", 'publish'],

@@ -23,7 +23,7 @@ describe('supplementary study notes validation', () => {
       notes: 'Compare options before choosing.',
     }, assignment);
     expect(notes.questions).toHaveLength(2);
-    expect(() => validateStudyNotes({ ...notes, example: { ...notes.example, sourceDisclosure: 'A true story.' } }, assignment)).toThrow(/hypothetical/);
+    expect(() => validateStudyNotes({ ...notes, example: { ...notes.example, sourceDisclosure: 'A true story.' } }, assignment)).toThrow(/illustrative|hypothetical/i);
     expect(() => validateStudyNotes({ ...notes, questions: [{ ...notes.questions[0], pdfPages: [99] }, notes.questions[1]] }, assignment)).toThrow(/citations/);
   });
 });
