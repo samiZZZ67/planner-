@@ -3,6 +3,8 @@ import {
   checkGatewayStatus,
   getGatewayConfig,
   setGatewayRuntimeConfig,
+  persistGatewayRuntimeConfig,
+  loadGatewayConfigFromDb,
   POPULAR_FREE_MODELS,
 } from '@/lib/server/freellm/gateway';
 import { getActiveGeminiKey, getActiveGroqKey } from '@/lib/server/freellm/multimodal';
@@ -24,6 +26,7 @@ export async function OPTIONS() {
 
 export async function GET() {
   try {
+    await loadGatewayConfigFromDb();
     const status = await checkGatewayStatus();
 
     const hasVision = Boolean(getActiveGeminiKey());
@@ -83,7 +86,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     if (body.clear) {
-      setGatewayRuntimeConfig({ clear: true });
+      await persistGatewayRuntimeConfig({ clear: true });
     } else {
       const update: { baseUrl?: string; apiKey?: string } = {};
       if (typeof body.baseUrl === 'string') {
@@ -92,7 +95,7 @@ export async function POST(req: NextRequest) {
       if (typeof body.apiKey === 'string' && body.apiKey.trim().length > 0) {
         update.apiKey = body.apiKey.trim();
       }
-      setGatewayRuntimeConfig(update);
+      await persistGatewayRuntimeConfig(update);
     }
 
     const status = await checkGatewayStatus();

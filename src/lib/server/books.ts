@@ -52,6 +52,22 @@ async function ensureBookSchema(sql: NonNullable<ReturnType<typeof getDb>>) {
       await sql`ALTER TABLE book_pages ADD COLUMN IF NOT EXISTS reviewed_by_user BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE book_pages ADD COLUMN IF NOT EXISTS visual_preview JSONB`;
       await sql`CREATE INDEX IF NOT EXISTS idx_book_pages_owner ON book_pages(user_id, book_id, pdf_page)`;
+      await sql`CREATE TABLE IF NOT EXISTS book_files (
+        book_id VARCHAR(64) PRIMARY KEY REFERENCES books(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        data BYTEA NOT NULL,
+        size BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
+      )`;
+      await sql`CREATE TABLE IF NOT EXISTS book_previews (
+        book_id VARCHAR(64) NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+        pdf_page INTEGER NOT NULL,
+        filename TEXT NOT NULL,
+        mime_type VARCHAR(32) NOT NULL DEFAULT 'image/jpeg',
+        data BYTEA NOT NULL,
+        updated_at BIGINT NOT NULL,
+        PRIMARY KEY(book_id, pdf_page)
+      )`;
       // Preserve book metadata and extracted pages from the pre-Neon JSON fallback.
       for (const record of readRecords()) {
         await sql`INSERT INTO books (id, user_id, data, created_at, updated_at)
@@ -66,6 +82,19 @@ async function ensureBookSchema(sql: NonNullable<ReturnType<typeof getDb>>) {
               COALESCE((item->>'requiresReview')::boolean, false), COALESCE((item->>'reviewedByUser')::boolean, false), NULLIF(item->'visualPreview', 'null'::jsonb), (item->>'updatedAt')::bigint
             FROM jsonb_array_elements(${serialized}::jsonb) AS item
             ON CONFLICT (book_id, pdf_page) DO NOTHING`;
+        }
+        // Migrate existing PDF files from local disk to permanent Neon DB storage
+        const diskPdfPath = path.join(DATA_DIR, record.storedFilename);
+        if (fs.existsSync(diskPdfPath)) {
+          try {
+            const diskBytes = fs.readFileSync(diskPdfPath);
+            if (diskBytes.length > 0) {
+              const b64 = diskBytes.toString('base64');
+              await sql`INSERT INTO book_files (book_id, filename, data, size, updated_at)
+                VALUES (${record.id}, ${record.storedFilename}, decode(${b64}, 'base64'), ${diskBytes.length}, ${record.updatedAt || Date.now()})
+                ON CONFLICT (book_id) DO NOTHING`;
+            }
+          } catch {}
         }
       }
     })().catch(error => {
@@ -135,6 +164,20 @@ export async function saveBook(record: BookRecord, pdfBytes: Uint8Array) {
   fs.writeFileSync(diskPath, pdfBytes, { flag: 'wx' });
   try {
     await persistRecord(record);
+    const sql = getDb();
+    if (sql) {
+      await ensureBookSchema(sql);
+      const b64 = Buffer.from(pdfBytes).toString('base64');
+      await sql`
+        INSERT INTO book_files (book_id, filename, data, size, updated_at)
+        VALUES (${record.id}, ${record.storedFilename}, decode(${b64}, 'base64'), ${pdfBytes.length}, ${Date.now()})
+        ON CONFLICT (book_id) DO UPDATE SET
+          filename = EXCLUDED.filename,
+          data = EXCLUDED.data,
+          size = EXCLUDED.size,
+          updated_at = EXCLUDED.updated_at
+      `;
+    }
   } catch (error) {
     fs.rmSync(diskPath, { force: true });
     throw error;
@@ -161,6 +204,31 @@ export async function saveBookPages(book: BookRecord, pages: BookPageRecord[]) {
         FROM jsonb_array_elements(${serialized}::jsonb) AS item
         ON CONFLICT (book_id, pdf_page) DO UPDATE SET text = EXCLUDED.text, method = EXCLUDED.method,
           confidence = EXCLUDED.confidence, warnings = EXCLUDED.warnings, requires_review = EXCLUDED.requires_review, reviewed_by_user = FALSE, visual_preview = EXCLUDED.visual_preview, updated_at = EXCLUDED.updated_at`;
+
+      for (const page of pages) {
+        if (page.visualPreview?.filename) {
+          const previewDiskPath = path.join(DATA_DIR, book.id, 'page-previews', page.visualPreview.filename);
+          if (fs.existsSync(previewDiskPath)) {
+            try {
+              const previewBytes = fs.readFileSync(previewDiskPath);
+              if (previewBytes.length > 0) {
+                const b64 = previewBytes.toString('base64');
+                await sql`
+                  INSERT INTO book_previews (book_id, pdf_page, filename, mime_type, data, updated_at)
+                  VALUES (${book.id}, ${page.pdfPage}, ${page.visualPreview.filename}, ${page.visualPreview.mimeType || 'image/jpeg'}, decode(${b64}, 'base64'), ${Date.now()})
+                  ON CONFLICT (book_id, pdf_page) DO UPDATE SET
+                    filename = EXCLUDED.filename,
+                    mime_type = EXCLUDED.mime_type,
+                    data = EXCLUDED.data,
+                    updated_at = EXCLUDED.updated_at
+                `;
+              }
+            } catch (err) {
+              console.error(`[Books] Failed to store page preview ${page.pdfPage} in DB:`, err);
+            }
+          }
+        }
+      }
     }
   }
   const records = readRecords();
@@ -214,16 +282,81 @@ export async function markBookPageReviewed(userId: string, bookId: string, pdfPa
   return reviewed;
 }
 
-export async function getBookPdfPath(userId: string, id: string) {
+export async function getBookPdfPath(userId: string, id: string): Promise<string | null> {
   const record = await getBook(userId, id);
-  return record ? path.join(DATA_DIR, record.storedFilename) : null;
+  if (!record) return null;
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const diskPath = path.join(DATA_DIR, record.storedFilename);
+
+  if (fs.existsSync(diskPath)) {
+    try {
+      const stats = fs.statSync(diskPath);
+      if (stats.size > 0) return diskPath;
+    } catch {}
+  }
+
+  // Restore PDF from Neon Postgres if missing on local ephemeral container
+  const sql = getDb();
+  if (sql) {
+    await ensureBookSchema(sql);
+    try {
+      const rows = await sql`
+        SELECT encode(data, 'base64') AS data_base64
+        FROM book_files
+        WHERE book_id = ${id}
+        LIMIT 1
+      `;
+      if (rows.length && rows[0].data_base64) {
+        const buf = Buffer.from(rows[0].data_base64, 'base64');
+        fs.writeFileSync(diskPath, buf);
+        return diskPath;
+      }
+    } catch (err) {
+      console.error(`[Books] Error restoring PDF from database for book ${id}:`, err);
+    }
+  }
+
+  return fs.existsSync(diskPath) ? diskPath : null;
 }
 
-export async function getBookPagePreviewPath(userId: string, id: string, pdfPage: number) {
+export async function getBookPagePreviewPath(userId: string, id: string, pdfPage: number): Promise<string | null> {
   const page = (await listBookPages(userId, id, pdfPage, pdfPage))[0];
   const book = page ? await getBook(userId, id) : null;
   if (!book || !page?.visualPreview) return null;
-  return path.join(DATA_DIR, id, 'page-previews', page.visualPreview.filename);
+
+  const previewDir = path.join(DATA_DIR, id, 'page-previews');
+  const previewDiskPath = path.join(previewDir, page.visualPreview.filename);
+
+  if (fs.existsSync(previewDiskPath)) {
+    try {
+      const stats = fs.statSync(previewDiskPath);
+      if (stats.size > 0) return previewDiskPath;
+    } catch {}
+  }
+
+  // Restore preview image from Neon Postgres if missing on local disk
+  const sql = getDb();
+  if (sql) {
+    await ensureBookSchema(sql);
+    try {
+      const rows = await sql`
+        SELECT encode(data, 'base64') AS data_base64
+        FROM book_previews
+        WHERE book_id = ${id} AND pdf_page = ${pdfPage}
+        LIMIT 1
+      `;
+      if (rows.length && rows[0].data_base64) {
+        fs.mkdirSync(previewDir, { recursive: true });
+        const buf = Buffer.from(rows[0].data_base64, 'base64');
+        fs.writeFileSync(previewDiskPath, buf);
+        return previewDiskPath;
+      }
+    } catch (err) {
+      console.error(`[Books] Error restoring page preview ${pdfPage} from database for book ${id}:`, err);
+    }
+  }
+
+  return fs.existsSync(previewDiskPath) ? previewDiskPath : null;
 }
 
 export async function deleteBook(userId: string, id: string) {
@@ -233,6 +366,8 @@ export async function deleteBook(userId: string, id: string) {
   if (sql) {
     await ensureBookSchema(sql);
     await sql`DELETE FROM books WHERE id = ${id} AND user_id = ${userId}`;
+    await sql`DELETE FROM book_files WHERE book_id = ${id}`;
+    await sql`DELETE FROM book_previews WHERE book_id = ${id}`;
   }
   const records = readRecords().filter(item => !(item.id === id && item.userId === userId));
   writeRecords(records);

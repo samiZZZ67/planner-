@@ -83,4 +83,54 @@ describe('Telegram reading assignment formatting', () => {
       if (oldChat === undefined) delete process.env.TELEGRAM_CHAT_ID; else process.env.TELEGRAM_CHAT_ID = oldChat;
     }
   });
+
+  it('immediately sends load plan pages and returns delivery receipt', async () => {
+    const oldToken = process.env.TELEGRAM_BOT_TOKEN;
+    const oldChat = process.env.TELEGRAM_CHAT_ID;
+    process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+    process.env.TELEGRAM_CHAT_ID = '-1001234567890';
+    const sentMessages: any[] = [];
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith('/getMe')) {
+        return new Response(JSON.stringify({ ok: true, result: { id: 1, username: 'bot', first_name: 'Bot' } }), { status: 200 });
+      }
+      if (u.endsWith('/getChat')) {
+        return new Response(JSON.stringify({ ok: true, result: { id: -1001234567890, title: 'Chan', type: 'channel' } }), { status: 200 });
+      }
+      if (u.endsWith('/getChatMember')) {
+        return new Response(JSON.stringify({ ok: true, result: { status: 'administrator', can_post_messages: true } }), { status: 200 });
+      }
+      if (u.endsWith('/sendMessage')) {
+        const body = JSON.parse(String(init?.body || '{}'));
+        sentMessages.push(body);
+        return new Response(JSON.stringify({ ok: true, result: { message_id: 100 + sentMessages.length } }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+    }));
+
+    try {
+      const { publishLoadPlanPagesToTelegram } = await import('./telegram');
+      const testAssignment: BookAssignmentRecord = {
+        ...approved,
+        id: 'assignment-sendnow-1',
+        dayNumber: 1,
+        scheduledDate: '2026-10-15',
+        status: 'draft',
+      };
+
+      const result = await publishLoadPlanPagesToTelegram('owner', book, testAssignment, [page]);
+      expect(result.delivery.status).toBe('completed');
+      expect(result.delivery.telegramMessageIds.length).toBeGreaterThan(0);
+      expect(sentMessages.length).toBeGreaterThan(0);
+      expect(sentMessages[0].text).toContain('Reading Load Plan · Day 1');
+      // Original assignment scheduled date was NOT modified by the delivery
+      expect(testAssignment.scheduledDate).toBe('2026-10-15');
+      expect(testAssignment.dayNumber).toBe(1);
+    } finally {
+      if (oldToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN; else process.env.TELEGRAM_BOT_TOKEN = oldToken;
+      if (oldChat === undefined) delete process.env.TELEGRAM_CHAT_ID; else process.env.TELEGRAM_CHAT_ID = oldChat;
+    }
+  });
 });

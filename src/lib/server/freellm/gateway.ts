@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { getDb } from '../neon';
 import {
   CatalogModel,
   VERIFIED_FREE_MODELS,
@@ -43,6 +44,73 @@ function loadRuntimeOverride(): SavedGatewayOverride {
   return runtimeOverride;
 }
 
+let dbLoaded = false;
+let dbLoadingPromise: Promise<void> | null = null;
+
+export async function loadGatewayConfigFromDb(): Promise<void> {
+  if (process.env.VITEST) return;
+  const sql = getDb();
+  if (!sql) return;
+  if (dbLoaded) return;
+  if (dbLoadingPromise) return dbLoadingPromise;
+
+  dbLoadingPromise = (async () => {
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS gateway_settings (
+          key VARCHAR(64) PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at BIGINT NOT NULL
+        )
+      `;
+      const rows = await sql`SELECT key, value FROM gateway_settings`;
+      let dbUrl: string | undefined;
+      let dbKey: string | undefined;
+      if (Array.isArray(rows)) {
+        for (const row of rows) {
+          if (row.key === 'gateway_base_url' && typeof row.value === 'string' && row.value.trim()) {
+            dbUrl = row.value.trim();
+          }
+          if (row.key === 'gateway_api_key' && typeof row.value === 'string' && row.value.trim()) {
+            dbKey = row.value.trim();
+          }
+        }
+      }
+
+      const diskConfig = loadRuntimeOverride();
+      if (dbUrl || dbKey) {
+        runtimeOverride = {
+          baseUrl: dbUrl || diskConfig.baseUrl,
+          apiKey: dbKey || diskConfig.apiKey,
+        };
+      } else if (diskConfig.baseUrl || diskConfig.apiKey) {
+        const now = Date.now();
+        if (diskConfig.baseUrl) {
+          await sql`
+            INSERT INTO gateway_settings (key, value, updated_at)
+            VALUES ('gateway_base_url', ${diskConfig.baseUrl}, ${now})
+            ON CONFLICT (key) DO NOTHING
+          `;
+        }
+        if (diskConfig.apiKey) {
+          await sql`
+            INSERT INTO gateway_settings (key, value, updated_at)
+            VALUES ('gateway_api_key', ${diskConfig.apiKey}, ${now})
+            ON CONFLICT (key) DO NOTHING
+          `;
+        }
+      }
+      dbLoaded = true;
+    } catch (err) {
+      console.error('[Gateway] Failed to load settings from DB:', err);
+    } finally {
+      dbLoadingPromise = null;
+    }
+  })();
+
+  return dbLoadingPromise;
+}
+
 export function setGatewayRuntimeConfig(update: { baseUrl?: string; apiKey?: string; clear?: boolean }): void {
   if (update.clear) {
     runtimeOverride = {};
@@ -65,6 +133,52 @@ export function setGatewayRuntimeConfig(update: { baseUrl?: string; apiKey?: str
     fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(runtimeOverride, null, 2), 'utf8');
   } catch {
     // Ignore write errors in read-only environments
+  }
+}
+
+export async function persistGatewayRuntimeConfig(update: { baseUrl?: string; apiKey?: string; clear?: boolean }): Promise<void> {
+  setGatewayRuntimeConfig(update);
+  if (process.env.VITEST) return;
+  const sql = getDb();
+  if (!sql) return;
+
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS gateway_settings (
+        key VARCHAR(64) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at BIGINT NOT NULL
+      )
+    `;
+    const now = Date.now();
+    if (update.clear) {
+      await sql`DELETE FROM gateway_settings WHERE key IN ('gateway_base_url', 'gateway_api_key')`;
+    } else {
+      if (update.baseUrl !== undefined) {
+        if (update.baseUrl.trim()) {
+          await sql`
+            INSERT INTO gateway_settings (key, value, updated_at)
+            VALUES ('gateway_base_url', ${update.baseUrl.trim()}, ${now})
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+          `;
+        } else {
+          await sql`DELETE FROM gateway_settings WHERE key = 'gateway_base_url'`;
+        }
+      }
+      if (update.apiKey !== undefined) {
+        if (update.apiKey.trim()) {
+          await sql`
+            INSERT INTO gateway_settings (key, value, updated_at)
+            VALUES ('gateway_api_key', ${update.apiKey.trim()}, ${now})
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+          `;
+        } else {
+          await sql`DELETE FROM gateway_settings WHERE key = 'gateway_api_key'`;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[Gateway] Failed to persist settings to DB:', err);
   }
 }
 
@@ -202,6 +316,7 @@ export async function checkGatewayStatus(
   customUrl?: string,
   customKey?: string
 ): Promise<GatewayStatusResult> {
+  await loadGatewayConfigFromDb();
   const config = getGatewayConfig();
   const targetBaseUrl = (customUrl || config.baseUrl).trim().replace(/\/+$/, '');
   const apiKey = customKey !== undefined ? customKey : config.apiKey;
@@ -423,6 +538,7 @@ async function fetchDirect(url: string, init: RequestInit): Promise<Response> {
 export async function sendChatCompletion(
   options: SendChatOptions
 ): Promise<ChatCompletionResult> {
+  await loadGatewayConfigFromDb();
   const config = getGatewayConfig();
   const targetBaseUrl = (options.customUrl || config.baseUrl).trim().replace(/\/+$/, '');
   const apiKey = options.customKey !== undefined ? options.customKey : config.apiKey;
@@ -755,6 +871,7 @@ async function callGroqDirect(
 export async function sendChatCompletionWithFallback(
   options: SendChatOptions
 ): Promise<ChatCompletionResult & { providerUsed: string; fallbackFrom?: string }> {
+  await loadGatewayConfigFromDb();
   const requestedModel = options.model || 'auto';
   const effectiveModel = !requestedModel || requestedModel === 'auto' ? 'gemini-3.6-flash' : requestedModel;
   const isGoogleTarget =

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/server/auth';
 import { getBook, listBookPages } from '@/lib/server/books';
-import { listBookAssignments } from '@/lib/server/bookAssignments';
-import { publishApprovedAssignment } from '@/lib/server/telegram';
+import { listBookAssignments, updateBookAssignment } from '@/lib/server/bookAssignments';
+import { publishApprovedAssignment, publishLoadPlanPagesToTelegram } from '@/lib/server/telegram';
 import { listBookPublishJobs, updateBookPublishJob } from '@/lib/server/bookScheduler';
 
 export async function POST(request: Request, context: RouteContext<'/api/books/[id]/assignments/[assignmentId]/publish'>) {
@@ -11,21 +11,50 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
   const { id, assignmentId } = await context.params;
   const book = await getBook(session.userId, id);
   if (!book) return NextResponse.json({ error: 'Book not found.' }, { status: 404 });
-  const assignment = (await listBookAssignments(session.userId, id)).find(item => item.id === assignmentId);
+  const assignments = await listBookAssignments(session.userId, id);
+  const assignment = assignments.find(item => item.id === assignmentId);
   if (!assignment) return NextResponse.json({ error: 'Reading assignment not found.' }, { status: 404 });
-  if (assignment.status !== 'approved' || !assignment.studyNotes) return NextResponse.json({ error: 'Approve this assignment and its study notes before publishing.' }, { status: 409 });
+
+  const url = new URL(request.url);
+  const body = await request.json().catch(() => ({}));
+  const isSendNow = Boolean(body?.sendNow || body?.override || url.searchParams.get('sendNow') === 'true');
+
+  if (!isSendNow && (assignment.status !== 'approved' || !assignment.studyNotes)) {
+    return NextResponse.json({ error: 'Approve this assignment and its study notes before publishing.' }, { status: 409 });
+  }
+
   try {
     const pages = await listBookPages(session.userId, id, assignment.startPdfPage, assignment.endPdfPage);
-    const previous = (await listBookAssignments(session.userId, id)).find(item => item.dayNumber === assignment.dayNumber - 1);
-    const delivery = await publishApprovedAssignment(session.userId, book, assignment, pages, previous);
+    if (!pages.length) {
+      return NextResponse.json({ error: 'No extracted page content found for this section. Extract the book pages first.' }, { status: 400 });
+    }
+    const previous = assignments.find(item => item.dayNumber === assignment.dayNumber - 1);
+
+    let delivery: any;
+    let channel: string | undefined;
+    let bot: string | undefined;
+
+    if (!isSendNow && assignment.status === 'approved' && assignment.studyNotes) {
+      delivery = await publishApprovedAssignment(session.userId, book, assignment, pages, previous);
+    } else {
+      const result = await publishLoadPlanPagesToTelegram(session.userId, book, assignment, pages, previous);
+      delivery = result.delivery;
+      channel = result.channel;
+      bot = result.bot;
+    }
+
+    // Preserve the original schedule and all dates; mark status completed
+    await updateBookAssignment({ ...assignment, status: 'completed', updatedAt: Date.now() });
+
     const job = (await listBookPublishJobs(session.userId)).find(item => item.assignmentId === assignmentId);
     if (job) await updateBookPublishJob({ ...job, status: 'completed', lastError: '' });
-    return NextResponse.json({ delivery });
+
+    return NextResponse.json({ ok: true, delivery, channel, bot });
   } catch (error) {
     const failure = error as Error & { delivery?: unknown };
     const retry = failure.delivery as { safeToRetry?: boolean; retryAfterAt?: number | null } | undefined;
     const job = (await listBookPublishJobs(session.userId)).find(item => item.assignmentId === assignmentId);
     if (job && retry?.safeToRetry && retry.retryAfterAt) await updateBookPublishJob({ ...job, status: 'scheduled', scheduledAt: retry.retryAfterAt, lastError: failure.message });
-    return NextResponse.json({ error: failure.message, delivery: failure.delivery }, { status: /already exists/i.test(failure.message) ? 409 : 502 });
+    return NextResponse.json({ error: failure.message, delivery: failure.delivery }, { status: /already exists|currently/i.test(failure.message) ? 409 : 502 });
   }
 }

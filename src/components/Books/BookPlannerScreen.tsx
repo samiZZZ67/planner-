@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BookOpen, ChevronDown, ChevronUp, Clock3, FileUp, LockKeyhole, Pencil, Save, Trash2, TriangleAlert, X } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, Clock3, FileUp, LockKeyhole, Pencil, Save, Send, Trash2, TriangleAlert, X } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
 import type { BookAssignmentRecord, BookPageRecord, BookRecord, BookStudyNotes } from '@/lib/books/types';
 
@@ -23,6 +23,7 @@ export function BookPlannerScreen() {
   const [startPage, setStartPage] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [sendingAssignmentId, setSendingAssignmentId] = useState<string | null>(null);
   const [pagesByBook, setPagesByBook] = useState<Record<string, BookPageRecord[]>>({});
   const [assignmentsByBook, setAssignmentsByBook] = useState<Record<string, BookAssignmentRecord[]>>({});
   const [assignmentDetails, setAssignmentDetails] = useState<Record<string, AssignmentDetail>>({});
@@ -177,6 +178,33 @@ export function BookPlannerScreen() {
     setAssignmentsByBook(current => ({ ...current, [bookId]: (current[bookId] || []).map(item => item.id === assignment.id ? assignment : item) }));
     setAssignmentDetails(current => current[assignment.id] ? { ...current, [assignment.id]: { ...current[assignment.id], assignment } } : current);
     if (assignment.studyNotes) setNotesDrafts(current => ({ ...current, [assignment.id]: assignment.studyNotes! }));
+  }
+
+  async function sendAssignmentNow(book: BookRecord, assignment: BookAssignmentRecord) {
+    if (sendingAssignmentId !== null) return;
+    setSendingAssignmentId(assignment.id);
+    setError('');
+    setNotice('');
+    try {
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(assignment.id)}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sendNow: true, override: true }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not send this section to Telegram.');
+
+      updateAssignmentState(book.id, { ...assignment, status: 'completed' });
+      const channel = data.channel || data.delivery?.channel || 'Telegram channel';
+      const msgIds = data.delivery?.telegramMessageIds?.length
+        ? ` (Telegram message ID: ${data.delivery.telegramMessageIds.join(', ')})`
+        : '';
+      setNotice(`🚀 Sent Day ${assignment.dayNumber} section to ${channel}! Original schedule remains unchanged.${msgIds}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send this section to Telegram.');
+    } finally {
+      setSendingAssignmentId(null);
+    }
   }
 
   async function generateNotes(book: BookRecord, assignment: BookAssignmentRecord) {
@@ -375,7 +403,30 @@ export function BookPlannerScreen() {
                 <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{assignment.status} · estimated {assignment.estimatedMinutes} minutes · original text remains in extracted pages</span>
                 <div style={{ display: 'grid', gap: 5 }}>{assignment.concepts.map((concept, index) => <div key={`${assignment.id}-${index}`} style={{ fontSize: 13 }}><strong>{concept.title}</strong><div style={{ color: 'var(--text-secondary)' }}>{concept.concept}</div></div>)}</div>
                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>Why this section: {assignment.rationale}</p>
-                <button type="button" className="v-pill-btn" onClick={() => void openAssignment(book, assignment)} style={{ justifySelf: 'start', padding: '8px 12px' }}>Review original reading and notes</button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button type="button" className="v-pill-btn" onClick={() => void openAssignment(book, assignment)} style={{ padding: '8px 12px' }}>Review original reading and notes</button>
+                  <button
+                    type="button"
+                    className="v-pill-btn"
+                    disabled={sendingAssignmentId !== null}
+                    onClick={() => void sendAssignmentNow(book, assignment)}
+                    style={{
+                      padding: '8px 14px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: 'rgba(59, 130, 246, 0.2)',
+                      borderColor: 'rgba(59, 130, 246, 0.5)',
+                      color: '#60a5fa',
+                      fontWeight: 600,
+                      cursor: sendingAssignmentId !== null ? 'wait' : 'pointer',
+                    }}
+                    title="Immediately dispatch this reading section to your Telegram channel regardless of scheduled time"
+                  >
+                    <Send size={14} />
+                    {sendingAssignmentId === assignment.id ? 'Sending to Telegram…' : 'Send Now'}
+                  </button>
+                </div>
                 {assignmentDetails[assignment.id] && (() => {
                   const detail = assignmentDetails[assignment.id];
                   const draft = notesDrafts[assignment.id] || detail.assignment.studyNotes;
@@ -401,12 +452,56 @@ export function BookPlannerScreen() {
                       <div style={{ display: 'grid', gap: 8 }}><strong>Review questions and answers</strong>{draft.questions.map((item, index) => <div key={index} style={{ fontSize: 13 }}><p style={{ margin: '2px 0' }}><b>Q:</b> {item.question}</p><p style={{ margin: '2px 0' }}><b>A:</b> {item.answer} <span style={{ color: 'var(--text-muted)' }}>(PDF pp. {item.pdfPages.join(', ')})</span></p></div>)}</div>
                       <label style={fieldStyle}>Study notes<textarea style={{ ...inputStyle, minHeight: 120 }} value={draft.notes} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, notes: event.target.value } }))} /></label>
                       <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Generated by {draft.generatedByModel}. {assignment.status === 'approved' ? 'Approved; change status to draft before editing.' : 'Review and edit this supplement before approval.'}</span>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                         <button type="button" className="v-pill-btn" disabled={busy || assignment.status === 'approved'} onClick={() => void generateNotes(book, assignment)} style={{ padding: '8px 12px' }}>{busy ? 'Generating…' : assignment.studyNotes ? 'Regenerate notes' : 'Generate study notes'}</button>
                         <button type="button" className="v-pill-btn" disabled={assignment.status === 'approved'} onClick={() => void saveNotes(book, assignment, 'draft')} style={{ padding: '8px 12px' }}>Save edits</button>
                         <button type="button" className="v-pill-btn" disabled={assignment.status === 'approved'} onClick={() => void saveNotes(book, assignment, 'approved')} style={{ padding: '8px 12px' }}>Approve assignment</button>
+                        <button
+                          type="button"
+                          className="v-pill-btn"
+                          disabled={sendingAssignmentId !== null}
+                          onClick={() => void sendAssignmentNow(book, assignment)}
+                          style={{
+                            padding: '8px 14px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            background: 'rgba(59, 130, 246, 0.2)',
+                            borderColor: 'rgba(59, 130, 246, 0.5)',
+                            color: '#60a5fa',
+                            fontWeight: 600,
+                            cursor: sendingAssignmentId !== null ? 'wait' : 'pointer',
+                          }}
+                          title="Immediately dispatch this reading section to your Telegram channel regardless of scheduled time"
+                        >
+                          <Send size={14} />
+                          {sendingAssignmentId === assignment.id ? 'Sending to Telegram…' : 'Send Now'}
+                        </button>
                       </div>
-                    </div> : <button type="button" className="v-pill-btn" disabled={busy} onClick={() => void generateNotes(book, assignment)} style={{ justifySelf: 'start', padding: '8px 12px' }}>{busy ? 'Generating…' : 'Generate study notes'}</button>}
+                    </div> : <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button type="button" className="v-pill-btn" disabled={busy} onClick={() => void generateNotes(book, assignment)} style={{ justifySelf: 'start', padding: '8px 12px' }}>{busy ? 'Generating…' : 'Generate study notes'}</button>
+                      <button
+                        type="button"
+                        className="v-pill-btn"
+                        disabled={sendingAssignmentId !== null}
+                        onClick={() => void sendAssignmentNow(book, assignment)}
+                        style={{
+                          padding: '8px 14px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          background: 'rgba(59, 130, 246, 0.2)',
+                          borderColor: 'rgba(59, 130, 246, 0.5)',
+                          color: '#60a5fa',
+                          fontWeight: 600,
+                          cursor: sendingAssignmentId !== null ? 'wait' : 'pointer',
+                        }}
+                        title="Immediately dispatch this reading section to your Telegram channel regardless of scheduled time"
+                      >
+                        <Send size={14} />
+                        {sendingAssignmentId === assignment.id ? 'Sending to Telegram…' : 'Send Now'}
+                      </button>
+                    </div>}
                   </div>;
                 })()}
               </section>

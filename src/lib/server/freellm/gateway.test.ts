@@ -213,5 +213,28 @@ describe('FreeLLMAPI Gateway Client Suite', () => {
       expect(result.providerUsed).toContain('Auto-Switched');
     });
   });
+
+  describe('5. Unified API Key Persistence & Masking', () => {
+    it('masks secret key and verifies keyConfigured status without exposing secrets', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            object: 'list',
+            data: [{ id: 'gemini-2.5-flash', object: 'model', execution_status: 'ready' }],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      );
+
+      const secretKey = 'my-super-secret-unified-key-12345';
+      const status = await checkGatewayStatus('https://gateway.example/v1', secretKey);
+
+      expect(status.keyConfigured).toBe(true);
+      expect(status.maskedKey).toBe('••••2345');
+      expect(JSON.stringify(status)).not.toContain(secretKey);
+      expect(status.online).toBe(true);
+      expect(status.models).toContain('gemini-2.5-flash');
+    });
+  });
 });
 

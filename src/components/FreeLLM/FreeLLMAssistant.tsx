@@ -429,10 +429,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       .catch(() => null);
 
     // 4. Custom Gateway URL & Key
-    try {
-      localStorage.removeItem('np_freellm_custom_url');
-      localStorage.removeItem('np_freellm_custom_key');
-    } catch {}
+    // Gateway settings and unified API keys are persisted securely in backend database
 
     const onResize = () => {
       setBtnPos(prev => (prev ? clampPosition(prev.x, prev.y) : null));
@@ -540,6 +537,10 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       setIsTestingGateway(false);
     }
   }, [configUrl, configKeyInput, applyStatusPayload]);
+
+  useEffect(() => {
+    testGatewayConnection();
+  }, [testGatewayConnection]);
 
   useEffect(() => {
     if (windowState !== 'collapsed') {
