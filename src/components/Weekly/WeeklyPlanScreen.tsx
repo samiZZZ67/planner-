@@ -11,6 +11,7 @@ import {
 import type { WeeklyPlan, Task, TimeLog, MonthlyPlan } from '@/types';
 import { countWords, getWeekBounds } from '@/lib/plan/weeklyPlanUtils';
 import { apiFetch } from '@/lib/api/apiClient';
+import { formatEthiopianDateRange } from '@/lib/date/ethiopianCalendar';
 
 interface WeeklyPlanScreenProps {
   currentDate: string;
@@ -211,8 +212,9 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
             WEEKLY PLAN
           </div>
           <div style={{ fontSize: 13, color: 'var(--accent-color)', fontWeight: 600, marginTop: 2 }}>
-            {weekInfo.weekLabel}
+            {formatEthiopianDateRange(weekInfo.startDate, weekInfo.endDate)}
           </div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>{weekInfo.weekLabel} Gregorian</div>
         </div>
         <button
           type="button"
@@ -495,8 +497,9 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <CalendarRange size={14} color={isSelected ? 'var(--accent-color)' : 'var(--text-muted)'} />
                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {w.startDate} → {w.endDate}
+                      {formatEthiopianDateRange(w.startDate, w.endDate)}
                     </span>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>({w.startDate} → {w.endDate} Gregorian)</span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                       ({w.wordCount} words)
                     </span>

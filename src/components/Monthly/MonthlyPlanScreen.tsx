@@ -9,6 +9,7 @@ import {
   Edit2, X
 } from 'lucide-react';
 import type { MonthlyPlan, MonthlyGoalItem, WeeklyPlan, Task } from '@/types';
+import { formatEthiopianMonthRange } from '@/lib/date/ethiopianCalendar';
 
 interface MonthlyPlanScreenProps {
   currentDate: string;
@@ -27,6 +28,11 @@ function formatMonthLabel(monthStr: string): string {
   } catch {
     return monthStr;
   }
+}
+
+function formatGregorianMonthLabel(monthStr: string): string {
+  const [year, month] = monthStr.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
 function EditablePriorityCard({
@@ -421,8 +427,9 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
             MONTHLY PLAN
           </div>
           <div style={{ fontSize: 13, color: 'var(--accent-color)', fontWeight: 600, marginTop: 2 }}>
-            {formatMonthLabel(selectedMonth)}
+            {formatEthiopianMonthRange(selectedMonth)}
           </div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>Gregorian month data: {formatGregorianMonthLabel(selectedMonth)}</div>
         </div>
         <button
           type="button"

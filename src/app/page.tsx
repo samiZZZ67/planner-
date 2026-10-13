@@ -24,6 +24,7 @@ import { LoginModal } from '@/components/Modals/LoginModal';
 import { MasterLockScreen } from '@/components/Auth/MasterLockScreen';
 import { AIChatPanel } from '@/components/Chat/AIChatPanel';
 import { FreeLLMAssistant } from '@/components/FreeLLM/FreeLLMAssistant';
+import { TelegramQuickSend } from '@/components/FreeLLM/TelegramQuickSend';
 import { apiFetch } from '@/lib/api/apiClient';
 
 export default function SamsSpaceApp() {
@@ -587,6 +588,7 @@ export default function SamsSpaceApp() {
 
       {/* ── 9. Independent FreeLLMAPI Assistant (Movable, Expandable AI Moon Button) ── */}
       <FreeLLMAssistant isPhone={isPhone} theme={theme} />
+      <TelegramQuickSend isPhone={isPhone} theme={theme} />
     </div>
   );
 }

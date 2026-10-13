@@ -108,6 +108,20 @@ export async function checkTelegramChannel() {
   };
 }
 
+export async function sendTelegramTextToChannel(text: string) {
+  if (!text.trim()) throw new Error('Type a message before sending it.');
+  if (Array.from(text).length > 3500) throw new Error('Keep the message under 3,500 characters so it fits in one Telegram post.');
+  const connection = await checkTelegramChannel();
+  if (!connection.canPost) throw new Error(connection.message);
+  const { chatId } = envConfig();
+  const sent = await telegramCall<{ message_id: number }>('sendMessage', {
+    chat_id: chatId,
+    text,
+    disable_web_page_preview: true,
+  });
+  return { channel: connection.channel.title, messageId: sent.message_id };
+}
+
 export function splitTelegramText(text: string, max = 3500): string[] {
   const chars = Array.from(text);
   const parts: string[] = [];
