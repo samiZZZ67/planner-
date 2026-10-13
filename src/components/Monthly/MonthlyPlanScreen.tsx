@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import {
   CalendarDays, CheckCircle2, Plus, Trash2, Save,
   ChevronLeft, ChevronRight, Target, BookOpen, Video, Clock, History, Check,
@@ -474,7 +475,7 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
       </div>
 
       {/* ── 3. Monthly Planning Form ── */}
-      <form onSubmit={handleSaveMonthlyPlan}>
+      <form onSubmit={event => { void withActionFeedback('Saving monthly plan', () => handleSaveMonthlyPlan(event), event.currentTarget); }}>
         <div className="v-card" style={{ padding: '24px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
             <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>

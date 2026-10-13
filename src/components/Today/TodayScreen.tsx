@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import { useTimer } from '@/lib/timer/useTimer';
 import { Play, Pause, Square, Check, Clock, ChevronDown, ChevronUp, Moon } from 'lucide-react';
 import type { Task, Section, TimeLog, Day, PriorityLevel } from '@/types';
@@ -138,7 +139,7 @@ export function TodayScreen({ sections, onOpenManualTime, onPreviewImage, isPhon
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     {/* Checkbox */}
                     <button
-                      onClick={() => handleToggleDone(task)}
+                      onClick={event => { void withActionFeedback(task.isCompleted ? 'Updating task' : 'Completing task', () => handleToggleDone(task), event.currentTarget); }}
                       style={{
                         width: 22, height: 22, borderRadius: 6,
                         background: task.isCompleted ? `rgba(34,197,94,0.15)` : 'transparent',
@@ -168,14 +169,14 @@ export function TodayScreen({ sections, onOpenManualTime, onPreviewImage, isPhon
                       {isActive ? (
                         <>
                           {isTimerRunning ? (
-                            <button onClick={pauseTimer} className="g-icon-btn" style={{ width: 32, height: 32, color: 'rgba(234,179,8,0.7)', borderColor: 'rgba(234,179,8,0.2)' }} aria-label="Pause"><Pause size={13} /></button>
+                            <button onClick={event => { void withActionFeedback('Pausing timer', pauseTimer, event.currentTarget); }} className="g-icon-btn" style={{ width: 32, height: 32, color: 'rgba(234,179,8,0.7)', borderColor: 'rgba(234,179,8,0.2)' }} aria-label="Pause"><Pause size={13} /></button>
                           ) : (
-                            <button onClick={resumeTimer} className="g-icon-btn" style={{ width: 32, height: 32, color: 'rgba(99,102,241,0.8)', borderColor: 'rgba(99,102,241,0.2)' }} aria-label="Resume"><Play size={13} /></button>
+                            <button onClick={event => { void withActionFeedback('Resuming timer', resumeTimer, event.currentTarget); }} className="g-icon-btn" style={{ width: 32, height: 32, color: 'rgba(99,102,241,0.8)', borderColor: 'rgba(99,102,241,0.2)' }} aria-label="Resume"><Play size={13} /></button>
                           )}
-                          <button onClick={handleStopTimer} className="g-icon-btn" style={{ width: 32, height: 32, color: 'rgba(239,68,68,0.7)', borderColor: 'rgba(239,68,68,0.2)' }} aria-label="Stop"><Square size={13} /></button>
+                          <button onClick={event => { void withActionFeedback('Stopping timer', handleStopTimer, event.currentTarget); }} className="g-icon-btn" style={{ width: 32, height: 32, color: 'rgba(239,68,68,0.7)', borderColor: 'rgba(239,68,68,0.2)' }} aria-label="Stop"><Square size={13} /></button>
                         </>
                       ) : (
-                        <button onClick={() => handleStartTimer(task)} className="g-icon-btn" style={{ width: 32, height: 32, color: 'rgba(34,197,94,0.7)', borderColor: 'rgba(34,197,94,0.2)' }} aria-label="Start timer"><Play size={13} /></button>
+                        <button onClick={event => { void withActionFeedback('Starting timer', () => handleStartTimer(task), event.currentTarget); }} className="g-icon-btn" style={{ width: 32, height: 32, color: 'rgba(34,197,94,0.7)', borderColor: 'rgba(34,197,94,0.2)' }} aria-label="Start timer"><Play size={13} /></button>
                       )}
                       <button onClick={() => onOpenManualTime(task.id, task.title)} className="g-icon-btn" style={{ width: 32, height: 32 }} aria-label="Log time manually"><Clock size={13} /></button>
                       <button onClick={() => setExpandedId(isExpanded ? null : task.id)} className="g-icon-btn" style={{ width: 28, height: 28 }} aria-label={isExpanded ? 'Collapse' : 'Expand'}>
@@ -213,7 +214,7 @@ export function TodayScreen({ sections, onOpenManualTime, onPreviewImage, isPhon
                           <button
                             key={mins}
                             type="button"
-                            onClick={() => handleUpdateTaskTime(task.id, mins)}
+                            onClick={event => { void withActionFeedback('Updating task time', () => handleUpdateTaskTime(task.id, mins), event.currentTarget); }}
                             style={{
                               fontSize: 9,
                               fontWeight: 700,
@@ -246,7 +247,7 @@ export function TodayScreen({ sections, onOpenManualTime, onPreviewImage, isPhon
                           <button
                             key={lvl}
                             type="button"
-                            onClick={() => handleUpdateTaskPriority(task.id, lvl)}
+                            onClick={event => { void withActionFeedback('Updating task priority', () => handleUpdateTaskPriority(task.id, lvl), event.currentTarget); }}
                             style={{
                               fontSize: 9,
                               fontWeight: 700,
@@ -333,7 +334,7 @@ export function TodayScreen({ sections, onOpenManualTime, onPreviewImage, isPhon
                 />
               </div>
             ))}
-            <button onClick={saveReview} className="g-btn g-btn-primary" style={{ alignSelf: 'flex-end', padding: '9px 20px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button onClick={event => { void withActionFeedback('Saving review', saveReview, event.currentTarget); }} className="g-btn g-btn-primary" style={{ alignSelf: 'flex-end', padding: '9px 20px', display: 'flex', alignItems: 'center', gap: 6 }}>
               <Check size={14} /><span>Save Review</span>
             </button>
           </div>

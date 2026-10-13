@@ -7,6 +7,7 @@ import {
   Sun, Moon, Download, Upload, Shield, LogOut, Sparkles, Check, Bell, BellOff, Volume2
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
+import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import {
   getNotificationStatus,
   requestNotificationPermission,
@@ -38,26 +39,36 @@ export function SettingsScreen({
     setTimeout(() => setMessage(''), 3000);
   };
 
-  const handleExport = async () => {
-    try {
-      await exportAllDataToJson();
-      showMsg('Data exported successfully');
-    } catch {
-      showMsg('Export failed');
-    }
+  const handleExport = async (source?: HTMLElement | null) => {
+    await withActionFeedback('Exporting backup', async () => {
+      try {
+        await exportAllDataToJson();
+        showMsg('Data exported successfully');
+      } catch (error) {
+        showMsg('Export failed');
+        throw error;
+      }
+    }, source);
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    try {
-      const text = await file.text();
-      const result = await importDataFromJson(text);
-      syncEngine.notifyLocalMutation();
-      showMsg(`Imported ${result.count} records`);
-    } catch (err: any) {
-      setImportError(err.message || 'Import failed');
-    }
+    const source = e.currentTarget;
+    setImportError('');
+    await withActionFeedback('Importing backup', async () => {
+      try {
+        const text = await file.text();
+        const result = await importDataFromJson(text);
+        syncEngine.notifyLocalMutation();
+        showMsg(`Imported ${result.count} records`);
+      } catch (err: any) {
+        setImportError(err.message || 'Import failed');
+        throw err;
+      } finally {
+        if (source.isConnected) source.value = '';
+      }
+    }, source);
   };
 
   return (
@@ -207,7 +218,7 @@ export function SettingsScreen({
           {notifStatus !== 'granted' && (
             <button
               type="button"
-              onClick={async () => {
+              onClick={event => { void withActionFeedback('Enabling notifications', async () => {
                 const res = await requestNotificationPermission();
                 setNotifStatus(res);
                 if (res === 'granted') {
@@ -216,7 +227,7 @@ export function SettingsScreen({
                 } else if (res === 'denied') {
                   showMsg('Notifications were blocked. Please enable them in your browser site settings.');
                 }
-              }}
+              }, event.currentTarget); }}
               className="v-pill-btn v-pill-btn-primary"
               style={{ padding: '8px 20px', fontSize: 13 }}
             >
@@ -227,10 +238,10 @@ export function SettingsScreen({
 
           <button
             type="button"
-            onClick={async () => {
+            onClick={event => { void withActionFeedback('Testing sound and alert', async () => {
               await sendPomodoroNotification('test', { taskTitle: 'Sample Task' });
               showMsg('Played chime & sent test notification!');
-            }}
+            }, event.currentTarget); }}
             className="v-pill-btn"
             style={{ padding: '8px 18px', fontSize: 13 }}
           >
@@ -308,7 +319,7 @@ export function SettingsScreen({
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button
             type="button"
-            onClick={handleExport}
+              onClick={event => { void handleExport(event.currentTarget); }}
             className="v-pill-btn"
             style={{ padding: '8px 18px', fontSize: 13 }}
           >

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import {
   CalendarRange, CheckCircle2, AlertCircle, Sparkles, Clock, Save,
   ChevronLeft, ChevronRight, FileText, Target, BookOpen, Video, ShieldAlert,
@@ -183,6 +184,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
       syncEngine.notifyLocalMutation();
     } catch (err: any) {
       setValidationError('Could not generate weekly report: ' + (err.message || 'Unknown error'));
+      throw err;
     } finally {
       setGeneratingReport(false);
     }
@@ -290,7 +292,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
       </div>
 
       {/* ── 4. Detailed Weekly Planning Form ── */}
-      <form onSubmit={handleSaveWeeklyPlan}>
+      <form onSubmit={event => { void withActionFeedback('Saving weekly plan', () => handleSaveWeeklyPlan(event), event.currentTarget); }}>
         <div className="v-card" style={{ padding: '24px 22px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           {/* Header with live word counter */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
@@ -430,7 +432,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
 
             <button
               type="button"
-              onClick={handleGenerateReport}
+              onClick={event => { void withActionFeedback('Generating weekly report', handleGenerateReport, event.currentTarget); }}
               disabled={generatingReport || !prompt.trim()}
               className="v-pill-btn"
               style={{ minHeight: 44, padding: '0 18px', gap: 6 }}

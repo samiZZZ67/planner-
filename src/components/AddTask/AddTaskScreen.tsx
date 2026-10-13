@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import {
   Plus, Clock, Calendar, Tag, AlertCircle, ChevronDown, ChevronUp,
   Target, FileText, Layers, Flag, CheckSquare, X
@@ -325,7 +326,7 @@ export function AddTaskScreen({ currentDate, onChangeDate, isPhone, onTaskAdded 
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>hrs</span>
               <button
                 type="button"
-                onClick={handleSaveBudget}
+                onClick={event => { void withActionFeedback('Saving focus budget', handleSaveBudget, event.currentTarget); }}
                 className="v-pill-btn"
                 style={{ padding: '4px 12px', fontSize: 12, minHeight: 32 }}
               >
@@ -387,7 +388,7 @@ export function AddTaskScreen({ currentDate, onChangeDate, isPhone, onTaskAdded 
       </div>
 
       {/* ── Task Form ── */}
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={event => { void withActionFeedback('Adding task', () => handleSubmit(event), event.currentTarget); }}>
         <div className="v-card" style={{ overflow: 'visible' }}>
           {/* Title — always visible / acts as collapsible header */}
           <div

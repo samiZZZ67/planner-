@@ -25,6 +25,7 @@ import { MasterLockScreen } from '@/components/Auth/MasterLockScreen';
 import { AIChatPanel } from '@/components/Chat/AIChatPanel';
 import { FreeLLMAssistant } from '@/components/FreeLLM/FreeLLMAssistant';
 import { apiFetch } from '@/lib/api/apiClient';
+import { ActionFeedbackHost } from '@/components/Shared/ActionFeedbackHost';
 
 export default function SamsSpaceApp() {
   const { isPhone, isPC } = useDeviceType();
@@ -300,6 +301,7 @@ export default function SamsSpaceApp() {
 
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-start overflow-x-hidden selection:bg-sky-500/30 selection:text-white">
+      <ActionFeedbackHost />
       {/* ── 1. Room Backdrop ── */}
       <div className="vision-room-bg" />
 

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import { DEFAULT_SECTIONS } from '@/lib/db';
 import {
   Tag, Plus, Trash2, Edit2, Check, ChevronDown, ChevronUp,
@@ -543,7 +544,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button type="button" onClick={addSection} className="v-pill-btn v-pill-btn-primary" style={{ flex: 1 }}>
+              <button type="button" onClick={event => { void withActionFeedback('Adding category', addSection, event.currentTarget); }} className="v-pill-btn v-pill-btn-primary" style={{ flex: 1 }}>
                 <Plus size={14} /> Create Category
               </button>
               <button type="button" onClick={() => setShowNewSection(false)} className="v-pill-btn" style={{ flex: 1 }}>
@@ -626,7 +627,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                 </button>
                 <button
                   type="button"
-                  onClick={e => { e.stopPropagation(); deleteSection(sec.id); }}
+                  onClick={e => { e.stopPropagation(); void withActionFeedback('Deleting category', () => deleteSection(sec.id), e.currentTarget); }}
                   className="v-circle-btn"
                   style={{ width: 30, height: 30, color: '#f87171' }}
                   aria-label="Delete category"
@@ -701,7 +702,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                       <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
                         <button
                           type="button"
-                          onClick={() => handleCreateTaskInCategory(sec.id)}
+                          onClick={event => { void withActionFeedback('Adding task', () => handleCreateTaskInCategory(sec.id), event.currentTarget); }}
                           className="v-pill-btn v-pill-btn-primary"
                           style={{ padding: '4px 14px', fontSize: 12, minHeight: 32 }}
                         >
@@ -759,7 +760,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                           {/* Checkbox */}
                           <button
                             type="button"
-                            onClick={e => { e.stopPropagation(); toggleComplete(task); }}
+                            onClick={e => { e.stopPropagation(); void withActionFeedback(task.isCompleted ? 'Updating task' : 'Completing task', () => toggleComplete(task), e.currentTarget); }}
                             style={{
                               width: 22,
                               height: 22,
@@ -849,7 +850,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                             </button>
                             <button
                               type="button"
-                              onClick={e => { e.stopPropagation(); deleteTask(task.id); }}
+                              onClick={e => { e.stopPropagation(); void withActionFeedback('Deleting task', () => deleteTask(task.id), e.currentTarget); }}
                               className="v-circle-btn"
                               style={{ width: 28, height: 28, color: '#f87171' }}
                               aria-label="Delete task"
@@ -934,7 +935,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                                   </div>
                                 </div>
                                 <div style={{ display: 'flex', gap: 10 }}>
-                                  <button type="button" onClick={() => saveTask(task)} className="v-pill-btn v-pill-btn-primary" style={{ flex: 1, gap: 6 }}>
+                                  <button type="button" onClick={event => { void withActionFeedback('Saving task', () => saveTask(task), event.currentTarget); }} className="v-pill-btn v-pill-btn-primary" style={{ flex: 1, gap: 6 }}>
                                     <Save size={14} /> Save Changes
                                   </button>
                                   <button type="button" onClick={cancelEditing} className="v-pill-btn" style={{ flex: 1 }}>

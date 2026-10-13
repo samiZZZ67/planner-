@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db, saveTaskDraft, getTaskDraft, clearTaskDraft } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import { compressImage } from '@/lib/utils/image';
 import { STRATEGY_COLORS } from '@/lib/utils/colors';
 import {
@@ -382,7 +383,7 @@ export function TaskFormModal({
             {existingTask && (
               <button
                 type="button"
-                onClick={handleDelete}
+                onClick={event => { void withActionFeedback('Deleting task', handleDelete, event.currentTarget); }}
                 className="g-btn"
                 style={{ padding: '6px 12px', fontSize: 12, color: 'rgba(239,68,68,0.8)', borderColor: 'rgba(239,68,68,0.2)' }}
                 aria-label="Delete task"
@@ -402,7 +403,7 @@ export function TaskFormModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSave} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 18, flex: 1, overflowY: 'auto' }}>
+        <form onSubmit={event => { void withActionFeedback(existingTask ? 'Updating task' : 'Adding task', () => handleSave(event), event.currentTarget); }} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 18, flex: 1, overflowY: 'auto' }}>
           {mustDoWarning && (
             <div style={{ padding: '10px 14px', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.25)', borderRadius: 12, fontSize: 12, color: 'rgba(234,179,8,0.9)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <AlertCircle size={15} style={{ flexShrink: 0 }} />
@@ -846,7 +847,7 @@ export function TaskFormModal({
           </button>
 
           <button
-            onClick={handleSave}
+            type="submit"
             disabled={!title.trim()}
             className="g-btn g-btn-primary"
             style={{ padding: '9px 24px', display: 'flex', alignItems: 'center', gap: 7, opacity: !title.trim() ? 0.4 : 1 }}

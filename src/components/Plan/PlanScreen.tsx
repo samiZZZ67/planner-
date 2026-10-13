@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import { getPreviousDayData } from '@/lib/plan/autoPlan';
 import { useTimer } from '@/lib/timer/useTimer';
 import {
@@ -381,7 +382,7 @@ export function PlanScreen({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
             <button
               type="button"
-              onClick={() => handleMoveTask(t.id, 'up')}
+              onClick={event => { void withActionFeedback('Reordering task', () => handleMoveTask(t.id, 'up'), event.currentTarget); }}
               style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0, lineHeight: 1 }}
               title="Move Up"
               aria-label="Move task up"
@@ -390,7 +391,7 @@ export function PlanScreen({
             </button>
             <button
               type="button"
-              onClick={() => handleMoveTask(t.id, 'down')}
+              onClick={event => { void withActionFeedback('Reordering task', () => handleMoveTask(t.id, 'down'), event.currentTarget); }}
               style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', padding: 0, lineHeight: 1 }}
               title="Move Down"
               aria-label="Move task down"
@@ -401,7 +402,7 @@ export function PlanScreen({
 
           {/* Checkbox */}
           <button
-            onClick={() => handleToggleTask(t)}
+            onClick={event => { void withActionFeedback(t.isCompleted ? 'Updating task' : 'Completing task', () => handleToggleTask(t), event.currentTarget); }}
             style={{
               background: 'none',
               border: 'none',
@@ -514,7 +515,7 @@ export function PlanScreen({
               <Edit2 size={12} />
             </button>
             <button
-              onClick={() => handleDeleteTask(t.id)}
+              onClick={event => { void withActionFeedback('Deleting task', () => handleDeleteTask(t.id), event.currentTarget); }}
               style={{ background: 'none', border: 'none', color: 'rgba(239, 68, 68, 0.45)', cursor: 'pointer', padding: 2 }}
               title="Delete Task"
             >
@@ -546,7 +547,7 @@ export function PlanScreen({
                 <button
                   key={mins}
                   type="button"
-                  onClick={() => handleUpdateTaskTime(t.id, mins)}
+                  onClick={event => { void withActionFeedback('Updating task time', () => handleUpdateTaskTime(t.id, mins), event.currentTarget); }}
                   style={{
                     fontSize: 9,
                     fontWeight: 700,
@@ -579,7 +580,7 @@ export function PlanScreen({
                 <button
                   key={lvl}
                   type="button"
-                  onClick={() => handleUpdateTaskPriority(t.id, lvl)}
+                  onClick={event => { void withActionFeedback('Updating task priority', () => handleUpdateTaskPriority(t.id, lvl), event.currentTarget); }}
                   style={{
                     fontSize: 9,
                     fontWeight: 700,
@@ -683,7 +684,7 @@ export function PlanScreen({
               <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)' }}>Budget:</span>
               <button
                 type="button"
-                onClick={() => handleUpdateFreeHours(freeHours - 0.5)}
+                onClick={event => { void withActionFeedback('Updating available hours', () => handleUpdateFreeHours(freeHours - 0.5), event.currentTarget); }}
                 style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer', fontSize: 11, padding: '0 3px', fontWeight: 700 }}
                 title="Decrease budget by 0.5h"
               >
@@ -694,7 +695,7 @@ export function PlanScreen({
               </span>
               <button
                 type="button"
-                onClick={() => handleUpdateFreeHours(freeHours + 0.5)}
+                onClick={event => { void withActionFeedback('Updating available hours', () => handleUpdateFreeHours(freeHours + 0.5), event.currentTarget); }}
                 style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer', fontSize: 11, padding: '0 3px', fontWeight: 700 }}
                 title="Increase budget by 0.5h"
               >
@@ -1014,8 +1015,10 @@ export function PlanScreen({
                 <form
                   onSubmit={e => {
                     e.preventDefault();
-                    createQuickTask(newGoalTitle, newGoalTime, newGoalPriority, { mustDo: true });
-                    setNewGoalTitle('');
+                    void withActionFeedback('Adding goal', async () => {
+                      await createQuickTask(newGoalTitle, newGoalTime, newGoalPriority, { mustDo: true });
+                      setNewGoalTitle('');
+                    }, e.currentTarget);
                   }}
                   style={{
                     display: 'flex',
@@ -1129,8 +1132,10 @@ export function PlanScreen({
               <form
                 onSubmit={e => {
                   e.preventDefault();
-                  createQuickTask(newCallTitle, newCallTime, 'Medium', { tags: ['call'], icon: '📞' });
-                  setNewCallTitle('');
+                  void withActionFeedback('Adding call', async () => {
+                    await createQuickTask(newCallTitle, newCallTime, 'Medium', { tags: ['call'], icon: '📞' });
+                    setNewCallTitle('');
+                  }, e.currentTarget);
                 }}
                 style={{ display: 'flex', gap: 6, marginTop: 4, borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: 6 }}
               >
@@ -1185,8 +1190,10 @@ export function PlanScreen({
               <form
                 onSubmit={e => {
                   e.preventDefault();
-                  createQuickTask(newErrandTitle, newErrandTime, 'Medium', { tags: ['errand'], icon: '🏃' });
-                  setNewErrandTitle('');
+                  void withActionFeedback('Adding errand', async () => {
+                    await createQuickTask(newErrandTitle, newErrandTime, 'Medium', { tags: ['errand'], icon: '🏃' });
+                    setNewErrandTitle('');
+                  }, e.currentTarget);
                 }}
                 style={{ display: 'flex', gap: 6, marginTop: 4, borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: 6 }}
               >
@@ -1248,8 +1255,10 @@ export function PlanScreen({
               <form
                 onSubmit={e => {
                   e.preventDefault();
-                  createQuickTask(newTodoTitle, newTodoTime, newTodoPriority, {});
-                  setNewTodoTitle('');
+                  void withActionFeedback('Adding task', async () => {
+                    await createQuickTask(newTodoTitle, newTodoTime, newTodoPriority, {});
+                    setNewTodoTitle('');
+                  }, e.currentTarget);
                 }}
                 style={{
                   display: 'flex',

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import { useTimer } from '@/lib/timer/useTimer';
 import {
   Calendar, Check, Play, Pause, Square as StopIcon,
@@ -1127,7 +1128,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
 
       {/* ── 3. ADD TASK BOX WITH FORMATTING TOOLBAR ── */}
       <form
-        onSubmit={handleAddTask}
+        onSubmit={event => { void withActionFeedback('Adding task', () => handleAddTask(event), event.currentTarget); }}
         className="v-card"
         style={{
           padding: isPhone ? '18px 16px' : '22px 28px',
@@ -1477,7 +1478,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleSaveEdit(task.id)}
+                          onClick={event => { void withActionFeedback('Saving task', () => handleSaveEdit(task.id), event.currentTarget); }}
                           className="v-pill-btn v-pill-btn-primary"
                           style={{ padding: '6px 16px', fontSize: 12 }}
                         >
@@ -1493,7 +1494,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                       {/* Checkbox */}
                       <button
                         type="button"
-                        onClick={() => handleToggleTask(task)}
+                        onClick={event => { void withActionFeedback(task.isCompleted ? 'Updating task' : 'Completing task', () => handleToggleTask(task), event.currentTarget); }}
                         style={{
                           width: 24,
                           height: 24,
@@ -1574,7 +1575,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                         <button
                           type="button"
-                          onClick={() => handleToggleTaskFormat(task, 'bold')}
+                          onClick={event => { void withActionFeedback('Updating task style', () => handleToggleTaskFormat(task, 'bold'), event.currentTarget); }}
                           className="v-circle-btn"
                           style={{
                             width: 30,
@@ -1589,7 +1590,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
 
                         <button
                           type="button"
-                          onClick={() => handleToggleTaskFormat(task, 'strikethrough')}
+                          onClick={event => { void withActionFeedback('Updating task style', () => handleToggleTaskFormat(task, 'strikethrough'), event.currentTarget); }}
                           className="v-circle-btn"
                           style={{
                             width: 30,
@@ -1604,7 +1605,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
 
                         <button
                           type="button"
-                          onClick={() => handleToggleTaskFormat(task, 'color')}
+                          onClick={event => { void withActionFeedback('Updating task color', () => handleToggleTaskFormat(task, 'color'), event.currentTarget); }}
                           className="v-circle-btn"
                           style={{
                             width: 30,
@@ -1629,7 +1630,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
 
                         <button
                           type="button"
-                          onClick={() => handleDeleteTask(task.id)}
+                          onClick={event => { void withActionFeedback('Deleting task', () => handleDeleteTask(task.id), event.currentTarget); }}
                           className="v-circle-btn"
                           style={{ width: 30, height: 30, color: '#f87171' }}
                           title="Delete Task"

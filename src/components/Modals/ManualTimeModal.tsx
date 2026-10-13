@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import { X, Clock, Plus } from 'lucide-react';
 import type { TimeLog } from '@/types';
 
@@ -106,7 +107,7 @@ export function ManualTimeModal({ taskId, taskTitle, isOpen, onClose }: ManualTi
           {[15, 30, 45, 60, 90, 120].map(m => (
             <button
               key={m}
-              onClick={() => handleAdd(m)}
+              onClick={event => { void withActionFeedback('Logging time', () => handleAdd(m), event.currentTarget); }}
               className="g-btn"
               style={{ padding: '8px 0', textAlign: 'center', fontSize: 12, fontWeight: 600 }}
             >
@@ -132,7 +133,7 @@ export function ManualTimeModal({ taskId, taskTitle, isOpen, onClose }: ManualTi
               style={{ flex: 1 }}
             />
             <button
-              onClick={() => handleAdd(minutes)}
+              onClick={event => { void withActionFeedback('Logging time', () => handleAdd(minutes), event.currentTarget); }}
               className="g-btn g-btn-primary"
               style={{ padding: '0 16px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}
             >

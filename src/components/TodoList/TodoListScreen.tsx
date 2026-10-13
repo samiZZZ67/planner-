@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
+import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import { useTimer } from '@/lib/timer/useTimer';
 import {
   ListChecks, Check, CheckCircle2, Clock, Play, Pause, Square as StopIcon,
@@ -403,7 +404,7 @@ export function TodoListScreen({
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>hrs</span>
               <button
                 type="button"
-                onClick={handleSaveBudget}
+                onClick={event => { void withActionFeedback('Saving focus budget', handleSaveBudget, event.currentTarget); }}
                 className="v-pill-btn"
                 style={{ padding: '4px 10px', fontSize: 12, minHeight: 30 }}
               >
@@ -618,7 +619,7 @@ export function TodoListScreen({
 
       {/* Inline Quick Add Form */}
       {showInlineAdd && (
-        <form onSubmit={handleInlineAdd}>
+        <form onSubmit={event => { void withActionFeedback('Adding task', () => handleInlineAdd(event), event.currentTarget); }}>
           <div className="v-card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <input
               type="text"
@@ -711,7 +712,7 @@ export function TodoListScreen({
                   {/* Clean round checkbox */}
                   <button
                     type="button"
-                    onClick={() => handleToggleTask(task)}
+                    onClick={event => { void withActionFeedback(task.isCompleted ? 'Updating task' : 'Completing task', () => handleToggleTask(task), event.currentTarget); }}
                     style={{
                       width: 26,
                       height: 26,
@@ -915,7 +916,7 @@ export function TodoListScreen({
                     />
                     <button
                       type="button"
-                      onClick={() => handleSaveTaskTime(task.id)}
+                      onClick={event => { void withActionFeedback('Saving task time', () => handleSaveTaskTime(task.id), event.currentTarget); }}
                       className="v-pill-btn v-pill-btn-primary"
                       style={{ padding: '4px 12px', fontSize: 12, minHeight: 30 }}
                     >
