@@ -59,6 +59,29 @@ Add the following environment variables in your Render Web Service dashboard und
 | `GEMINI_MODEL` | Optional | `gemini-3.5-flash` | Gemini model name (`gemini-3.5-flash`, `gemini-3.8-flash`). |
 | `GROQ_API_KEY_1` | Optional | `gsk_...` | Primary Groq API key for zero-latency AI fallback. |
 | `GROQ_MODEL` | Optional | `openai/gpt-oss-20b` | Groq model name (`openai/gpt-oss-20b`, `openai/gpt-oss-120b`). |
+| `BOOK_DATA_DIR` | Recommended for book uploads | `/var/data` | Directory for private uploaded PDFs and cached OCR language data. Mount a persistent disk at the same path in Render. |
+| `TELEGRAM_BOT_TOKEN` | For Telegram publishing | *(BotFather token)* | Secret backend environment variable. Do not use a `NEXT_PUBLIC_` name or paste the token into chat. |
+| `TELEGRAM_CHAT_ID` | For Telegram publishing | `@your_channel` or numeric ID | Backend environment variable for the destination channel. The bot must be an administrator with permission to post. |
+| `BOOKS_CRON_SECRET` | For scheduled publishing | *(random secret, 32+ characters)* | Same secret on the web service and Render Cron service. It protects the scheduler endpoint. |
+| `PDF_OCR_LANGS` | Optional | `eng` | Tesseract OCR language code(s), joined with `+`, such as `eng+fra`. The first OCR run downloads language data unless `TESSERACT_LANG_PATH` is configured in the application environment. |
+
+For book PDFs on Render, attach a persistent disk to the **web service** at `/var/data` and set `BOOK_DATA_DIR=/var/data`. The PDF binary and OCR cache live on that disk; extracted page text and book metadata use Neon when `DATABASE_URL` is configured. Without the disk, PDF files stored on the service filesystem may be lost when the service is replaced.
+
+To connect Telegram, open Render **Dashboard → your NightPlanner web service → Environment**, add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, and redeploy. The connection check is available in the authenticated endpoint `GET /api/telegram/status`; delivery history is `GET /api/telegram/deliveries`. A manual publish request is `POST /api/books/{bookId}/assignments/{assignmentId}/publish` and requires an approved assignment. The application checks the bot's channel membership and posting permission before sending. Never include the bot token in frontend settings or client requests.
+
+### Scheduled Telegram publishing on Render
+
+Approved assignments create persistent publishing jobs using the book's configured local posting time and timezone. To run them without leaving the site open, create a **Cron Job** in Render using the same repository and deploy environment, set its schedule to `*/5 * * * *`, and use this command:
+
+```bash
+curl -fsS -X POST "$NIGHTPLANNER_URL/api/cron/books" -H "Authorization: Bearer $BOOKS_CRON_SECRET"
+```
+
+Set `NIGHTPLANNER_URL` to the deployed web service origin (for example `https://your-service.onrender.com`). Set `BOOKS_CRON_SECRET` on both services to the same random secret. The Cron service does not need the Telegram token; it calls the authenticated web service, which reads the token and sends the message. Render cron schedules use UTC; the scheduler compares stored UTC timestamps computed from each book's configured timezone. Render Cron Jobs cannot use a persistent disk, so use Neon (`DATABASE_URL`) for durable jobs and delivery history. If using the local JSON fallback, the web service needs its own persistent disk mounted at `/var/data`; that disk is only accessed by the web service. Render documents Cron Jobs' UTC schedules and lack of persistent-disk access [here](https://render.com/docs/cronjobs) and [here](https://render.com/docs/disks).
+
+Set these on the **Cron service**: `NIGHTPLANNER_URL`, `BOOKS_CRON_SECRET` (same as the web service), and no Telegram token. Use Neon (`DATABASE_URL`) for the web service job/delivery tables; the Cron trigger reaches them through the web service API.
+
+The protected trigger is `POST /api/cron/books`. `GET/POST /api/telegram/automation` reports or pauses/resumes automation. `PATCH /api/books/{bookId}/assignments/{assignmentId}/schedule` reschedules an approved assignment using its book timezone. Automatic sends require an approved assignment with reviewed, readable source pages. Only Telegram's explicit rate-limit response is retried automatically; delivery timeouts or ambiguous partial sends require checking the channel and delivery history to avoid duplicate posts.
 
 ---
 

@@ -3,10 +3,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BookOpen, Clock3, FileUp, LockKeyhole, TriangleAlert } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
-import type { BookRecord } from '@/lib/books/types';
+import type { BookAssignmentRecord, BookPageRecord, BookRecord, BookStudyNotes } from '@/lib/books/types';
 
 const fieldStyle: React.CSSProperties = { display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 };
 const inputStyle: React.CSSProperties = { width: '100%', minHeight: 42, borderRadius: 12, border: '1px solid var(--v-glass-border)', padding: '9px 12px', background: 'var(--v-glass-bg-subtle)', color: 'var(--text-primary)' };
+
+interface AssignmentDetail {
+  book: { title: string; author: string };
+  assignment: BookAssignmentRecord;
+  originalPages: BookPageRecord[];
+}
 
 export function BookPlannerScreen() {
   const [books, setBooks] = useState<BookRecord[]>([]);
@@ -16,6 +22,11 @@ export function BookPlannerScreen() {
   const [error, setError] = useState('');
   const [startPage, setStartPage] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [pagesByBook, setPagesByBook] = useState<Record<string, BookPageRecord[]>>({});
+  const [assignmentsByBook, setAssignmentsByBook] = useState<Record<string, BookAssignmentRecord[]>>({});
+  const [assignmentDetails, setAssignmentDetails] = useState<Record<string, AssignmentDetail>>({});
+  const [notesDrafts, setNotesDrafts] = useState<Record<string, BookStudyNotes>>({});
 
   const refresh = useCallback(async () => {
     try {
@@ -31,6 +42,149 @@ export function BookPlannerScreen() {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!processingId) return;
+    const timer = window.setInterval(() => { void refresh(); }, 2000);
+    return () => window.clearInterval(timer);
+  }, [processingId, refresh]);
+
+  async function extractBook(book: BookRecord) {
+    setError('');
+    setNotice('');
+    setProcessingId(book.id);
+    setBooks(current => current.map(item => item.id === book.id ? { ...item, status: 'processing', extractionStatus: 'processing', extractionProgress: { completedPages: 0, totalPages: book.endPage - book.startPage + 1 } } : item));
+    try {
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/extract`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'PDF extraction failed.');
+      setBooks(current => current.map(item => item.id === book.id ? data.book : item));
+      setNotice(data.book.extractionMessage);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'PDF extraction failed.');
+      await refresh();
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  async function previewPages(book: BookRecord) {
+    setError('');
+    const from = book.startPage;
+    const to = Math.min(book.endPage, from + 99);
+    try {
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/pages?from=${from}&to=${to}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not retrieve extracted pages.');
+      setPagesByBook(current => ({ ...current, [book.id]: data.pages || [] }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not retrieve extracted pages.');
+    }
+  }
+
+  async function markPageReviewed(book: BookRecord, pdfPage: number) {
+    setError('');
+    try {
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/pages/review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pdfPage }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not record the page review.');
+      setBooks(current => current.map(item => item.id === book.id ? data.book : item));
+      setPagesByBook(current => ({ ...current, [book.id]: (current[book.id] || []).map(page => page.pdfPage === pdfPage ? data.page : page) }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not record the page review.');
+    }
+  }
+
+  async function loadAssignments(book: BookRecord) {
+    setError('');
+    try {
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not load the plan.');
+      setAssignmentsByBook(current => ({ ...current, [book.id]: data.assignments || [] }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load the plan.');
+    }
+  }
+
+  async function generatePlan(book: BookRecord) {
+    setError('');
+    setNotice('');
+    setBusy(true);
+    try {
+      const model = localStorage.getItem('np_freellm_selected_model') || 'auto';
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Reading plan generation failed.');
+      setAssignmentsByBook(current => ({ ...current, [book.id]: data.assignments || [] }));
+      setNotice(`Draft plan created with ${data.assignments.length} reading assignments using ${data.model} via ${data.provider}.`);
+      if (data.issues?.length) setError(data.issues.join(' '));
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Reading plan generation failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openAssignment(book: BookRecord, assignment: BookAssignmentRecord) {
+    setError('');
+    try {
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(assignment.id)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not load this assignment.');
+      const detail = data as AssignmentDetail;
+      setAssignmentDetails(current => ({ ...current, [assignment.id]: detail }));
+      if (detail.assignment.studyNotes) setNotesDrafts(current => ({ ...current, [assignment.id]: detail.assignment.studyNotes! }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load this assignment.');
+    }
+  }
+
+  function updateAssignmentState(bookId: string, assignment: BookAssignmentRecord) {
+    setAssignmentsByBook(current => ({ ...current, [bookId]: (current[bookId] || []).map(item => item.id === assignment.id ? assignment : item) }));
+    setAssignmentDetails(current => current[assignment.id] ? { ...current, [assignment.id]: { ...current[assignment.id], assignment } } : current);
+    if (assignment.studyNotes) setNotesDrafts(current => ({ ...current, [assignment.id]: assignment.studyNotes! }));
+  }
+
+  async function generateNotes(book: BookRecord, assignment: BookAssignmentRecord) {
+    setError('');
+    setBusy(true);
+    try {
+      const model = localStorage.getItem('np_freellm_selected_model') || 'auto';
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(assignment.id)}/notes`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Study note generation failed.');
+      updateAssignmentState(book.id, data.assignment);
+      setNotice(`Study notes generated with ${data.model} via ${data.provider}. Original page text was not sent back as generated text.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Study note generation failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveNotes(book: BookRecord, assignment: BookAssignmentRecord, status: 'draft' | 'approved') {
+    const studyNotes = notesDrafts[assignment.id];
+    if (!studyNotes) return;
+    setError('');
+    try {
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(assignment.id)}/notes`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, studyNotes }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save study notes.');
+      updateAssignmentState(book.id, data.assignment);
+      setNotice(status === 'approved' ? `Day ${assignment.dayNumber} is approved. It is not published yet.` : 'Study-note edits saved as a draft.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save study notes.');
+    }
+  }
 
   async function handleUpload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,7 +222,7 @@ export function BookPlannerScreen() {
       <div className="v-card" style={{ padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start', borderColor: 'rgba(251,191,36,.45)' }}>
         <TriangleAlert size={19} color="#fbbf24" style={{ flexShrink: 0, marginTop: 2 }} />
         <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
-          <strong style={{ color: 'var(--text-primary)' }}>Exact text extraction is not configured.</strong> The PDF is kept as an original source file, but this app has no PDF text/OCR or image extraction engine. It will not create assignments, summaries, or Telegram posts from unverified text.
+          <strong style={{ color: 'var(--text-primary)' }}>PDF text extraction and OCR are available.</strong> Selectable text is extracted directly from PDF pages. Scanned pages use OCR and are marked as estimates that must be checked against the source before they can be used in study material.
         </div>
       </div>
 
@@ -84,6 +238,8 @@ export function BookPlannerScreen() {
           <label style={fieldStyle}>Starting PDF page<input name="startPage" type="number" min={1} value={startPage} onChange={event => { const next = Math.max(1, Number(event.target.value) || 1); setStartPage(next); if (currentPage < next) setCurrentPage(next); }} required style={inputStyle} /></label>
           <label style={fieldStyle}>Ending PDF page<input name="endPage" type="number" min={1} defaultValue={30} required style={inputStyle} /></label>
           <label style={fieldStyle}>Reading days<input name="durationDays" type="number" min={1} max={365} defaultValue={30} required style={inputStyle} /></label>
+          <label style={fieldStyle}>Plan start date<input name="startDate" type="date" defaultValue={new Date().toLocaleDateString('en-CA')} required style={inputStyle} /></label>
+          <label style={fieldStyle}>Study minutes per day<input name="studyMinutes" type="number" min={5} max={1440} defaultValue={60} required style={inputStyle} /></label>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
           <label style={fieldStyle}>Daily posting time<input name="postingTime" type="time" defaultValue="08:00" required style={inputStyle} /></label>
@@ -103,12 +259,70 @@ export function BookPlannerScreen() {
           <article key={book.id} style={{ padding: 14, borderRadius: 14, border: '1px solid var(--v-glass-border)', display: 'grid', gap: 9 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <div><strong>{book.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{book.author}</div></div>
-              <span style={{ fontSize: 12, color: '#fbbf24' }}>Draft · extraction pending</span>
+              <span style={{ fontSize: 12, color: book.extractionStatus === 'completed' ? '#86efac' : book.extractionStatus === 'failed' ? '#fca5a5' : '#fbbf24' }}>{book.status === 'processing' ? 'Extracting…' : `${book.status} · extraction ${book.extractionStatus.replace('_', ' ')}`}</span>
             </div>
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', color: 'var(--text-secondary)', fontSize: 12 }}>
               <span>PDF pages {book.startPage}–{book.endPage}</span><span>Current page {book.currentPage}</span><span>{book.durationDays} days</span><span><Clock3 size={13} style={{ verticalAlign: 'middle' }} /> {book.postingTime} · {book.timezone}</span><span><LockKeyhole size={13} style={{ verticalAlign: 'middle' }} /> Private server file</span>
             </div>
+            {book.extractionProgress && <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 12 }}>Progress: {book.extractionProgress.completedPages} / {book.extractionProgress.totalPages} selected pages</p>}
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5 }}>{book.extractionMessage}</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="v-pill-btn" disabled={processingId !== null} onClick={() => void extractBook(book)} style={{ padding: '8px 12px', cursor: processingId !== null ? 'wait' : 'pointer' }}>{processingId === book.id ? 'Extracting…' : book.extractionStatus === 'pending' ? 'Extract PDF text / OCR' : book.extractionStatus === 'processing' ? 'Resume / retry extraction' : 'Re-extract PDF pages'}</button>
+              {(book.extractionStatus === 'completed' || book.extractionStatus === 'needs_review') && <button type="button" className="v-pill-btn" onClick={() => void previewPages(book)} style={{ padding: '8px 12px' }}>Preview extracted pages</button>}
+            </div>
+            {pagesByBook[book.id]?.map(page => (
+              <section key={page.pdfPage} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 12, padding: 12 }}>
+                <strong style={{ fontSize: 13 }}>Original PDF page {page.pdfPage} · {page.method === 'ocr' ? `OCR estimate (${page.confidence?.toFixed(1) ?? '—'}%)${page.reviewedByUser ? ' · visually checked' : ''}` : page.method === 'empty' ? 'Unreadable / no text' : 'Selectable PDF text'}</strong>
+                {page.warnings.map(warning => <p key={warning} style={{ margin: '6px 0', color: '#fbbf24', fontSize: 12 }}>{warning}</p>)}
+                <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 360, overflow: 'auto', margin: '10px 0 0', font: '13px/1.6 ui-monospace,Consolas,monospace', color: 'var(--text-primary)' }}>{page.text || '[No text extracted from this page]'}</pre>
+                {page.requiresReview && page.text && !page.reviewedByUser && <button type="button" className="v-pill-btn" onClick={() => void markPageReviewed(book, page.pdfPage)} style={{ marginTop: 10, padding: '8px 12px' }}>I checked this page against the PDF</button>}
+              </section>
+            ))}
+            {book.extractionStatus === 'completed' && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" className="v-pill-btn" disabled={busy} onClick={() => void generatePlan(book)} style={{ padding: '8px 12px' }}>{busy ? 'Generating plan…' : 'Generate concept-based plan'}</button>
+              <button type="button" className="v-pill-btn" onClick={() => void loadAssignments(book)} style={{ padding: '8px 12px' }}>Load saved plan</button>
+            </div>}
+            {assignmentsByBook[book.id]?.map(assignment => (
+              <section key={assignment.id} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
+                <strong>Day {assignment.dayNumber} · {assignment.scheduledDate} · PDF pages {assignment.startPdfPage}–{assignment.endPdfPage}</strong>
+                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{assignment.status} · estimated {assignment.estimatedMinutes} minutes · original text remains in extracted pages</span>
+                <div style={{ display: 'grid', gap: 5 }}>{assignment.concepts.map((concept, index) => <div key={`${assignment.id}-${index}`} style={{ fontSize: 13 }}><strong>{concept.title}</strong><div style={{ color: 'var(--text-secondary)' }}>{concept.concept}</div></div>)}</div>
+                <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>Why this section: {assignment.rationale}</p>
+                <button type="button" className="v-pill-btn" onClick={() => void openAssignment(book, assignment)} style={{ justifySelf: 'start', padding: '8px 12px' }}>Review original reading and notes</button>
+                {assignmentDetails[assignment.id] && (() => {
+                  const detail = assignmentDetails[assignment.id];
+                  const draft = notesDrafts[assignment.id] || detail.assignment.studyNotes;
+                  return <div style={{ display: 'grid', gap: 12, paddingTop: 8 }}>
+                    <h4 style={{ margin: 0 }}>Complete original reading · PDF pages {assignment.startPdfPage}–{assignment.endPdfPage}</h4>
+                    {detail.originalPages.map(page => <section key={page.pdfPage} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 10, padding: 10 }}>
+                      <strong style={{ fontSize: 12 }}>Original PDF page {page.pdfPage}{page.method === 'ocr' ? ' · OCR, visually reviewed' : ''}</strong>
+                      <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflow: 'auto', margin: '8px 0 0', font: '13px/1.6 ui-monospace,Consolas,monospace' }}>{page.text}</pre>
+                    </section>)}
+                    <h4 style={{ margin: '8px 0 0' }}>AI-generated supplementary study notes</h4>
+                    {draft ? <div style={{ display: 'grid', gap: 10 }}>
+                      <label style={fieldStyle}>Concept summary<textarea style={{ ...inputStyle, minHeight: 90 }} value={draft.summary} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, summary: event.target.value } }))} /></label>
+                      <label style={fieldStyle}>Key concepts, one per line<textarea style={{ ...inputStyle, minHeight: 90 }} value={draft.keyConcepts.join('\n')} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, keyConcepts: event.target.value.split('\n') } }))} /></label>
+                      <div className="v-card" style={{ padding: 12, display: 'grid', gap: 8 }}>
+                        <strong>Real-life example · hypothetical</strong>
+                        <label style={fieldStyle}>Situation<textarea style={{ ...inputStyle, minHeight: 60 }} value={draft.example.situation} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, example: { ...draft.example, situation: event.target.value } } }))} /></label>
+                        <label style={fieldStyle}>Concept in action<textarea style={{ ...inputStyle, minHeight: 60 }} value={draft.example.conceptInAction} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, example: { ...draft.example, conceptInAction: event.target.value } } }))} /></label>
+                        <label style={fieldStyle}>Lesson<textarea style={{ ...inputStyle, minHeight: 60 }} value={draft.example.lesson} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, example: { ...draft.example, lesson: event.target.value } } }))} /></label>
+                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{draft.example.sourceDisclosure}</span>
+                      </div>
+                      <div style={{ display: 'grid', gap: 8 }}><strong>Definitions</strong>{draft.definitions.map((definition, index) => <p key={`${definition.term}-${index}`} style={{ margin: 0, fontSize: 13 }}><b>{definition.term}</b> — {definition.explanation} <span style={{ color: 'var(--text-muted)' }}>(PDF p. {definition.pdfPage})</span></p>)}</div>
+                      <div style={{ display: 'grid', gap: 8 }}><strong>Review questions and answers</strong>{draft.questions.map((item, index) => <div key={index} style={{ fontSize: 13 }}><p style={{ margin: '2px 0' }}><b>Q:</b> {item.question}</p><p style={{ margin: '2px 0' }}><b>A:</b> {item.answer} <span style={{ color: 'var(--text-muted)' }}>(PDF pp. {item.pdfPages.join(', ')})</span></p></div>)}</div>
+                      <label style={fieldStyle}>Study notes<textarea style={{ ...inputStyle, minHeight: 120 }} value={draft.notes} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, notes: event.target.value } }))} /></label>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Generated by {draft.generatedByModel}. {assignment.status === 'approved' ? 'Approved; change status to draft before editing.' : 'Review and edit this supplement before approval.'}</span>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button type="button" className="v-pill-btn" disabled={busy || assignment.status === 'approved'} onClick={() => void generateNotes(book, assignment)} style={{ padding: '8px 12px' }}>{busy ? 'Generating…' : assignment.studyNotes ? 'Regenerate notes' : 'Generate study notes'}</button>
+                        <button type="button" className="v-pill-btn" disabled={assignment.status === 'approved'} onClick={() => void saveNotes(book, assignment, 'draft')} style={{ padding: '8px 12px' }}>Save edits</button>
+                        <button type="button" className="v-pill-btn" disabled={assignment.status === 'approved'} onClick={() => void saveNotes(book, assignment, 'approved')} style={{ padding: '8px 12px' }}>Approve assignment</button>
+                      </div>
+                    </div> : <button type="button" className="v-pill-btn" disabled={busy} onClick={() => void generateNotes(book, assignment)} style={{ justifySelf: 'start', padding: '8px 12px' }}>{busy ? 'Generating…' : 'Generate study notes'}</button>}
+                  </div>;
+                })()}
+              </section>
+            ))}
           </article>
         ))}
       </div>

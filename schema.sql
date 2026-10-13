@@ -167,4 +167,76 @@ CREATE TABLE IF NOT EXISTS ai_messages (
     user_id VARCHAR(64) NOT NULL DEFAULT 'owner'
 );
 
+-- Book reading source documents and exact page-aware extracted text.
+CREATE TABLE IF NOT EXISTS books (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(64) NOT NULL,
+  data JSONB NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_books_user_updated ON books(user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS book_pages (
+  book_id VARCHAR(64) NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  user_id VARCHAR(64) NOT NULL,
+  pdf_page INTEGER NOT NULL,
+  text TEXT NOT NULL DEFAULT '',
+  method VARCHAR(16) NOT NULL,
+  confidence NUMERIC(5,2),
+  warnings JSONB NOT NULL DEFAULT '[]'::jsonb,
+  requires_review BOOLEAN NOT NULL DEFAULT FALSE,
+  reviewed_by_user BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at BIGINT NOT NULL,
+  PRIMARY KEY (book_id, pdf_page)
+);
+CREATE INDEX IF NOT EXISTS idx_book_pages_owner ON book_pages(user_id, book_id, pdf_page);
+
+CREATE TABLE IF NOT EXISTS book_assignments (
+  id VARCHAR(64) PRIMARY KEY,
+  book_id VARCHAR(64) NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  user_id VARCHAR(64) NOT NULL,
+  scheduled_date DATE NOT NULL,
+  start_pdf_page INTEGER NOT NULL,
+  end_pdf_page INTEGER NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'draft',
+  data JSONB NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_book_assignments_owner_date ON book_assignments(user_id, book_id, scheduled_date);
+
+-- Telegram delivery state; unique per owner and reading assignment to prevent duplicate sends.
+CREATE TABLE IF NOT EXISTS telegram_deliveries (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(64) NOT NULL,
+  book_id VARCHAR(64) NOT NULL,
+  assignment_id VARCHAR(64) NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  data JSONB NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE(user_id, assignment_id)
+);
+CREATE INDEX IF NOT EXISTS idx_telegram_deliveries_owner ON telegram_deliveries(user_id, updated_at DESC);
+
+-- Durable scheduling metadata used by the Render Cron trigger.
+CREATE TABLE IF NOT EXISTS book_publish_jobs (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id VARCHAR(64) NOT NULL,
+  book_id VARCHAR(64) NOT NULL,
+  assignment_id VARCHAR(64) NOT NULL,
+  scheduled_at BIGINT NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  data JSONB NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE(user_id, assignment_id)
+);
+CREATE INDEX IF NOT EXISTS idx_book_publish_jobs_due ON book_publish_jobs(status, scheduled_at);
+CREATE TABLE IF NOT EXISTS book_publish_settings (
+  user_id VARCHAR(64) PRIMARY KEY,
+  paused BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at BIGINT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_ai_messages_conv ON ai_messages(conversation_id);

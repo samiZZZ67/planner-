@@ -7,8 +7,8 @@ export async function GET(request: Request, context: RouteContext<'/api/books/[i
   const session = await getSessionUser(request);
   if (!session) return NextResponse.json({ error: 'Sign in to access this PDF.' }, { status: 401 });
   const { id } = await context.params;
-  const book = getBook(session.userId, id);
-  const filePath = getBookPdfPath(session.userId, id);
+  const book = await getBook(session.userId, id);
+  const filePath = await getBookPdfPath(session.userId, id);
   if (!book || !filePath) return NextResponse.json({ error: 'Book not found.' }, { status: 404 });
   try {
     const bytes = await fs.readFile(filePath);

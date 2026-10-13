@@ -1018,12 +1018,19 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     activeRequestRef.current = requestController;
 
     try {
+      const chatHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      try {
+        const sessionToken = localStorage.getItem('np_session_token');
+        if (sessionToken) chatHeaders.Authorization = `Bearer ${sessionToken}`;
+      } catch {
+        // The same-origin session cookie remains available when browser storage is restricted.
+      }
       const response = await fetchWithTimeout(
         '/api/ai/freellm/chat',
         {
           method: 'POST',
           signal: requestController.signal,
-          headers: { 'Content-Type': 'application/json' },
+          headers: chatHeaders,
           body: JSON.stringify({
             messages: updated
               .filter(m => m.id !== 'msg-greeting' && !m.id.startsWith('err-'))

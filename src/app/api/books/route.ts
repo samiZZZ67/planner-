@@ -9,7 +9,7 @@ const MAX_PDF_BYTES = 100 * 1024 * 1024;
 export async function GET(request: Request) {
   const session = await getSessionUser(request);
   if (!session) return NextResponse.json({ error: 'Sign in to access your book planner.' }, { status: 401 });
-  return NextResponse.json({ books: listBooks(session.userId) });
+  return NextResponse.json({ books: await listBooks(session.userId) });
 }
 
 export async function POST(request: Request) {
@@ -25,6 +25,8 @@ export async function POST(request: Request) {
     const endPage = Number(form.get('endPage'));
     const durationDays = Number(form.get('durationDays'));
     const currentPage = Number(form.get('currentPage'));
+    const startDate = String(form.get('startDate') || new Date().toISOString().slice(0, 10));
+    const studyMinutes = Number(form.get('studyMinutes') || 60);
     const postingTime = String(form.get('postingTime') || '08:00');
     const timezone = String(form.get('timezone') || 'Africa/Nairobi');
     const metadata = String(form.get('metadata') || '').trim().slice(0, 2000);
@@ -32,7 +34,7 @@ export async function POST(request: Request) {
     if (!(file instanceof File) || file.size < 5 || file.size > MAX_PDF_BYTES) {
       return NextResponse.json({ error: 'Choose a PDF smaller than 100 MB.' }, { status: 400 });
     }
-    if (!title || !author || !Number.isInteger(startPage) || !Number.isInteger(endPage) || startPage < 1 || endPage < startPage || !Number.isInteger(currentPage) || currentPage < startPage || currentPage > endPage || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) {
+    if (!title || !author || !Number.isInteger(startPage) || !Number.isInteger(endPage) || startPage < 1 || endPage < startPage || !Number.isInteger(currentPage) || currentPage < startPage || currentPage > endPage || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365 || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || Number.isNaN(Date.parse(`${startDate}T12:00:00Z`)) || !Number.isInteger(studyMinutes) || studyMinutes < 5 || studyMinutes > 1440) {
       return NextResponse.json({ error: 'Enter a title, author, valid page range, and duration between 1 and 365 days.' }, { status: 400 });
     }
     if (!/^\d{2}:\d{2}$/.test(postingTime) || !Number.isFinite(Date.parse(`1970-01-01T${postingTime}:00Z`))) {
@@ -58,12 +60,12 @@ export async function POST(request: Request) {
     const record: BookRecord = {
       id, userId: session.userId, title, author, metadata,
       originalFilename: file.name.slice(0, 255), storedFilename: `${id}.pdf`, fileSize: file.size,
-      startPage, endPage, durationDays, postingTime, timezone, currentPage,
+      startPage, endPage, durationDays, startDate, studyMinutes, postingTime, timezone, currentPage,
       status: 'draft', extractionStatus: 'pending',
       extractionMessage: 'PDF saved privately. Exact page extraction is unavailable until a PDF text and image extraction engine is configured; no reading text or plan has been fabricated.',
       createdAt: now, updatedAt: now,
     };
-    saveBook(record, bytes);
+    await saveBook(record, bytes);
     return NextResponse.json({ book: record }, { status: 201 });
   } catch (error) {
     console.error('[Books API] Could not save PDF or book record:', error);
