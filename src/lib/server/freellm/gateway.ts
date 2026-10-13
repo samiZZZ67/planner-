@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import {
   CatalogModel,
   VERIFIED_FREE_MODELS,
@@ -9,6 +11,61 @@ export interface FreeLLMGatewayConfig {
   baseUrl: string;
   apiKey?: string;
   defaultModel: string;
+}
+
+interface SavedGatewayOverride {
+  baseUrl?: string;
+  apiKey?: string;
+}
+
+let runtimeOverride: SavedGatewayOverride | null = null;
+const CONFIG_FILE_PATH = path.join(process.cwd(), '.data', 'freellm_config.json');
+
+function loadRuntimeOverride(): SavedGatewayOverride {
+  if (process.env.VITEST) return runtimeOverride || {};
+  if (runtimeOverride) return runtimeOverride;
+  try {
+    if (fs.existsSync(CONFIG_FILE_PATH)) {
+      const raw = fs.readFileSync(CONFIG_FILE_PATH, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        runtimeOverride = {
+          baseUrl: typeof parsed.baseUrl === 'string' && parsed.baseUrl.trim() ? parsed.baseUrl.trim() : undefined,
+          apiKey: typeof parsed.apiKey === 'string' && parsed.apiKey.trim() ? parsed.apiKey.trim() : undefined,
+        };
+        return runtimeOverride;
+      }
+    }
+  } catch {
+    // Ignore file read errors in serverless/test environments
+  }
+  runtimeOverride = {};
+  return runtimeOverride;
+}
+
+export function setGatewayRuntimeConfig(update: { baseUrl?: string; apiKey?: string; clear?: boolean }): void {
+  if (update.clear) {
+    runtimeOverride = {};
+    try {
+      if (fs.existsSync(CONFIG_FILE_PATH)) fs.unlinkSync(CONFIG_FILE_PATH);
+    } catch {}
+    return;
+  }
+  const current = loadRuntimeOverride();
+  runtimeOverride = {
+    baseUrl: update.baseUrl !== undefined ? update.baseUrl.trim() || undefined : current.baseUrl,
+    apiKey: update.apiKey !== undefined ? update.apiKey.trim() || undefined : current.apiKey,
+  };
+  if (process.env.VITEST) return;
+  try {
+    const dir = path.dirname(CONFIG_FILE_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(runtimeOverride, null, 2), 'utf8');
+  } catch {
+    // Ignore write errors in read-only environments
+  }
 }
 
 export interface ChatMessage {
@@ -45,6 +102,9 @@ export interface GatewayStatusResult {
   models: string[];
   catalog: CatalogModel[];
   error?: string;
+  authError?: boolean;
+  keyConfigured?: boolean;
+  maskedKey?: string;
   fallbackReady: boolean;
 }
 
@@ -60,22 +120,23 @@ export const POPULAR_FREE_MODELS = VERIFIED_FREE_MODELS.filter(m => m.isPopular)
  * Get server-configured FreeLLMAPI Gateway settings
  */
 export function getGatewayConfig(): FreeLLMGatewayConfig {
+  const override = loadRuntimeOverride();
   let url =
+    override.baseUrl ||
+    process.env.FREELLM_API_BASE_URL ||
     process.env.FREE_LLM_API_URL ||
     process.env.FREELLM_API_URL ||
-    process.env.FREELLM_API_BASE_URL ||
     process.env.FREE_LLM_GATEWAY_URL ||
     process.env.FREE_LLM_API_BASE_URL ||
-    (process.env.NODE_ENV === 'production'
-      ? 'https://free-llm-api-7fue.onrender.com/v1'
-      : 'http://localhost:3001');
+    'https://free-llm-api-7fue.onrender.com/v1';
 
   // Normalize: remove trailing slash
   url = url.trim().replace(/\/+$/, '');
 
   const apiKey =
-    process.env.FREE_LLM_API_KEY ||
+    override.apiKey ||
     process.env.FREELLM_API_KEY ||
+    process.env.FREE_LLM_API_KEY ||
     process.env.FREE_LLM_GATEWAY_KEY ||
     process.env.UNIFIED_API_KEY ||
     process.env.FREEAPI_UNIFIED_KEY ||
@@ -115,6 +176,19 @@ export function resolveModelsUrl(baseUrl: string): string {
 }
 
 /**
+ * Normalizes URL to target the FreeLLMAPI /api/ping health check endpoint
+ */
+export function resolvePingUrl(baseUrl: string): string {
+  const clean = baseUrl
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/v1\/(models|chat\/completions)$/i, '')
+    .replace(/\/(models|chat\/completions)$/i, '')
+    .replace(/\/v1$/i, '');
+  return `${clean}/api/ping`;
+}
+
+/**
  * Check if the FreeLLMAPI Gateway is online and retrieve all available models dynamically
  */
 export async function checkGatewayStatus(
@@ -124,6 +198,8 @@ export async function checkGatewayStatus(
   const config = getGatewayConfig();
   const targetBaseUrl = (customUrl || config.baseUrl).trim().replace(/\/+$/, '');
   const apiKey = customKey !== undefined ? customKey : config.apiKey;
+  const keyConfigured = Boolean(apiKey && apiKey.trim().length > 0);
+  const maskedKey = keyConfigured && apiKey ? `••••${apiKey.trim().slice(-4)}` : undefined;
 
   const modelsUrl = resolveModelsUrl(targetBaseUrl);
   const startTime = Date.now();
@@ -158,17 +234,26 @@ export async function checkGatewayStatus(
     const data = parsed.json;
 
     if (!res.ok) {
+      const isAuthErr = res.status === 401 || res.status === 403;
       const detail = parsed.isHtml
         ? `HTML (${res.status}, ${res.headers?.get?.('content-type') || 'unknown content type'}): ${parsed.text.slice(0, 160)}`
         : data?.error?.message || parsed.text.slice(0, 160);
+      const authHint = isAuthErr
+        ? keyConfigured
+          ? ' (Verify FREELLM_API_KEY matches UNIFIED_API_KEY on your FreeLLMAPI service)'
+          : ' (Paste your Unified API Key in Settings or set FREELLM_API_KEY in Render)'
+        : '';
       return {
         online: false,
         gatewayUrl: targetBaseUrl,
         latencyMs,
         models: [],
         catalog: [],
+        authError: isAuthErr,
+        keyConfigured,
+        maskedKey,
         fallbackReady: hasFallback,
-        error: `Model discovery failed at ${modelsUrl}: HTTP ${res.status} ${res.statusText}; ${detail || 'request failed'}`,
+        error: `Model discovery failed at ${modelsUrl}: HTTP ${res.status} ${res.statusText}; ${detail || 'request failed'}${authHint}`,
       };
     }
 
@@ -181,15 +266,27 @@ export async function checkGatewayStatus(
     } else {
       const detail = parsed.isHtml
         ? `HTML (${res.status}, ${res.headers?.get?.('content-type') || 'unknown content type'}): ${parsed.text.slice(0, 160)}`
-        : `invalid JSON model-list shape (${res.headers?.get?.('content-type') || 'unknown content type'})`
+        : `invalid JSON model-list shape (${res.headers?.get?.('content-type') || 'unknown content type'})`;
       return {
-        online: false, gatewayUrl: targetBaseUrl, latencyMs, models: [], catalog: [],
+        online: false,
+        gatewayUrl: targetBaseUrl,
+        latencyMs,
+        models: [],
+        catalog: [],
+        keyConfigured,
+        maskedKey,
         fallbackReady: hasFallback,
         error: `Model discovery at ${modelsUrl} returned HTTP ${res.status} but not a model-list JSON response: ${detail}`,
       };
     }
 
-    const liveIds = rawModels
+    // If FreeLLMAPI attaches execution_status on models, prefer ready models when available
+    const readyFiltered = rawModels.filter(
+      (item: any) => item && typeof item === 'object' && item.execution_status === 'ready'
+    );
+    const effectiveRawModels = readyFiltered.length > 0 ? readyFiltered : rawModels;
+
+    const liveIds = effectiveRawModels
       .map((item: unknown) => {
         if (typeof item === 'string') return item;
         if (item && typeof item === 'object' && 'id' in item) return (item as { id?: unknown }).id;
@@ -197,9 +294,19 @@ export async function checkGatewayStatus(
       })
       .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0);
     if (liveIds.length === 0) {
-      return { online: false, gatewayUrl: targetBaseUrl, latencyMs, models: [], catalog: [], fallbackReady: hasFallback, error: `Model discovery at ${modelsUrl} returned an empty model list.` };
+      return {
+        online: false,
+        gatewayUrl: targetBaseUrl,
+        latencyMs,
+        models: [],
+        catalog: [],
+        keyConfigured,
+        maskedKey,
+        fallbackReady: hasFallback,
+        error: `Model discovery at ${modelsUrl} returned an empty model list.`,
+      };
     }
-    const liveCatalog = mergeDiscoveredModels(rawModels).filter(model => liveIds.includes(model.id));
+    const liveCatalog = mergeDiscoveredModels(effectiveRawModels).filter(model => liveIds.includes(model.id));
 
     return {
       online: true,
@@ -207,6 +314,8 @@ export async function checkGatewayStatus(
       latencyMs,
       models: liveIds,
       catalog: liveCatalog,
+      keyConfigured,
+      maskedKey,
       fallbackReady: hasFallback,
     };
   } catch (err: any) {
@@ -217,6 +326,8 @@ export async function checkGatewayStatus(
       latencyMs,
       models: [],
       catalog: [],
+      keyConfigured,
+      maskedKey,
       fallbackReady: hasFallback,
       error:
         err.name === 'AbortError'
@@ -278,12 +389,12 @@ function getProviderKeys(prefix: 'GEMINI_API_KEY' | 'GROQ_API_KEY'): string[] {
 
 function getGatewayKeys(): Array<string | undefined> {
   const keys: string[] = [];
-  for (let slot = 1; slot <= 16; slot += 1) {
-    const key = process.env[`FREE_LLM_API_KEY_${slot}`]?.trim();
-    if (key && !keys.includes(key)) keys.push(key);
-  }
   const configuredKey = getGatewayConfig().apiKey?.trim();
   if (configuredKey && !keys.includes(configuredKey)) keys.push(configuredKey);
+  for (let slot = 1; slot <= 16; slot += 1) {
+    const key = process.env[`FREE_LLM_API_KEY_${slot}`]?.trim() || process.env[`FREELLM_API_KEY_${slot}`]?.trim();
+    if (key && !keys.includes(key)) keys.push(key);
+  }
   return keys.length ? keys : [undefined];
 }
 
@@ -645,12 +756,22 @@ export async function sendChatCompletionWithFallback(
       const result = await sendChatCompletion({
         ...options,
         model: requestedModel || 'auto',
-        ...(gatewayKey !== undefined ? { customKey: gatewayKey } : {}),
+        ...(gatewayKey !== undefined && options.customKey === undefined ? { customKey: gatewayKey } : {}),
       });
       console.info(`[FreeLLM Fallback] Gateway succeeded with model ${result.model}.`);
       return { ...result, providerUsed: 'FreeLLMAPI Gateway' };
-    } catch (error) {
+    } catch (error: any) {
       gatewayErr = error;
+      if (
+        requestedModel !== 'auto' &&
+        /model[^.]{0,40}(not found|unknown|invalid|unsupported)|model_(not_found|not_supported)/i.test(
+          String(error?.message || error)
+        )
+      ) {
+        throw new Error(
+          `Selected model '${requestedModel}' was rejected by the FreeLLM gateway: ${String(error?.message || error).slice(0, 220)}`
+        );
+      }
     }
   }
   console.warn('[FreeLLM Gateway] Configured gateway keys failed; trying direct providers in order.');

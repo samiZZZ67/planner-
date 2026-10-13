@@ -1,5 +1,10 @@
-import { NextResponse } from 'next/server';
-import { checkGatewayStatus, getGatewayConfig, POPULAR_FREE_MODELS } from '@/lib/server/freellm/gateway';
+import { NextRequest, NextResponse } from 'next/server';
+import {
+  checkGatewayStatus,
+  getGatewayConfig,
+  setGatewayRuntimeConfig,
+  POPULAR_FREE_MODELS,
+} from '@/lib/server/freellm/gateway';
 import { getActiveGeminiKey, getActiveGroqKey } from '@/lib/server/freellm/multimodal';
 
 function corsHeaders() {
@@ -33,8 +38,8 @@ export async function GET() {
         defaultGatewayUrl: getGatewayConfig().baseUrl,
         capabilities: {
           chat: true,
-          vision: true,
-          transcription: true,
+          vision: hasVision || true,
+          transcription: hasTranscription || true,
           imageGeneration: true,
           videoGeneration: true,
           voiceMode: true,
@@ -67,7 +72,52 @@ export async function GET() {
         },
       },
       {
-        status: 200, // Return JSON status so the frontend can preserve its current catalog
+        status: 200,
+        headers: corsHeaders(),
+      }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json().catch(() => ({}));
+    if (body.clear) {
+      setGatewayRuntimeConfig({ clear: true });
+    } else {
+      const update: { baseUrl?: string; apiKey?: string } = {};
+      if (typeof body.baseUrl === 'string') {
+        update.baseUrl = body.baseUrl.trim();
+      }
+      if (typeof body.apiKey === 'string' && body.apiKey.trim().length > 0) {
+        update.apiKey = body.apiKey.trim();
+      }
+      setGatewayRuntimeConfig(update);
+    }
+
+    const status = await checkGatewayStatus();
+    return NextResponse.json(
+      {
+        ok: true,
+        ...status,
+        popularModels: POPULAR_FREE_MODELS,
+        totalModelsAvailable: status.catalog?.length ?? 0,
+        defaultGatewayUrl: getGatewayConfig().baseUrl,
+      },
+      {
+        status: 200,
+        headers: corsHeaders(),
+      }
+    );
+  } catch (err: any) {
+    return NextResponse.json(
+      {
+        ok: false,
+        online: false,
+        error: err.message || 'Failed to update gateway settings',
+      },
+      {
+        status: 200,
         headers: corsHeaders(),
       }
     );

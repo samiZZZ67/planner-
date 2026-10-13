@@ -192,6 +192,8 @@ export async function POST(req: NextRequest) {
           role: 'assistant',
           content: result.content,
         },
+        model: result.model,
+        provider: result.providerUsed,
         latencyMs: result.latencyMs,
         tokensUsed: result.tokensUsed,
       },

@@ -265,6 +265,10 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   const [showModelSearch, setShowModelSearch] = useState<boolean>(false);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [isTestingGateway, setIsTestingGateway] = useState(false);
+  const [configUrl, setConfigUrl] = useState<string>('https://free-llm-api-7fue.onrender.com/v1');
+  const [configKeyInput, setConfigKeyInput] = useState<string>('');
+  const [keyConfigured, setKeyConfigured] = useState<boolean>(false);
+  const [maskedKey, setMaskedKey] = useState<string | null>(null);
 
   // ── Clamp position inside viewport ──
   const clampPosition = useCallback((x: number, y: number) => {
@@ -423,6 +427,32 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   }, [clampPosition]);
 
   // ── Check Gateway Status (Render Backend) ──
+  const applyStatusPayload = useCallback((data: any) => {
+    setGatewayOnline(Boolean(data.online));
+    setGatewayLatency(data.latencyMs ?? null);
+    if (typeof data.gatewayUrl === 'string' && data.gatewayUrl.trim()) {
+      setConfigUrl(data.gatewayUrl.trim());
+    } else if (typeof data.defaultGatewayUrl === 'string' && data.defaultGatewayUrl.trim()) {
+      setConfigUrl(data.defaultGatewayUrl.trim());
+    }
+    setKeyConfigured(Boolean(data.keyConfigured));
+    setMaskedKey(data.maskedKey || null);
+
+    if (Array.isArray(data.catalog) && data.catalog.length > 0) {
+      setCatalogModels(data.catalog);
+      setAvailableModels(data.catalog.map((m: CatalogModel) => m.id));
+    } else if (Array.isArray(data.models) && data.models.length > 0) {
+      const merged = mergeDiscoveredModels(data.models);
+      setCatalogModels(merged);
+      setAvailableModels(merged.map(m => m.id));
+    }
+    if (data.error && !data.online) {
+      setGatewayError(data.error);
+    } else {
+      setGatewayError(null);
+    }
+  }, []);
+
   const testGatewayConnection = useCallback(async () => {
     setIsTestingGateway(true);
     setGatewayError(null);
@@ -431,21 +461,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       const data = await res.json().catch(() => null);
 
       if (res.ok && data?.ok) {
-        setGatewayOnline(Boolean(data.online));
-        setGatewayLatency(data.latencyMs ?? null);
-        if (Array.isArray(data.catalog) && data.catalog.length > 0) {
-          setCatalogModels(data.catalog);
-          setAvailableModels(data.catalog.map((m: CatalogModel) => m.id));
-        } else if (Array.isArray(data.models) && data.models.length > 0) {
-          const merged = mergeDiscoveredModels(data.models);
-          setCatalogModels(merged);
-          setAvailableModels(merged.map(m => m.id));
-        }
-        if (data.error && !data.online) {
-          setGatewayError(data.error);
-        } else {
-          setGatewayError(null);
-        }
+        applyStatusPayload(data);
       } else {
         setGatewayOnline(false);
         setGatewayError(data?.error || `Gateway returned HTTP ${res.status}`);
@@ -456,7 +472,43 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     } finally {
       setIsTestingGateway(false);
     }
-  }, []);
+  }, [applyStatusPayload]);
+
+  const saveGatewaySettings = useCallback(async (clear = false) => {
+    setIsTestingGateway(true);
+    setGatewayError(null);
+    try {
+      const res = await fetchWithTimeout(
+        '/api/ai/freellm/status',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            clear
+              ? { clear: true }
+              : {
+                  baseUrl: configUrl.trim(),
+                  ...(configKeyInput.trim() ? { apiKey: configKeyInput.trim() } : {}),
+                }
+          ),
+        },
+        15000
+      );
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok) {
+        setConfigKeyInput('');
+        applyStatusPayload(data);
+      } else {
+        setGatewayOnline(false);
+        setGatewayError(data?.error || `Failed to save settings (HTTP ${res.status})`);
+      }
+    } catch (err: any) {
+      setGatewayOnline(false);
+      setGatewayError(formatFetchError(err));
+    } finally {
+      setIsTestingGateway(false);
+    }
+  }, [configUrl, configKeyInput, applyStatusPayload]);
 
   useEffect(() => {
     if (windowState !== 'collapsed') {
@@ -1805,62 +1857,115 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                 </button>
               </div>
 
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                    FreeLLM API Base URL (`/v1`):
+                  </label>
+                  <input
+                    type="text"
+                    value={configUrl}
+                    onChange={e => setConfigUrl(e.target.value)}
+                    placeholder="https://free-llm-api-7fue.onrender.com/v1"
+                    style={{
+                      width: '100%',
+                      background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                      border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                      color: 'var(--text-primary)',
+                      borderRadius: 6,
+                      padding: '6px 8px',
+                      fontSize: 11.5,
+                      outline: 'none',
+                    }}
+                  />
+                </div>
 
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                      Unified API Key (`FREELLM_API_KEY` / `UNIFIED_API_KEY`):
+                    </label>
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        color: keyConfigured ? '#10b981' : '#f59e0b',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {keyConfigured ? `✓ Server Key Active (${maskedKey || '••••'})` : '⚠️ Key Not Set'}
+                    </span>
+                  </div>
+                  <input
+                    type="password"
+                    value={configKeyInput}
+                    onChange={e => setConfigKeyInput(e.target.value)}
+                    placeholder={
+                      keyConfigured
+                        ? 'Paste a new Unified API Key to replace current key...'
+                        : 'Paste your FreeLLMAPI Unified API Key here...'
+                    }
+                    style={{
+                      width: '100%',
+                      background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                      border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                      color: 'var(--text-primary)',
+                      borderRadius: 6,
+                      padding: '6px 8px',
+                      fontSize: 11.5,
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+              </div>
 
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, color: gatewayOnline ? '#10b981' : gatewayError ? '#ef4444' : '#94a3b8', flex: 1, minWidth: 160 }}>
+                  {isTestingGateway
+                    ? 'Testing connection...'
+                    : gatewayOnline
+                    ? `● Online (${gatewayLatency ?? 0}ms · ${catalogModels.length} ready models)`
+                    : gatewayError
+                    ? `⚠️ ${gatewayError.slice(0, 85)}${gatewayError.length > 85 ? '...' : ''}`
+                    : '● Ready'}
+                </span>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-            <span style={{ fontSize: 11, color: gatewayOnline ? '#10b981' : gatewayError ? '#ef4444' : '#94a3b8' }}>
-              {isTestingGateway
-                ? 'Testing connection...'
-                : gatewayOnline
-                ? `● Online (${gatewayLatency ?? 0}ms · ${catalogModels.length} models)`
-                : gatewayError
-                ? `⚠️ ${gatewayError.slice(0, 45)}...`
-                : '● Ready'}
-            </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => saveGatewaySettings(true)}
+                    disabled={isTestingGateway}
+                    style={{
+                      background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)',
+                      border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.15)'),
+                      borderRadius: 6,
+                      padding: '4px 10px',
+                      color: 'var(--text-secondary)',
+                      fontSize: 11,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Reset
+                  </button>
 
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button
-                onClick={() => {
-                  try {
-                    localStorage.removeItem('np_freellm_custom_url');
-                    localStorage.removeItem('np_freellm_custom_key');
-                  } catch {}
-                  testGatewayConnection();
-                }}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.08)',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  borderRadius: 6,
-                  padding: '4px 10px',
-                  color: '#cbd5e1',
-                  fontSize: 11,
-                  cursor: 'pointer',
-                }}
-              >
-                Reset
-              </button>
-
-              <button
-                onClick={() => testGatewayConnection()}
-                disabled={isTestingGateway}
-                style={{
-                  background: 'linear-gradient(135deg, #a855f7, #6366f1)',
-                  border: 'none',
-                  borderRadius: 6,
-                  padding: '4px 12px',
-                  color: '#fff',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  cursor: isTestingGateway ? 'default' : 'pointer',
-                }}
-              >
-                {isTestingGateway ? 'Testing...' : 'Test Connection'}
-              </button>
+                  <button
+                    onClick={() => saveGatewaySettings(false)}
+                    disabled={isTestingGateway}
+                    style={{
+                      background: 'linear-gradient(135deg, #a855f7, #6366f1)',
+                      border: 'none',
+                      borderRadius: 6,
+                      padding: '4px 12px',
+                      color: '#fff',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: isTestingGateway ? 'default' : 'pointer',
+                    }}
+                  >
+                    {isTestingGateway ? 'Connecting...' : 'Save & Connect'}
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
       {/* ── Model Selector Bar ── */}
       <div
