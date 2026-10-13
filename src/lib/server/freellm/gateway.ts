@@ -63,6 +63,7 @@ export function getGatewayConfig(): FreeLLMGatewayConfig {
   let url =
     process.env.FREE_LLM_API_URL ||
     process.env.FREELLM_API_URL ||
+    process.env.FREELLM_API_BASE_URL ||
     process.env.FREE_LLM_GATEWAY_URL ||
     process.env.FREE_LLM_API_BASE_URL ||
     (process.env.NODE_ENV === 'production'
