@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ListChecks, BarChart3, Settings, Plus, StickyNote, Tag, CalendarRange, CalendarDays } from 'lucide-react';
+import { ListChecks, BarChart3, Settings, Plus, StickyNote, Tag, CalendarRange, CalendarDays, BookOpen } from 'lucide-react';
 import type { TabType } from './PhoneTabBar';
 
 interface PCSidebarProps {
@@ -18,6 +18,7 @@ export function PCSidebar({ currentTab, onSelectTab, onOpenAIChat }: PCSidebarPr
     { id: 'add_task', icon: <Plus size={20} />, label: 'Add Task', shortcut: '4' },
     { id: 'note', icon: <StickyNote size={20} />, label: 'Note', shortcut: '5' },
     { id: 'category', icon: <Tag size={20} />, label: 'Category', shortcut: '6' },
+    { id: 'books', icon: <BookOpen size={20} />, label: 'Book Planner', shortcut: '9' },
   ];
 
   return (

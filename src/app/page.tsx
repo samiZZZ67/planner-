@@ -19,6 +19,7 @@ import { WeeklyPlanScreen } from '@/components/Weekly/WeeklyPlanScreen';
 import { MonthlyPlanScreen } from '@/components/Monthly/MonthlyPlanScreen';
 import { AnalyticsScreen } from '@/components/Analytics/AnalyticsScreen';
 import { SettingsScreen } from '@/components/Settings/SettingsScreen';
+import { BookPlannerScreen } from '@/components/Books/BookPlannerScreen';
 import { LoginModal } from '@/components/Modals/LoginModal';
 import { MasterLockScreen } from '@/components/Auth/MasterLockScreen';
 import { AIChatPanel } from '@/components/Chat/AIChatPanel';
@@ -257,6 +258,9 @@ export default function SamsSpaceApp() {
       } else if (e.key === '8') {
         e.preventDefault();
         setCurrentTab('settings');
+      } else if (e.key === '9') {
+        e.preventDefault();
+        setCurrentTab('books');
       } else if (e.key === ' ' && activeTimer) {
         e.preventDefault();
         if (isTimerRunning) pauseTimer();
@@ -402,6 +406,15 @@ export default function SamsSpaceApp() {
             >
               Category
             </button>
+            <button
+              onClick={() => setCurrentTab('books')}
+              className={`v-tab-btn${currentTab === 'books' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={currentTab === 'books'}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Book Planner
+            </button>
 
             {/* Preserved secondary tabs if active */}
             {currentTab === 'analytics' && (
@@ -483,6 +496,8 @@ export default function SamsSpaceApp() {
                 onClearFocus={() => setFocusTaskId(null)}
               />
             )}
+
+            {currentTab === 'books' && <BookPlannerScreen />}
 
             {currentTab === 'analytics' && (
               <AnalyticsScreen
