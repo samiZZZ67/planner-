@@ -122,6 +122,48 @@ export async function sendTelegramTextToChannel(text: string) {
   return { channel: connection.channel.title, messageId: sent.message_id };
 }
 
+export async function sendTelegramMediaToChannel(text: string, media: File) {
+  if (text.length > 1024) throw new Error('Telegram captions are limited to 1,024 characters.');
+  const name = media.name.toLowerCase();
+  const imageType = ['image/jpeg', 'image/png', 'image/webp'].includes(media.type);
+  const voiceType = (
+    (media.type === 'audio/ogg' || media.type === 'application/ogg') && name.endsWith('.ogg')
+  ) || (media.type === 'audio/mpeg' && name.endsWith('.mp3'))
+    || (['audio/mp4', 'audio/x-m4a', 'audio/m4a'].includes(media.type) && name.endsWith('.m4a'));
+  const kind = imageType ? 'photo' : voiceType ? 'voice' : null;
+  const maxBytes = kind === 'photo' ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
+  if (!kind) throw new Error('Choose a JPEG, PNG, or WebP image, or an OGG/Opus, MP3, or M4A voice file.');
+  if (media.size <= 0 || media.size > maxBytes) {
+    throw new Error(kind === 'photo' ? 'Images must be 10 MB or smaller.' : 'Voice files must be 50 MB or smaller.');
+  }
+
+  const connection = await checkTelegramChannel();
+  if (!connection.canPost) throw new Error(connection.message);
+  const { token, chatId } = envConfig();
+  const form = new FormData();
+  form.set('chat_id', chatId);
+  form.set(kind === 'photo' ? 'photo' : 'voice', media, media.name);
+  if (text) form.set('caption', text);
+
+  let response: Response;
+  try {
+    response = await fetch(`https://api.telegram.org/bot${token}/${kind === 'photo' ? 'sendPhoto' : 'sendVoice'}`, {
+      method: 'POST',
+      body: form,
+      signal: AbortSignal.timeout(60_000),
+      cache: 'no-store',
+    });
+  } catch {
+    throw Object.assign(new Error('Telegram upload timed out or could not connect. Check the channel before retrying.'), { uncertain: true });
+  }
+  const data = await response.json().catch(() => null) as { ok?: boolean; result?: { message_id: number }; description?: string; error_code?: number } | null;
+  if (!response.ok || !data?.ok) {
+    const code = data?.error_code ?? response.status;
+    throw new Error(data?.description || `Telegram media upload failed (${code}).`);
+  }
+  return { channel: connection.channel.title, messageId: data.result?.message_id, kind };
+}
+
 export function splitTelegramText(text: string, max = 3500): string[] {
   const chars = Array.from(text);
   const parts: string[] = [];
