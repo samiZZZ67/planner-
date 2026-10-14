@@ -10,21 +10,14 @@ import { cleanMarkdownForSpeech, splitTextIntoSpeechChunks } from '../textChunke
 
 export const ELEVENLABS_BUILTIN_VOICES: TTSVoiceInfo[] = [
   {
-    id: '21m00Tcm4TlvDq8ikWAM',
-    name: 'Rachel (Conversational & Warm)',
-    provider: 'elevenlabs',
-    gender: 'female',
-    accent: 'American',
-    description: 'Calm, friendly, and natural conversational voice ideal for AI assistants',
-    isDefault: true,
-  },
-  {
     id: 'pNInz6obpgDQGcFmaJgB',
     name: 'Adam (Deep Narration)',
     provider: 'elevenlabs',
     gender: 'male',
     accent: 'American',
-    description: 'Deep, clear, expressive voice well-suited for instructional and reflective responses',
+    description: 'Deep, clear, expressive voice verified for ElevenLabs free API tier',
+    isDefault: true,
+    freeTierReady: true,
   },
   {
     id: 'EXAVITQu4vr4xnSDxMaL',
@@ -32,7 +25,8 @@ export const ELEVENLABS_BUILTIN_VOICES: TTSVoiceInfo[] = [
     provider: 'elevenlabs',
     gender: 'female',
     accent: 'American',
-    description: 'Crisp, professional, and articulate tone',
+    description: 'Crisp, professional, and articulate tone verified for ElevenLabs free API tier',
+    freeTierReady: true,
   },
   {
     id: 'ErXwobaYiN019PkySvjV',
@@ -40,31 +34,8 @@ export const ELEVENLABS_BUILTIN_VOICES: TTSVoiceInfo[] = [
     provider: 'elevenlabs',
     gender: 'male',
     accent: 'American',
-    description: 'Engaging, warm, and well-modulated',
-  },
-  {
-    id: 'AZnzlk1XvdvUeBnXmlld',
-    name: 'Domi (Energetic & Dynamic)',
-    provider: 'elevenlabs',
-    gender: 'female',
-    accent: 'American',
-    description: 'Upbeat and lively',
-  },
-  {
-    id: 'MF3mGyEYCl7XYWbV9V6O',
-    name: 'Elli (Young & Natural)',
-    provider: 'elevenlabs',
-    gender: 'female',
-    accent: 'American',
-    description: 'Gentle, modern, and casual voice',
-  },
-  {
-    id: 'TxGEqnHWrfWFTfGW9XjX',
-    name: 'Josh (Young & Confident)',
-    provider: 'elevenlabs',
-    gender: 'male',
-    accent: 'American',
-    description: 'Natural, young, and confident American male voice',
+    description: 'Engaging, warm, and well-modulated (free API verified)',
+    freeTierReady: true,
   },
   {
     id: 'VR6AewLTigWG4xSOukaG',
@@ -72,15 +43,8 @@ export const ELEVENLABS_BUILTIN_VOICES: TTSVoiceInfo[] = [
     provider: 'elevenlabs',
     gender: 'male',
     accent: 'American',
-    description: 'Crisp, articulate, and commanding executive tone',
-  },
-  {
-    id: 'yoZ06aMxZJJ28mfd3POQ',
-    name: 'Sam (Dynamic Narration)',
-    provider: 'elevenlabs',
-    gender: 'male',
-    accent: 'American',
-    description: 'Raspy, dynamic, and engaging narration',
+    description: 'Crisp, articulate, and commanding executive tone (free API verified)',
+    freeTierReady: true,
   },
   {
     id: 'cgSgspJ2msm6clMCkdW9',
@@ -88,7 +52,8 @@ export const ELEVENLABS_BUILTIN_VOICES: TTSVoiceInfo[] = [
     provider: 'elevenlabs',
     gender: 'female',
     accent: 'American',
-    description: 'Bright, playful, and expressive female voice',
+    description: 'Bright, playful, and expressive female voice (free API verified)',
+    freeTierReady: true,
   },
   {
     id: 'onwK4e9ZLuTAKqWW03F9',
@@ -96,23 +61,8 @@ export const ELEVENLABS_BUILTIN_VOICES: TTSVoiceInfo[] = [
     provider: 'elevenlabs',
     gender: 'male',
     accent: 'British',
-    description: 'Deep, sophisticated British presenter voice',
-  },
-  {
-    id: 'ThT5KcBeYPX3keUQqHPh',
-    name: 'Dorothy (Pleasant & Gentle)',
-    provider: 'elevenlabs',
-    gender: 'female',
-    accent: 'British',
-    description: 'Soft, pleasant, and soothing narration',
-  },
-  {
-    id: 'bVMeCyTHy58xNoL34h3p',
-    name: 'Jeremy (Excited & Irish)',
-    provider: 'elevenlabs',
-    gender: 'male',
-    accent: 'Irish',
-    description: 'Warm, animated Irish accent',
+    description: 'Deep, sophisticated British presenter voice (free API verified)',
+    freeTierReady: true,
   },
   {
     id: 'N2lVS1w4EtoT3dr4eOWO',
@@ -120,15 +70,8 @@ export const ELEVENLABS_BUILTIN_VOICES: TTSVoiceInfo[] = [
     provider: 'elevenlabs',
     gender: 'male',
     accent: 'Transatlantic',
-    description: 'Dramatic, intense, and expressive pacing',
-  },
-  {
-    id: 'XB0fDUnXU5powFXDhCwa',
-    name: 'Charlotte (Seductive & Swedish)',
-    provider: 'elevenlabs',
-    gender: 'female',
-    accent: 'Swedish',
-    description: 'Calm, pleasant Swedish-accented English',
+    description: 'Dramatic, intense, and expressive pacing (free API verified)',
+    freeTierReady: true,
   },
   {
     id: 'IKne3meq5aSn9XLyUdCD',
@@ -136,7 +79,8 @@ export const ELEVENLABS_BUILTIN_VOICES: TTSVoiceInfo[] = [
     provider: 'elevenlabs',
     gender: 'male',
     accent: 'Australian',
-    description: 'Energetic, casual Australian male voice',
+    description: 'Energetic, casual Australian male voice (free API verified)',
+    freeTierReady: true,
   },
   {
     id: 'JBFqnCBsd6RMkjVDRZzb',
@@ -144,15 +88,8 @@ export const ELEVENLABS_BUILTIN_VOICES: TTSVoiceInfo[] = [
     provider: 'elevenlabs',
     gender: 'male',
     accent: 'British',
-    description: 'Warm, mature, captivating storyteller voice',
-  },
-  {
-    id: 'piTKgcLEGmPE4e6mEKli',
-    name: 'Nicole (Whispering Audiobooks)',
-    provider: 'elevenlabs',
-    gender: 'female',
-    accent: 'American',
-    description: 'Whispering, soft, and intimate reading voice',
+    description: 'Warm, mature, captivating storyteller voice (free API verified)',
+    freeTierReady: true,
   },
   {
     id: 'pFZP5JQG7iQjIQuC4Bku',
@@ -160,7 +97,89 @@ export const ELEVENLABS_BUILTIN_VOICES: TTSVoiceInfo[] = [
     provider: 'elevenlabs',
     gender: 'female',
     accent: 'British',
-    description: 'Velvety, poised, and clear British female voice',
+    description: 'Velvety, poised, and clear British female voice (free API verified)',
+    freeTierReady: true,
+  },
+  {
+    id: '21m00Tcm4TlvDq8ikWAM',
+    name: 'Rachel (Conversational & Warm)',
+    provider: 'elevenlabs',
+    gender: 'female',
+    accent: 'American',
+    description: 'Calm, friendly conversational voice (requires ElevenLabs paid subscription)',
+    requiresPaidPlan: true,
+  },
+  {
+    id: 'AZnzlk1XvdvUeBnXmlld',
+    name: 'Domi (Energetic & Dynamic)',
+    provider: 'elevenlabs',
+    gender: 'female',
+    accent: 'American',
+    description: 'Upbeat and lively (requires ElevenLabs paid subscription)',
+    requiresPaidPlan: true,
+  },
+  {
+    id: 'MF3mGyEYCl7XYWbV9V6O',
+    name: 'Elli (Young & Natural)',
+    provider: 'elevenlabs',
+    gender: 'female',
+    accent: 'American',
+    description: 'Gentle, modern, and casual voice (requires ElevenLabs paid subscription)',
+    requiresPaidPlan: true,
+  },
+  {
+    id: 'TxGEqnHWrfWFTfGW9XjX',
+    name: 'Josh (Young & Confident)',
+    provider: 'elevenlabs',
+    gender: 'male',
+    accent: 'American',
+    description: 'Natural, young, and confident American male voice (requires ElevenLabs paid subscription)',
+    requiresPaidPlan: true,
+  },
+  {
+    id: 'yoZ06aMxZJJ28mfd3POQ',
+    name: 'Sam (Dynamic Narration)',
+    provider: 'elevenlabs',
+    gender: 'male',
+    accent: 'American',
+    description: 'Raspy, dynamic, and engaging narration (requires ElevenLabs paid subscription)',
+    requiresPaidPlan: true,
+  },
+  {
+    id: 'ThT5KcBeYPX3keUQqHPh',
+    name: 'Dorothy (Pleasant & Gentle)',
+    provider: 'elevenlabs',
+    gender: 'female',
+    accent: 'British',
+    description: 'Soft, pleasant, and soothing narration (requires ElevenLabs paid subscription)',
+    requiresPaidPlan: true,
+  },
+  {
+    id: 'bVMeCyTHy58xNoL34h3p',
+    name: 'Jeremy (Excited & Irish)',
+    provider: 'elevenlabs',
+    gender: 'male',
+    accent: 'Irish',
+    description: 'Warm, animated Irish accent (requires ElevenLabs paid subscription)',
+    requiresPaidPlan: true,
+  },
+  {
+    id: 'XB0fDUnXU5powFXDhCwa',
+    name: 'Charlotte (Seductive & Swedish)',
+    provider: 'elevenlabs',
+    gender: 'female',
+    accent: 'Swedish',
+    description: 'Calm, pleasant Swedish-accented English (requires ElevenLabs paid subscription)',
+    requiresPaidPlan: true,
+  },
+  {
+    id: 'piTKgcLEGmPE4e6mEKli',
+    name: 'Nicole (Whispering Audiobooks)',
+    provider: 'elevenlabs',
+    gender: 'female',
+    accent: 'American',
+    description: 'Whispering, soft reading voice (requires ElevenLabs paid subscription)',
+    requiresPaidPlan: true,
   },
 ];
 
@@ -457,7 +476,8 @@ export async function synthesizeElevenLabs(options: TTSOptions): Promise<TTSResu
     throw error;
   }
 
-  const voiceId = options.voiceId || process.env.ELEVENLABS_VOICE_ID?.trim() || '21m00Tcm4TlvDq8ikWAM';
+  const defaultVoiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || 'pNInz6obpgDQGcFmaJgB';
+  const voiceId = options.voiceId || defaultVoiceId;
   const voice = ELEVENLABS_VOICES.find(v => v.id === voiceId) || {
     id: voiceId,
     name: `Custom (${voiceId.slice(0, 8)})`,
@@ -513,6 +533,10 @@ export async function synthesizeElevenLabs(options: TTSOptions): Promise<TTSResu
     keyState.inFlightRequests++;
     attempts++;
 
+    let effectiveVoiceId = voiceId;
+    let wasAutoHealed = false;
+    let originalRequestedVoiceId = voiceId;
+
     try {
       const audioBuffers: Buffer[] = [];
 
@@ -521,8 +545,8 @@ export async function synthesizeElevenLabs(options: TTSOptions): Promise<TTSResu
           throw new Error('Synthesis request aborted.');
         }
 
-        const response = await fetch(
-          `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
+        let response = await fetch(
+          `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(effectiveVoiceId)}`,
           {
             method: 'POST',
             headers: {
@@ -551,78 +575,137 @@ export async function synthesizeElevenLabs(options: TTSOptions): Promise<TTSResu
             errorDetail = await response.text().catch(() => `HTTP ${response.status}`);
           }
 
-          // Case 1: 401/403 Invalid API key or Missing Permissions
-          if (response.status === 401 || response.status === 403) {
-            keyState.status = 'invalid';
-            keyState.cooldownUntil = Infinity;
-            const lowerErr = errorDetail.toLowerCase();
-            const isMissingPerm = lowerErr.includes('missing the permission') || lowerErr.includes('missing_permissions') || lowerErr.includes('text_to_speech');
-            keyState.lastError = isMissingPerm
-              ? 'Key missing text_to_speech permission in ElevenLabs dashboard'
-              : `Unauthorized (${response.status}): ${errorDetail}`;
-            console.warn(
-              `[ElevenLabs Key Rotation] Key ${keyState.maskedKey} failed (HTTP ${response.status}): ${keyState.lastError}`
-            );
-            const err: any = new Error(
-              isMissingPerm
-                ? `ElevenLabs API key ${keyState.maskedKey} is missing the "text_to_speech" permission. Please enable Text to Speech for this key in ElevenLabs dashboard.`
-                : `ElevenLabs API key ${keyState.maskedKey} is unauthorized (${response.status}): ${errorDetail}`
-            );
-            err.code = isMissingPerm ? 'MISSING_PERMISSIONS' : 'UNAUTHORIZED';
-            err.keyMasked = keyState.maskedKey;
-            throw err;
-          }
-
-          // Case 2: 429 Quota Exceeded (character allowance exhausted)
+          // Case 0: 402 Library Voice / Paid Plan Restriction on Free Tier
           const lowerDetail = errorDetail.toLowerCase();
-          const isQuota =
-            response.status === 429 &&
-            (lowerDetail.includes('quota_exceeded') ||
-              lowerDetail.includes('character_limit') ||
-              lowerDetail.includes('quota') ||
-              lowerDetail.includes('credit') ||
-              lowerDetail.includes('allowance'));
+          const isPaidPlanRequired =
+            response.status === 402 ||
+            lowerDetail.includes('paid_plan_required') ||
+            lowerDetail.includes('library voices') ||
+            lowerDetail.includes('free users cannot use library voices');
 
-          if (isQuota || lowerDetail.includes('quota_exceeded') || lowerDetail.includes('character_limit')) {
-            keyState.status = 'quota_exceeded';
-            keyState.cooldownUntil = Date.now() + 6 * 60 * 60 * 1000; // 6-hour cooldown
-            keyState.lastError = 'Monthly character quota exceeded';
+          if (isPaidPlanRequired && effectiveVoiceId !== 'pNInz6obpgDQGcFmaJgB') {
             console.warn(
-              `[ElevenLabs Key Rotation] Key ${keyState.maskedKey} quota exceeded. Rotating to next key... (${attempts}/${maxAttempts} attempted)`
+              `[ElevenLabs Auto-Heal] Voice "${effectiveVoiceId}" requires a paid ElevenLabs plan on free API tier. Auto-healing to verified free-tier voice Adam (pNInz6obpgDQGcFmaJgB)...`
             );
-            const err: any = new Error(
-              `ElevenLabs quota exceeded for key ${keyState.maskedKey}.`
+            effectiveVoiceId = 'pNInz6obpgDQGcFmaJgB';
+            wasAutoHealed = true;
+            originalRequestedVoiceId = voiceId;
+
+            // Retry with verified free-tier voice
+            response = await fetch(
+              `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(effectiveVoiceId)}`,
+              {
+                method: 'POST',
+                headers: {
+                  'xi-api-key': keyState.key,
+                  'Content-Type': 'application/json',
+                  Accept: 'audio/mpeg',
+                },
+                signal: options.signal,
+                body: JSON.stringify({
+                  text: chunk,
+                  model_id: modelId,
+                  voice_settings: {
+                    stability: 0.5,
+                    similarity_boost: 0.75,
+                  },
+                }),
+              }
             );
-            err.code = 'QUOTA_EXCEEDED';
-            throw err;
+
+            if (!response.ok) {
+              try {
+                const retryJson = await response.json();
+                errorDetail = retryJson?.detail?.message || retryJson?.message || JSON.stringify(retryJson);
+              } catch {
+                errorDetail = await response.text().catch(() => `HTTP ${response.status}`);
+              }
+            }
           }
 
-          // Case 3: 429 Rate Limited (concurrency / per-minute burst)
-          if (response.status === 429) {
-            keyState.status = 'rate_limited';
+          if (!response.ok) {
+            // Case 1: 402 Still failing or already on default voice
+            if (response.status === 402 || isPaidPlanRequired) {
+              const err: any = new Error(
+                `ElevenLabs voice "${voiceId}" requires a paid ElevenLabs subscription (library voice on free tier): ${errorDetail}`
+              );
+              err.code = 'PAID_VOICE_REQUIRED';
+              err.provider = 'elevenlabs';
+              throw err;
+            }
+
+            // Case 2: 401/403 Invalid API key or Missing Permissions
+            if (response.status === 401 || response.status === 403) {
+              keyState.status = 'invalid';
+              keyState.cooldownUntil = Infinity;
+              const lowerErr = errorDetail.toLowerCase();
+              const isMissingPerm = lowerErr.includes('missing the permission') || lowerErr.includes('missing_permissions') || lowerErr.includes('text_to_speech');
+              keyState.lastError = isMissingPerm
+                ? 'Key missing text_to_speech permission in ElevenLabs dashboard'
+                : `Unauthorized (${response.status}): ${errorDetail}`;
+              console.warn(
+                `[ElevenLabs Key Rotation] Key ${keyState.maskedKey} failed (HTTP ${response.status}): ${keyState.lastError}`
+              );
+              const err: any = new Error(
+                isMissingPerm
+                  ? `ElevenLabs API key ${keyState.maskedKey} is missing the "text_to_speech" permission. Please enable Text to Speech for this key in ElevenLabs dashboard.`
+                  : `ElevenLabs API key ${keyState.maskedKey} is unauthorized (${response.status}): ${errorDetail}`
+              );
+              err.code = isMissingPerm ? 'MISSING_PERMISSIONS' : 'UNAUTHORIZED';
+              err.keyMasked = keyState.maskedKey;
+              throw err;
+            }
+
+            // Case 3: 429 Quota Exceeded (character allowance exhausted)
+            const isQuota =
+              response.status === 429 &&
+              (lowerDetail.includes('quota_exceeded') ||
+                lowerDetail.includes('character_limit') ||
+                lowerDetail.includes('quota') ||
+                lowerDetail.includes('credit') ||
+                lowerDetail.includes('allowance'));
+
+            if (isQuota || lowerDetail.includes('quota_exceeded') || lowerDetail.includes('character_limit')) {
+              keyState.status = 'quota_exceeded';
+              keyState.cooldownUntil = Date.now() + 6 * 60 * 60 * 1000; // 6-hour cooldown
+              keyState.lastError = 'Monthly character quota exceeded';
+              console.warn(
+                `[ElevenLabs Key Rotation] Key ${keyState.maskedKey} quota exceeded. Rotating to next key... (${attempts}/${maxAttempts} attempted)`
+              );
+              const err: any = new Error(
+                `ElevenLabs quota exceeded for key ${keyState.maskedKey}.`
+              );
+              err.code = 'QUOTA_EXCEEDED';
+              throw err;
+            }
+
+            // Case 4: 429 Rate Limited (concurrency / per-minute burst)
+            if (response.status === 429) {
+              keyState.status = 'rate_limited';
+              keyState.consecutiveFailures++;
+              const cooldownSec = Math.min(300, 60 * keyState.consecutiveFailures);
+              keyState.cooldownUntil = Date.now() + cooldownSec * 1000;
+              keyState.lastError = `Rate limit reached (${cooldownSec}s cooldown)`;
+              console.warn(
+                `[ElevenLabs Key Rotation] Key ${keyState.maskedKey} rate-limited. Rotating to next key...`
+              );
+              const err: any = new Error(`ElevenLabs rate limit reached for key ${keyState.maskedKey}.`);
+              err.code = 'RATE_LIMITED';
+              throw err;
+            }
+
+            // Case 5: Other upstream provider errors (500, 502, 503, etc.)
+            keyState.status = 'failed';
             keyState.consecutiveFailures++;
-            const cooldownSec = Math.min(300, 60 * keyState.consecutiveFailures);
-            keyState.cooldownUntil = Date.now() + cooldownSec * 1000;
-            keyState.lastError = `Rate limit reached (${cooldownSec}s cooldown)`;
+            keyState.cooldownUntil = Date.now() + 30 * 1000; // 30s cooldown
+            keyState.lastError = `HTTP ${response.status}: ${errorDetail}`;
             console.warn(
-              `[ElevenLabs Key Rotation] Key ${keyState.maskedKey} rate-limited. Rotating to next key...`
+              `[ElevenLabs Key Rotation] Key ${keyState.maskedKey} failed with HTTP ${response.status}. Rotating...`
             );
-            const err: any = new Error(`ElevenLabs rate limit reached for key ${keyState.maskedKey}.`);
-            err.code = 'RATE_LIMITED';
+            const err: any = new Error(`ElevenLabs TTS failed (${response.status}): ${errorDetail}`);
+            err.code = 'PROVIDER_ERROR';
             throw err;
           }
-
-          // Case 4: Other upstream provider errors (500, 502, 503, etc.)
-          keyState.status = 'failed';
-          keyState.consecutiveFailures++;
-          keyState.cooldownUntil = Date.now() + 30 * 1000; // 30s cooldown
-          keyState.lastError = `HTTP ${response.status}: ${errorDetail}`;
-          console.warn(
-            `[ElevenLabs Key Rotation] Key ${keyState.maskedKey} failed with HTTP ${response.status}. Rotating...`
-          );
-          const err: any = new Error(`ElevenLabs TTS failed (${response.status}): ${errorDetail}`);
-          err.code = 'PROVIDER_ERROR';
-          throw err;
         }
 
         const arrayBuffer = await response.arrayBuffer();
@@ -647,17 +730,30 @@ export async function synthesizeElevenLabs(options: TTSOptions): Promise<TTSResu
         s => s.status === 'active' || (s.status !== 'invalid' && s.cooldownUntil > 0 && Date.now() >= s.cooldownUntil)
       ).length;
 
+      const voiceInfo = wasAutoHealed
+        ? ELEVENLABS_VOICES.find(v => v.id === effectiveVoiceId) || {
+            id: effectiveVoiceId,
+            name: 'Adam (Deep Narration)',
+            provider: 'elevenlabs' as const,
+          }
+        : voice;
+
       return {
         audioBuffer: concatenated,
         contentType: 'audio/mpeg',
         provider: 'ElevenLabs Neural TTS',
         providerId: 'elevenlabs',
-        voiceId: voice.id,
-        voiceName: voice.name,
+        voiceId: effectiveVoiceId,
+        voiceName: voiceInfo.name,
         characterCount: cleanText.length,
         keyUsedMasked: keyState.maskedKey,
         keysActive: activeKeysCount,
         keysTotal: states.length,
+        autoHealedVoice: wasAutoHealed,
+        originalVoiceId: wasAutoHealed ? originalRequestedVoiceId : undefined,
+        notice: wasAutoHealed
+          ? `Requested ElevenLabs voice (${originalRequestedVoiceId}) requires a paid ElevenLabs plan via API; automatically synthesized using verified free-tier voice Adam.`
+          : undefined,
       };
     } catch (err: any) {
       keyState.inFlightRequests = Math.max(0, keyState.inFlightRequests - 1);

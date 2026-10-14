@@ -268,7 +268,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     keyUsedMasked?: string;
   }>({ status: 'idle', messageId: null });
   const [selectedVoiceProvider, setSelectedVoiceProvider] = useState<string>('elevenlabs');
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('21m00Tcm4TlvDq8ikWAM');
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('pNInz6obpgDQGcFmaJgB');
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
   const [voiceConfigData, setVoiceConfigData] = useState<any>(null);
   const [isTestingVoice, setIsTestingVoice] = useState(false);
@@ -2540,7 +2540,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                           const newProv = e.target.value;
                           const defaultVoice =
                             newProv === 'elevenlabs'
-                              ? '21m00Tcm4TlvDq8ikWAM'
+                              ? (voiceConfigData?.activeVoiceId || 'pNInz6obpgDQGcFmaJgB')
                               : newProv === 'piper'
                               ? 'en_US-lessac-medium'
                               : newProv === 'openai'
@@ -2599,7 +2599,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                               )}
                               {voices.map((v: any) => (
                                 <option key={v.id} value={v.id}>
-                                  {v.name}
+                                  {v.freeTierReady ? `🌟 ${v.name} (Free API)` : v.requiresPaidPlan ? `💎 ${v.name} (Paid Plan)` : v.name}
                                 </option>
                               ))}
                             </>

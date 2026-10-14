@@ -8,6 +8,8 @@ export interface TTSVoiceInfo {
   accent?: string;
   description?: string;
   isDefault?: boolean;
+  freeTierReady?: boolean;
+  requiresPaidPlan?: boolean;
 }
 
 export interface TTSOptions {
@@ -32,6 +34,9 @@ export interface TTSResult {
   keyUsedMasked?: string;
   keysActive?: number;
   keysTotal?: number;
+  autoHealedVoice?: boolean;
+  originalVoiceId?: string;
+  notice?: string;
 }
 
 export type ElevenLabsKeyStatus = 'active' | 'quota_exceeded' | 'rate_limited' | 'invalid' | 'failed';

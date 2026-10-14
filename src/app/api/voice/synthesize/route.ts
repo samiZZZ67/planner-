@@ -79,6 +79,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (result.notice) {
+      headers['X-Voice-Notice'] = encodeURIComponent(result.notice);
+    }
+    if (result.autoHealedVoice) {
+      headers['X-Voice-Auto-Healed'] = 'true';
+      if (result.originalVoiceId) {
+        headers['X-Voice-Original-Id'] = encodeURIComponent(result.originalVoiceId);
+      }
+    }
+
     return new Response(new Uint8Array(result.audioBuffer), {
       status: 200,
       headers,
@@ -92,9 +102,10 @@ export async function POST(request: NextRequest) {
 
     let status = 502;
     if (error?.code === 'CONFIG_MISSING') status = 503;
-    else if (error?.code === 'UNAUTHORIZED') status = 401;
+    else if (error?.code === 'UNAUTHORIZED' || error?.code === 'MISSING_PERMISSIONS') status = 401;
     else if (error?.code === 'QUOTA_EXCEEDED' || error?.code === 'ALL_ELEVENLABS_KEYS_EXHAUSTED') status = 429;
     else if (error?.code === 'EMPTY_TEXT') status = 400;
+    else if (error?.code === 'PAID_VOICE_REQUIRED') status = 402;
 
     return NextResponse.json(
       {

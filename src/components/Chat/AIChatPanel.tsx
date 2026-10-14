@@ -178,7 +178,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
   const [speechError, setSpeechError] = useState<{ messageId: string; error: string; canFallbackToBrowser: boolean } | null>(null);
   const [speechFallbackNotice, setSpeechFallbackNotice] = useState<{ messageId: string; providerName: string } | null>(null);
   const [selectedVoiceProvider, setSelectedVoiceProvider] = useState<string>('elevenlabs');
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('C1npRmjB19a6yNkEucvx');
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('pNInz6obpgDQGcFmaJgB');
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
   const [voiceConfigData, setVoiceConfigData] = useState<any>(null);
   const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState(false);
@@ -2258,7 +2258,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                       const newProv = e.target.value;
                       const defaultVoice =
                         newProv === 'elevenlabs'
-                          ? (voiceConfigData?.activeVoiceId || 'C1npRmjB19a6yNkEucvx')
+                          ? (voiceConfigData?.activeVoiceId || 'pNInz6obpgDQGcFmaJgB')
                           : newProv === 'piper'
                           ? 'en_US-lessac-medium'
                           : newProv === 'openai'
@@ -2318,7 +2318,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                           )}
                           {voices.map((v: any) => (
                             <option key={v.id} value={v.id}>
-                              {v.name}
+                              {v.freeTierReady ? `🌟 ${v.name} (Free API)` : v.requiresPaidPlan ? `💎 ${v.name} (Paid Plan)` : v.name}
                             </option>
                           ))}
                         </>

@@ -632,4 +632,120 @@ describe('Modular Neural Voice TTS System Suite', () => {
       expect(result.voiceName).toContain('Configured Voice (C1npRmjB');
     });
   });
+
+  describe('8. HTTP 400 Diagnostics, 402 Auto-Heal & Robust Fallback Suite', () => {
+    it('should sanitize non-language voice IDs in synthesizeFreeTts to prevent Google TTS HTTP 400', async () => {
+      const mockAudio = Buffer.from([0xff, 0xfb, 0x90, 0x64]);
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(mockAudio, {
+          status: 200,
+          headers: { 'Content-Type': 'audio/mpeg' },
+        })
+      );
+
+      // Pass an ElevenLabs voice ID into free_tts (which previously caused HTTP 400)
+      const result = await synthesizeFreeTts({
+        text: 'Testing Free Neural Audio voice sanitization.',
+        voiceId: 'C1npRmjB19a6yNkEucvx',
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const urlStr = String(fetchMock.mock.calls[0]?.[0]);
+      const url = new URL(urlStr);
+      // Confirmed: tl parameter was sanitized to 'en-US' rather than invalid 'C1npRmjB19a6yNkEucvx'
+      expect(url.searchParams.get('tl')).toBe('en-US');
+      expect(result.voiceId).toBe('en-US');
+      expect(result.providerId).toBe('free_tts');
+    });
+
+    it('should capture provider response body and attach detailed diagnostic info on Free TTS failure', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response('<html>Custom Google Error</html>', {
+          status: 400,
+          statusText: 'Bad Request',
+        })
+      );
+
+      await expect(
+        synthesizeFreeTts({
+          text: 'Triggering simulated failure.',
+          voiceId: 'en-US',
+        })
+      ).rejects.toThrow(/Free Neural Audio synthesis request failed \(HTTP 400: <html>Custom Google Error<\/html>\)/);
+    });
+
+    it('should auto-heal to verified free-tier voice Adam when ElevenLabs returns 402 for library voice', async () => {
+      process.env.ELEVENLABS_API_KEY_1 = 'eleven_test_key_autoheal';
+
+      const mockAudio = Buffer.from([0xff, 0xfb, 0x90, 0x64]);
+      let callCount = 0;
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any) => {
+        callCount++;
+        const urlStr = String(url);
+        if (urlStr.includes('C1npRmjB19a6yNkEucvx')) {
+          return new Response(
+            JSON.stringify({
+              detail: {
+                type: 'payment_required',
+                code: 'paid_plan_required',
+                message: 'Free users cannot use library voices via the API. Please upgrade your subscription to use this voice.',
+                status: 'payment_required',
+              },
+            }),
+            { status: 402, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        // Auto-heal retry with Adam (pNInz6obpgDQGcFmaJgB)
+        if (urlStr.includes('pNInz6obpgDQGcFmaJgB')) {
+          return new Response(mockAudio, {
+            status: 200,
+            headers: { 'Content-Type': 'audio/mpeg' },
+          });
+        }
+        return new Response('Not found', { status: 404 });
+      });
+
+      const result = await synthesizeElevenLabs({
+        text: 'This library voice requires a paid plan.',
+        voiceId: 'C1npRmjB19a6yNkEucvx',
+      });
+
+      expect(callCount).toBe(2);
+      expect(result.autoHealedVoice).toBe(true);
+      expect(result.originalVoiceId).toBe('C1npRmjB19a6yNkEucvx');
+      expect(result.voiceId).toBe('pNInz6obpgDQGcFmaJgB');
+      expect(result.notice).toContain('automatically synthesized using verified free-tier voice Adam');
+    });
+
+    it('should gracefully fail over to Free Neural Audio when ElevenLabs voice cannot be synthesized', async () => {
+      process.env.ELEVENLABS_API_KEY_1 = 'eleven_test_key_fallback';
+
+      // Mock ElevenLabs failing permanently with 500 error
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any) => {
+        const urlStr = String(url);
+        if (urlStr.includes('api.elevenlabs.io')) {
+          return new Response('Internal Server Error', { status: 500 });
+        }
+        // Fallback to Google Translate TTS
+        if (urlStr.includes('translate.google.com')) {
+          return new Response(Buffer.from([0xff, 0xfb, 0x90, 0x64]), {
+            status: 200,
+            headers: { 'Content-Type': 'audio/mpeg' },
+          });
+        }
+        return new Response('Not found', { status: 404 });
+      });
+
+      const result = await synthesizeSpeech({
+        text: 'Fallback test when ElevenLabs fails with 500.',
+        voiceId: 'C1npRmjB19a6yNkEucvx',
+        provider: 'elevenlabs',
+      });
+
+      expect(result.fallbackTriggered).toBe(true);
+      expect(result.providerId).toBe('free_tts');
+      expect(result.voiceId).toBe('en-US'); // Sanitized cleanly
+      expect(result.audioBuffer).toBeDefined();
+    });
+  });
 });

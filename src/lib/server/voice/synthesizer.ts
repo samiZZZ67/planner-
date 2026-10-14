@@ -89,12 +89,12 @@ export function getTTSConfig(): TTSConfigResponse {
     },
   ];
 
-  let activeVoiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || '21m00Tcm4TlvDq8ikWAM';
+  let activeVoiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || 'pNInz6obpgDQGcFmaJgB';
   if (activeProvider === 'free_tts') activeVoiceId = 'en-US';
   else if (activeProvider === 'piper') activeVoiceId = 'en_US-lessac-medium';
   else if (activeProvider === 'openai') activeVoiceId = 'coral';
   else if (activeProvider === 'elevenlabs') {
-    activeVoiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || '21m00Tcm4TlvDq8ikWAM';
+    activeVoiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || 'pNInz6obpgDQGcFmaJgB';
   }
 
   return {
@@ -108,7 +108,7 @@ export function getTTSConfig(): TTSConfigResponse {
 /**
  * Central voice synthesizer dispatcher.
  * Selects the configured or requested provider, handles chunking, and returns synthesized audio.
- * When ElevenLabs experiences quota exhaustion or all keys are depleted, automatically fails over
+ * When ElevenLabs experiences quota exhaustion, key depletion, or provider failure, automatically fails over
  * to Piper (if configured) or zero-setup Free Neural Audio, tagging the result with fallback telemetry.
  */
 export async function synthesizeSpeech(options: TTSOptions): Promise<TTSResult> {
@@ -118,39 +118,53 @@ export async function synthesizeSpeech(options: TTSOptions): Promise<TTSResult> 
     try {
       return await synthesizeElevenLabs(options);
     } catch (err: any) {
-      const isExhausted =
-        err?.code === 'ALL_ELEVENLABS_KEYS_EXHAUSTED' ||
-        err?.code === 'QUOTA_EXCEEDED';
+      const isEligibleForFallback =
+        !options.signal?.aborted &&
+        (err?.code === 'ALL_ELEVENLABS_KEYS_EXHAUSTED' ||
+          err?.code === 'QUOTA_EXCEEDED' ||
+          err?.code === 'PAID_VOICE_REQUIRED' ||
+          err?.code === 'CONFIG_MISSING' ||
+          err?.code === 'PROVIDER_ERROR');
 
-      // If keys are completely exhausted and not aborted by client, perform graceful fallback
-      if (isExhausted && !options.signal?.aborted) {
+      // If keys are exhausted or provider failed and not aborted by client, perform graceful fallback
+      if (isEligibleForFallback) {
         console.warn(
-          `[Voice Synthesizer] All ElevenLabs keys exhausted or unavailable. Initiating graceful fallback...`
+          `[Voice Synthesizer] ElevenLabs unavailable (${err?.code || 'error'}: ${err?.message}). Initiating graceful fallback...`
         );
 
         if (isPiperConfigured()) {
           try {
-            const fallbackResult = await synthesizePiper(options);
+            const fallbackResult = await synthesizePiper({
+              ...options,
+              voiceId: 'en_US-lessac-medium',
+            });
             return {
               ...fallbackResult,
               fallbackTriggered: true,
               originalProviderId: 'elevenlabs',
               fallbackReason:
-                'All configured ElevenLabs keys are exhausted or rate-limited. Successfully failed over to Piper.',
+                err?.code === 'ALL_ELEVENLABS_KEYS_EXHAUSTED'
+                  ? 'All configured ElevenLabs keys are exhausted or rate-limited. Successfully failed over to Piper.'
+                  : `ElevenLabs unavailable (${err?.message || err?.code}). Successfully failed over to Piper.`,
             };
           } catch (piperErr) {
             console.warn('[Voice Synthesizer] Piper fallback failed, trying Free Neural Audio:', piperErr);
           }
         }
 
-        // Default zero-config fallback
-        const fallbackResult = await synthesizeFreeTts(options);
+        // Default zero-config fallback: always pass sanitized 'en-US' so free_tts never receives an invalid voiceId
+        const fallbackResult = await synthesizeFreeTts({
+          ...options,
+          voiceId: 'en-US',
+        });
         return {
           ...fallbackResult,
           fallbackTriggered: true,
           originalProviderId: 'elevenlabs',
           fallbackReason:
-            'All configured ElevenLabs keys are exhausted. Successfully failed over to Free Neural Audio.',
+            err?.code === 'ALL_ELEVENLABS_KEYS_EXHAUSTED'
+              ? 'All configured ElevenLabs keys are exhausted. Successfully failed over to Free Neural Audio.'
+              : `ElevenLabs unavailable (${err?.message || err?.code}). Successfully failed over to Free Neural Audio.`,
         };
       }
 

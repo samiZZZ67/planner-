@@ -41,10 +41,15 @@ export async function synthesizeFreeTts(options: TTSOptions): Promise<TTSResult>
     throw error;
   }
 
-  const voiceId = options.voiceId || 'en-US';
-  const voice = FREE_TTS_VOICES.find(v => v.id.toLowerCase() === voiceId.toLowerCase()) || {
-    id: voiceId,
-    name: `Natural (${voiceId})`,
+  const rawVoiceId = (options.voiceId || '').trim();
+  const matchedVoice = FREE_TTS_VOICES.find(v => v.id.toLowerCase() === rawVoiceId.toLowerCase());
+  // Validate whether rawVoiceId is a valid BCP-47 language tag (e.g. 'en', 'en-US', 'en-GB', 'es')
+  // This prevents passing external provider voice IDs (like ElevenLabs IDs) into Google's 'tl' parameter
+  const isValidLangTag = /^[a-z]{2}(?:-[a-z]{2,4})?$/i.test(rawVoiceId);
+  const targetLang = matchedVoice ? matchedVoice.id : (isValidLangTag ? rawVoiceId : 'en-US');
+  const voice = matchedVoice || {
+    id: targetLang,
+    name: `Neural Natural (${targetLang})`,
     provider: 'free_tts' as const,
   };
 
@@ -56,7 +61,7 @@ export async function synthesizeFreeTts(options: TTSOptions): Promise<TTSResult>
     const url = new URL('https://translate.google.com/translate_tts');
     url.searchParams.set('ie', 'UTF-8');
     url.searchParams.set('client', 'tw-ob');
-    url.searchParams.set('tl', voice.id);
+    url.searchParams.set('tl', targetLang);
     url.searchParams.set('q', chunk);
 
     const response = await fetch(url.toString(), {
@@ -70,9 +75,22 @@ export async function synthesizeFreeTts(options: TTSOptions): Promise<TTSResult>
     });
 
     if (!response.ok) {
-      const err: any = new Error(`Free Neural Audio synthesis request failed (HTTP ${response.status}).`);
+      let errorBody = '';
+      try {
+        errorBody = await response.text();
+        if (errorBody.length > 200) {
+          errorBody = errorBody.slice(0, 200).replace(/<[^>]*>/g, '').trim();
+        }
+      } catch {
+        errorBody = response.statusText;
+      }
+      console.warn(`[Free Neural Audio] Synthesis request failed (HTTP ${response.status}): ${errorBody}`);
+      const err: any = new Error(
+        `Free Neural Audio synthesis request failed (HTTP ${response.status}${errorBody ? `: ${errorBody}` : ''}).`
+      );
       err.code = 'PROVIDER_ERROR';
       err.provider = 'free_tts';
+      err.status = response.status;
       throw err;
     }
 
