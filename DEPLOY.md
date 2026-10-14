@@ -70,19 +70,27 @@ For book PDFs on Render, attach a persistent disk to the **web service** at `/va
 
 To connect Telegram, open Render **Dashboard → your NightPlanner web service → Environment**, add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, and redeploy. The connection check is available in the authenticated endpoint `GET /api/telegram/status`; delivery history is `GET /api/telegram/deliveries`. A manual publish request is `POST /api/books/{bookId}/assignments/{assignmentId}/publish` and requires an approved assignment. The application checks the bot's channel membership and posting permission before sending. Never include the bot token in frontend settings or client requests.
 
-### Scheduled Telegram publishing on Render
+### Scheduled Telegram Publishing & Automatic Background Scheduler (`node-cron`)
 
-New uploads and older saved books are queued for automatic processing by default. The web service extracts the selected pages, creates a concept based daily plan, then prepares that day's summary, definitions, illustrative example, questions, and previous lesson connection when the scheduled time arrives. Posts include the original source text and a rendered page image. To run this without leaving the site open, create a **Cron Job** in Render using the same repository and deploy environment, set its schedule to `*/5 * * * *`, and use this command:
+NightPlanner now includes a built-in, reliable **background scheduling mechanism powered by `node-cron`** directly inside the Node.js backend:
 
-```bash
-curl --max-time 600 -fsS -X POST "$NIGHTPLANNER_URL/api/cron/books" -H "Authorization: Bearer $BOOKS_CRON_SECRET"
-```
+- **Automatic Startup:** Initialized automatically when the backend boots (`src/instrumentation.ts` and `server.js`).
+- **Cadence:** Ticks every minute using the cron expression `* * * * *`.
+- **Zero-User-Dependency:** Runs in the background independently of whether any user has the website open.
+- **Atomic Concurrency Protection:** Uses database-level atomic claiming (`RETURNING id`) and an in-memory lock to prevent duplicate deliveries across instances.
+- **Overdue & Downtime Recovery:** Performs an immediate sweep upon boot and recovers any jobs that became due while the backend was restarting or asleep.
+- **Diagnostics in `/health`:** The `GET /health` endpoint reports the scheduler's running state, cron expression, last execution timestamp, and error streak.
 
-Set `NIGHTPLANNER_URL` to the deployed web service origin (for example `https://your-service.onrender.com`). Set `BOOKS_CRON_SECRET` on both services to the same random secret. The Cron service does not need the Telegram token; it calls the authenticated web service, which reads the token and sends the message. Render cron schedules use UTC; the scheduler compares stored UTC timestamps computed from each book's configured timezone. Render Cron Jobs cannot use a persistent disk, so use Neon (`DATABASE_URL`) for durable jobs and delivery history. If using the local JSON fallback, the web service needs its own persistent disk mounted at `/var/data`; that disk is only accessed by the web service. Render documents Cron Jobs' UTC schedules and lack of persistent-disk access [here](https://render.com/docs/cronjobs) and [here](https://render.com/docs/disks).
-
-Set these on the **Cron service**: `NIGHTPLANNER_URL`, `BOOKS_CRON_SECRET` (same as the web service), and no Telegram token. Use Neon (`DATABASE_URL`) for the web service job/delivery tables; the Cron trigger reaches them through the web service API.
-
-The protected trigger is `POST /api/cron/books`. `GET/POST /api/telegram/automation` reports or pauses/resumes automation. `PATCH /api/books/{bookId}/assignments/{assignmentId}/schedule` reschedules an approved assignment using its book timezone. Automatic sends require readable source pages. Pages flagged by OCR or right-to-left text ordering wait for visual review in the Book Planner before posting. Preparation failures retry automatically up to five times; Telegram rate limits are retried. Delivery timeouts or ambiguous partial sends stop for a manual status check to avoid duplicate posts. Keep the Render web service online and configure the disk, Neon database, Telegram variables, and cron above; without the cron job, scheduled posts will not run.
+#### Render Deployment Considerations & Web Service Sleep:
+- **`node-cron` Lifecycle:** `node-cron` runs inside the Node.js process and ticks as long as the process is alive.
+- **Render Starter / Paid Tier ($7/mo):** The web service runs 24/7 without sleeping. `node-cron` executes continuously every minute with zero external setup needed.
+- **Render Free Tier Sleep Limitation:** Free-tier web services on Render spin down into sleep after 15 minutes without incoming HTTP traffic. While asleep, the Node.js process is paused.
+  - When the service wakes up (e.g. via any HTTP request, user visit, or health probe), the scheduler runs an **immediate recovery sweep** to deliver any overdue messages.
+  - To ensure messages are sent at their exact minute on Render Free Tier, set up a free uptime monitor (e.g., [UptimeRobot](https://uptimerobot.com) or [cron-job.org](https://cron-job.org)) to ping `https://your-service.onrender.com/health` every 5–10 minutes to prevent sleep.
+  - Alternatively, you can use Render's optional Cron Job service to call the protected endpoint:
+    ```bash
+    curl --max-time 600 -fsS -X POST "$NIGHTPLANNER_URL/api/cron/books" -H "Authorization: Bearer $BOOKS_CRON_SECRET"
+    ```
 
 ---
 

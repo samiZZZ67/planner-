@@ -1,40 +1,39 @@
 import { NextResponse } from 'next/server';
-import { claimDueBookPublishJobs, updateBookPublishJob } from '@/lib/server/bookScheduler';
-import { listBookAssignments } from '@/lib/server/bookAssignments';
-import { getBook, listBookPages } from '@/lib/server/books';
-import { publishApprovedAssignment } from '@/lib/server/telegram';
-import { prepareAutomaticBookPublishing } from '@/lib/server/autoBookPublishing';
+import { runScheduledDeliveryCycle, getSchedulerStatus, initScheduler } from '@/lib/server/scheduler';
+
+export async function GET(request: Request) {
+  // Ensure scheduler is active
+  initScheduler();
+  const status = getSchedulerStatus();
+  return NextResponse.json({
+    ok: true,
+    scheduler: status,
+  });
+}
 
 export async function POST(request: Request) {
+  // Ensure scheduler is running
+  initScheduler();
+
   const secret = process.env.BOOKS_CRON_SECRET?.trim();
-  if (!secret) return NextResponse.json({ error: 'Scheduled publishing is not configured.' }, { status: 503 });
-  if (request.headers.get('authorization') !== `Bearer ${secret}`) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
-  const now = Date.now();
-  const automaticPreparation = await prepareAutomaticBookPublishing(now);
-  const due = await claimDueBookPublishJobs(now);
-  const results: Array<{ assignmentId: string; status: string; message?: string }> = [];
-  for (const job of due) {
-    try {
-      const book = await getBook(job.userId, job.bookId);
-      const assignments = book ? await listBookAssignments(job.userId, job.bookId) : [];
-      const assignment = assignments.find(item => item.id === job.assignmentId);
-      if (!book || !assignment || assignment.status !== 'approved') throw new Error('Book or approved assignment is no longer available.');
-      const pages = await listBookPages(job.userId, job.bookId, assignment.startPdfPage, assignment.endPdfPage);
-      const previous = assignments.find(item => item.dayNumber === assignment.dayNumber - 1);
-      const delivery = await publishApprovedAssignment(job.userId, book, assignment, pages, previous);
-      await updateBookPublishJob({ ...job, status: 'completed', lastError: `Telegram message IDs: ${delivery.telegramMessageIds.join(', ')}` });
-      results.push({ assignmentId: job.assignmentId, status: 'completed' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Scheduled publish failed.';
-      const delivery = (error as Error & { delivery?: { safeToRetry?: boolean; retryAfterAt?: number | null } }).delivery;
-      if (delivery?.safeToRetry && delivery.retryAfterAt && job.attemptCount < 5) {
-        await updateBookPublishJob({ ...job, status: 'scheduled', scheduledAt: delivery.retryAfterAt, lastError: message });
-        results.push({ assignmentId: job.assignmentId, status: 'retry_scheduled', message });
-      } else {
-        await updateBookPublishJob({ ...job, status: 'failed', lastError: message });
-        results.push({ assignmentId: job.assignmentId, status: 'failed', message });
-      }
+  // If a secret is configured, require authentication; otherwise allow manual trigger in dev/internal
+  if (secret) {
+    const authHeader = request.headers.get('authorization') || '';
+    if (authHeader !== `Bearer ${secret}`) {
+      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
     }
   }
-  return NextResponse.json({ automaticPreparation, claimed: due.length, results });
+
+  const now = Date.now();
+  console.log(`[API /api/cron/books] Manual or external trigger received at ${new Date(now).toISOString()}`);
+  const result = await runScheduledDeliveryCycle(now);
+
+  return NextResponse.json({
+    ok: true,
+    automaticPreparation: result.automaticPreparation,
+    claimed: result.bookJobs.claimed + result.scheduledMessages.claimed,
+    bookJobs: result.bookJobs,
+    scheduledMessages: result.scheduledMessages,
+    durationMs: result.durationMs,
+  });
 }

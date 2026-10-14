@@ -59,6 +59,7 @@ app.prepare().then(() => {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-store, no-cache',
         });
+        const schedulerState = global[Symbol.for('__NIGHTPLANNER_CRON_SCHEDULER__')];
         res.end(
           JSON.stringify({
             status: 'ok',
@@ -66,6 +67,12 @@ app.prepare().then(() => {
             uptime: process.uptime(),
             timestamp: new Date().toISOString(),
             port: port,
+            scheduler: schedulerState ? {
+              running: Boolean(schedulerState.running),
+              cronExpression: schedulerState.cronExpression,
+              lastRunAt: schedulerState.lastRunAt ? new Date(schedulerState.lastRunAt).toISOString() : null,
+              consecutiveErrors: schedulerState.consecutiveErrors || 0,
+            } : 'initializing',
           })
         );
         return;
@@ -116,6 +123,7 @@ app.prepare().then(() => {
     } else {
       console.log(`> Running in local JSON database mode (DATABASE_URL not set)`);
     }
+    console.log(`> Background scheduler: node-cron enabled (* * * * *)`);
   });
 }).catch((err) => {
   console.error('Failed to start server:', err);
