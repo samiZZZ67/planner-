@@ -86,21 +86,22 @@ export function TelegramQuickSend({
             : { right: isPhone ? 12 : 20, bottom: isPhone ? 154 : 88 }),
           zIndex: 91,
           width: isPhone ? 'min(360px, calc(100vw - 24px))' : 'min(380px, calc(100vw - 40px))',
-          padding: 14,
+          padding: 16,
           display: 'grid',
           overflowY: 'auto',
-          gap: 10,
-          borderRadius: 18,
+          gap: 12,
+          borderRadius: 20,
           color: 'var(--text-primary)',
-          background: isDark ? 'rgba(13, 11, 24, 0.97)' : 'rgba(255, 255, 255, 0.98)',
-          border: `1px solid ${isDark ? 'rgba(192, 132, 252, 0.38)' : 'rgba(124, 58, 237, 0.3)'}`,
-          boxShadow: '0 18px 48px rgba(0,0,0,.35)',
-          backdropFilter: 'blur(20px)',
+          background: 'var(--v-glass-bg-card)',
+          border: '1.5px solid var(--v-glass-border)',
+          boxShadow: 'var(--v-shadow-spatial)',
+          backdropFilter: 'blur(28px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(180%)',
         }}
       >
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <div><strong style={{ fontSize: 14 }}>Send to Telegram</strong><div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 3 }}>Your bot posts text, images, and voice files to its configured channel.</div></div>
-          <button type="button" onClick={() => setOpen(false)} aria-label="Close Telegram message" style={{ border: 0, background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', padding: 5 }}><X size={17} /></button>
+          <button type="button" onClick={() => setOpen(false)} aria-label="Close Telegram message" className="v-circle-btn" style={{ width: 26, height: 26 }}><X size={14} /></button>
         </header>
         <textarea
           autoFocus
@@ -110,14 +111,14 @@ export function TelegramQuickSend({
           onKeyDown={event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); void sendMessage(); } }}
           placeholder={media ? 'Optional caption for the attachment…' : 'Type the exact message to post…'}
           aria-label={media ? 'Optional Telegram caption' : 'Telegram message text'}
-          style={{ width: '100%', minHeight: 118, maxHeight: 280, resize: 'vertical', borderRadius: 12, border: '1px solid var(--v-glass-border)', padding: 11, background: 'var(--v-glass-bg-subtle)', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5 }}
+          style={{ width: '100%', minHeight: 118, maxHeight: 280, resize: 'vertical', borderRadius: 12, border: '1.5px solid var(--v-glass-border)', padding: 11, background: 'var(--v-glass-bg-subtle)', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 13, lineHeight: 1.5, outline: 'none' }}
         />
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 7 }}>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 10px', borderRadius: 9, border: '1px solid var(--v-glass-border)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 11px', borderRadius: 10, border: '1px solid var(--v-glass-border)', background: 'var(--v-glass-bg-subtle)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
             <ImageIcon size={14} /> Add image
             <input type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden onChange={event => { setMedia(event.target.files?.[0] || null); setError(''); event.currentTarget.value = ''; }} />
           </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 10px', borderRadius: 9, border: '1px solid var(--v-glass-border)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 11px', borderRadius: 10, border: '1px solid var(--v-glass-border)', background: 'var(--v-glass-bg-subtle)', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer' }}>
             <Mic size={14} /> Add voice
             <input type="file" accept="audio/ogg,audio/mpeg,audio/mp4,audio/x-m4a,.ogg,.mp3,.m4a" hidden onChange={event => { setMedia(event.target.files?.[0] || null); setError(''); event.currentTarget.value = ''; }} />
           </label>
@@ -125,7 +126,7 @@ export function TelegramQuickSend({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{text.length}/{media ? 1024 : 3500} characters · Ctrl+Enter to send</span>
-          <button type="button" onClick={() => void sendMessage()} disabled={(!text.trim() && !media) || sending} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 13px', border: 0, borderRadius: 10, background: 'var(--accent-color)', color: '#fff', fontWeight: 700, cursor: sending || (!text.trim() && !media) ? 'not-allowed' : 'pointer', opacity: sending || (!text.trim() && !media) ? .6 : 1 }}><Send size={14} />{sending ? 'Sending…' : media?.type.startsWith('image/') ? 'Send image' : media ? 'Send voice' : 'Send'}</button>
+          <button type="button" onClick={() => void sendMessage()} disabled={(!text.trim() && !media) || sending} className="v-pill-btn v-pill-btn-primary" style={{ padding: '7px 14px', minHeight: 36, fontSize: 12 }}><Send size={13} />{sending ? 'Sending…' : media?.type.startsWith('image/') ? 'Send image' : media ? 'Send voice' : 'Send'}</button>
         </div>
         {notice && <p role="status" style={{ margin: 0, color: '#22c55e', fontSize: 12 }}>{notice}</p>}
         {error && <p role="alert" style={{ margin: 0, color: '#f87171', fontSize: 12 }}>{error}</p>}
@@ -137,20 +138,23 @@ export function TelegramQuickSend({
         aria-label={open ? 'Close Telegram message button' : 'Open Telegram message button'}
         aria-expanded={open}
         title="Send a message to Telegram"
+        className="freellm-telegram-trigger"
         style={{
           position: 'fixed',
           ...(anchor
             ? { left: anchor.x + 29, top: anchor.y + 28 }
             : { right: isPhone ? 98 : 110, bottom: isPhone ? 106 : 50 }),
           zIndex: 90,
-          width: 21,
-          height: 21,
+          width: 22,
+          height: 22,
           borderRadius: '50%',
-          border: `1px solid ${isDark ? 'rgba(192, 132, 252, 0.75)' : 'rgba(124, 58, 237, 0.65)'}`,
-          background: isDark ? 'linear-gradient(145deg,#211432,#100d1d)' : 'linear-gradient(145deg,#fff,#f3e8ff)',
-          color: isDark ? '#e9d5ff' : '#6d28d9',
-          boxShadow: '0 2px 8px rgba(0,0,0,.35)',
-          fontSize: 12,
+          border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(15, 23, 42, 0.18)'}`,
+          background: isDark ? 'rgba(24, 24, 32, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          color: isDark ? 'var(--accent-color)' : '#0284c7',
+          boxShadow: isDark ? '0 4px 12px rgba(0,0,0,.45), 0 0 8px var(--accent-glow)' : '0 2px 8px rgba(0,0,0,.12), 0 0 6px var(--accent-glow)',
+          fontSize: 11,
           fontWeight: 800,
           cursor: isDragging ? 'grabbing' : 'pointer',
           padding: 0,

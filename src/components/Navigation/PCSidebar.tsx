@@ -56,7 +56,7 @@ export function PCSidebar({ currentTab, onSelectTab, onOpenAIChat }: PCSidebarPr
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: 22,
-          boxShadow: 'var(--v-shadow-btn), 0 0 16px rgba(168, 85, 247, 0.25)',
+          boxShadow: 'var(--v-shadow-btn), 0 0 16px var(--accent-glow)',
           cursor: 'pointer',
           transition: 'all 0.2s ease',
           overflow: 'hidden',

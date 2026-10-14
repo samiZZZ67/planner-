@@ -537,3 +537,198 @@ select,
   border-color: var(--v-glass-border-bright);
 }
 
+/* Global Disabled State */
+.v-pill-btn:disabled,
+.g-btn:disabled,
+.v-circle-btn:disabled,
+.g-icon-btn:disabled,
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ================================================================
+   SEMANTIC PILL BUTTON VARIANTS
+   ================================================================ */
+.v-pill-btn-accent {
+  background: var(--accent-glow);
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  font-weight: 700;
+}
+.v-pill-btn-accent:hover {
+  background: var(--accent-color);
+  color: var(--v-app-bg);
+  box-shadow: 0 4px 16px var(--accent-glow);
+}
+[data-theme="light"] .v-pill-btn-accent {
+  background: rgba(2, 132, 199, 0.1);
+  border-color: rgba(2, 132, 199, 0.4);
+  color: #0284c7;
+}
+[data-theme="light"] .v-pill-btn-accent:hover {
+  background: #0284c7;
+  color: #ffffff;
+}
+
+.v-pill-btn-success {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #22c55e;
+  font-weight: 600;
+}
+.v-pill-btn-success:hover {
+  background: rgba(34, 197, 94, 0.25);
+  border-color: rgba(34, 197, 94, 0.6);
+}
+[data-theme="dark"] .v-pill-btn-success {
+  color: #4ade80;
+}
+[data-theme="light"] .v-pill-btn-success {
+  background: rgba(22, 163, 74, 0.1);
+  border-color: rgba(22, 163, 74, 0.35);
+  color: #15803d;
+}
+
+.v-pill-btn-danger {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+  font-weight: 600;
+}
+.v-pill-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: rgba(239, 68, 68, 0.55);
+}
+[data-theme="dark"] .v-pill-btn-danger {
+  color: #f87171;
+}
+[data-theme="light"] .v-pill-btn-danger {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.35);
+  color: #b91c1c;
+}
+
+/* ================================================================
+   TASK ROW & ACCENT STRIP (.g-task-row, .g-section-accent)
+   ================================================================ */
+.g-task-row {
+  position: relative;
+  background: var(--v-glass-bg-card);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1.5px solid var(--v-glass-border-subtle);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--v-shadow-card);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.g-task-row:hover {
+  border-color: var(--v-glass-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.g-section-accent {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  border-radius: 4px 0 0 4px;
+}
+
+/* ================================================================
+   MODAL BACKDROP & DIALOG UTILITIES
+   ================================================================ */
+.v-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  animation: vFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="light"] .v-modal-backdrop {
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.v-modal-dialog {
+  background: var(--v-glass-bg-card);
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  border: 1.5px solid var(--v-glass-border);
+  border-radius: 24px;
+  box-shadow: var(--v-shadow-spatial);
+  overflow: hidden;
+  color: var(--text-primary);
+  animation: vScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes vFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes vScaleIn {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ================================================================
+   FREELMM MOON-SHAPED AI ASSISTANT BUTTON & TELEGRAM TRIGGER
+   Lighter, translucent, refined glassmorphic orb
+   ================================================================ */
+.freellm-moon-button {
+  background: var(--v-glass-bg);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  border: 1.5px solid var(--v-glass-border-bright);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), 0 0 20px var(--accent-glow);
+  color: var(--text-primary);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+[data-theme="light"] .freellm-moon-button {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(15, 23, 42, 0.2);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12), 0 0 16px var(--accent-glow);
+}
+
+.freellm-moon-button:hover {
+  border-color: var(--accent-color);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45), 0 0 26px var(--accent-glow);
+}
+
+.freellm-telegram-trigger {
+  background: var(--v-glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--v-glass-border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  color: var(--text-primary);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+[data-theme="light"] .freellm-telegram-trigger {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(15, 23, 42, 0.2);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+  color: #0f172a;
+}
+
+.freellm-telegram-trigger:hover {
+  border-color: var(--accent-color);
+  box-shadow: 0 4px 16px var(--accent-glow);
+  transform: scale(1.08);
+}
+
+

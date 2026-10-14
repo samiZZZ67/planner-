@@ -1503,9 +1503,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                   height: 36,
                   borderRadius: '50%',
                   overflow: 'hidden',
-                  background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.4), rgba(56, 189, 248, 0.4))',
-                  border: '2px solid rgba(192, 132, 252, 0.7)',
-                  boxShadow: '0 0 16px rgba(168, 85, 247, 0.4)',
+                  background: 'var(--v-glass-bg-subtle)',
+                  border: '1.5px solid var(--v-glass-border)',
+                  boxShadow: '0 0 14px var(--accent-glow)',
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
@@ -1525,7 +1525,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                   <span className="font-bloody" style={{ fontSize: 16, fontWeight: 700, letterSpacing: '0.02em' }}>
                     Sam’s AI
                   </span>
-                  <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#c084fc', fontWeight: 600 }}>
+                  <span style={{ fontSize: 9.5, padding: '1px 6px', borderRadius: 4, background: 'var(--accent-glow)', border: '1px solid var(--accent-color)', color: 'var(--accent-color)', fontWeight: 600 }}>
                     AI
                   </span>
                 </div>

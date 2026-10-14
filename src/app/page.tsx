@@ -554,11 +554,13 @@ export default function SamsSpaceApp() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.4), rgba(56, 189, 248, 0.4))',
-            border: '2px solid rgba(192, 132, 252, 0.6)',
+            background: 'var(--v-glass-bg)',
+            backdropFilter: 'blur(24px) saturate(170%)',
+            WebkitBackdropFilter: 'blur(24px) saturate(170%)',
+            border: '1.5px solid var(--v-glass-border-bright)',
             boxShadow: isDragging
-              ? '0 12px 28px rgba(0, 0, 0, 0.7), 0 0 30px rgba(168, 85, 247, 0.6)'
-              : '0 8px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(168, 85, 247, 0.4)',
+              ? '0 14px 32px rgba(0, 0, 0, 0.7), 0 0 28px var(--accent-glow)'
+              : '0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px var(--accent-glow)',
             cursor: isDragging ? 'grabbing' : 'grab',
             touchAction: 'none',
             userSelect: 'none',

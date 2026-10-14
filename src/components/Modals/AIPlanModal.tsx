@@ -281,23 +281,15 @@ export function AIPlanModal({
 
   return (
     <div
+      className="v-modal-backdrop"
       style={{
-        position: 'fixed',
-        inset: 0,
         zIndex: 100,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-        background: 'rgba(0, 0, 0, 0.75)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
       }}
       role="dialog"
       aria-modal="true"
     >
       <div
-        className="v-card"
+        className="v-modal-dialog"
         style={{
           width: '100%',
           maxWidth: 680,
@@ -305,8 +297,6 @@ export function AIPlanModal({
           display: 'flex',
           flexDirection: 'column',
           padding: 0,
-          overflow: 'hidden',
-          boxShadow: '0 24px 80px rgba(0,0,0,0.8)',
         }}
       >
         {/* ── Modal Header ── */}

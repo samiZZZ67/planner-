@@ -62,16 +62,12 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
       return (
         <button
           onClick={onOpenLogin}
-          className="v-pill-btn animate-pulse"
+          className="v-pill-btn v-pill-btn-accent animate-pulse"
           style={{
             padding: '6px 14px',
             fontSize: 11,
             minHeight: 34,
-            borderColor: '#a855f7',
-            background: 'rgba(168, 85, 247, 0.15)',
-            color: '#c084fc',
             gap: 6,
-            fontWeight: 700,
           }}
           title="Login to enable cloud sync across devices"
         >
@@ -189,8 +185,8 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
             height: 22,
             borderRadius: '50%',
             overflow: 'hidden',
-            border: '1px solid rgba(168, 85, 247, 0.4)',
-            boxShadow: '0 0 10px rgba(168, 85, 247, 0.3)',
+            border: '1.5px solid var(--v-glass-border)',
+            boxShadow: '0 0 10px var(--accent-glow)',
             flexShrink: 0,
             display: 'flex',
             alignItems: 'center',

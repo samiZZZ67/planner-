@@ -1442,18 +1442,20 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
           alignItems: 'center',
           justifyContent: 'center',
           background: isDark
-            ? 'linear-gradient(135deg, rgba(28, 20, 50, 0.88), rgba(15, 12, 30, 0.95))'
-            : 'linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(243, 232, 255, 0.95))',
+            ? 'rgba(24, 24, 32, 0.72)'
+            : 'rgba(255, 255, 255, 0.78)',
+          backdropFilter: 'blur(24px) saturate(170%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(170%)',
           border: isDark
-            ? '1.5px solid rgba(192, 132, 252, 0.45)'
-            : '1.5px solid rgba(168, 85, 247, 0.45)',
+            ? '1.5px solid rgba(255, 255, 255, 0.22)'
+            : '1.5px solid rgba(15, 23, 42, 0.18)',
           boxShadow: isDragging
             ? (isDark
-                ? '0 16px 36px rgba(0, 0, 0, 0.7), 0 0 30px rgba(168, 85, 247, 0.65)'
-                : '0 16px 36px rgba(15, 23, 42, 0.2), 0 0 30px rgba(168, 85, 247, 0.45)')
+                ? '0 16px 36px rgba(0, 0, 0, 0.7), 0 0 28px var(--accent-glow)'
+                : '0 16px 36px rgba(15, 23, 42, 0.18), 0 0 24px var(--accent-glow)')
             : (isDark
-                ? '0 8px 24px rgba(0, 0, 0, 0.45), 0 0 20px rgba(168, 85, 247, 0.35)'
-                : '0 8px 24px rgba(15, 23, 42, 0.12), 0 0 20px rgba(168, 85, 247, 0.25)'),
+                ? '0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px var(--accent-glow)'
+                : '0 8px 24px rgba(15, 23, 42, 0.1), 0 0 14px var(--accent-glow)'),
           cursor: isDragging ? 'grabbing' : 'grab',
           touchAction: 'none',
           userSelect: 'none',
@@ -1469,13 +1471,13 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         }}
       >
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {/* Glowing Cosmic Crescent Moon */}
+          {/* Lighter Translucent Crescent Moon */}
           <Moon
             style={{
-              width: 26,
-              height: 26,
-              color: isDark ? '#e9d5ff' : '#7c3aed',
-              filter: isDark ? 'drop-shadow(0 0 6px rgba(216, 180, 254, 0.9))' : 'drop-shadow(0 0 4px rgba(124, 58, 237, 0.4))',
+              width: 25,
+              height: 25,
+              color: isDark ? 'var(--accent-color)' : '#0284c7',
+              filter: 'drop-shadow(0 0 6px var(--accent-glow))',
               transform: 'rotate(-15deg)',
             }}
           />
@@ -1487,8 +1489,8 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
               right: -6,
               width: 14,
               height: 14,
-              color: isDark ? '#38bdf8' : '#0284c7',
-              filter: isDark ? 'drop-shadow(0 0 4px rgba(56, 189, 248, 0.9))' : 'drop-shadow(0 0 4px rgba(2, 132, 199, 0.5))',
+              color: isDark ? '#bae6fd' : '#0369a1',
+              filter: 'drop-shadow(0 0 4px var(--accent-glow))',
               animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             }}
           />
@@ -1541,14 +1543,12 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         zIndex: 85,
         display: 'flex',
         flexDirection: 'column',
-        background: isDark ? 'rgba(13, 11, 24, 0.95)' : 'rgba(255, 255, 255, 0.96)',
-        backdropFilter: 'blur(28px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(28px) saturate(180%)',
-        border: isPhone ? 'none' : isDragOver ? '2px dashed #a855f7' : isDark ? '1.5px solid rgba(192, 132, 252, 0.3)' : '1.5px solid rgba(168, 85, 247, 0.3)',
+        background: 'var(--v-glass-bg-card)',
+        backdropFilter: 'blur(32px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(32px) saturate(180%)',
+        border: isPhone ? 'none' : isDragOver ? '2px dashed var(--accent-color)' : '1.5px solid var(--v-glass-border)',
         borderRadius: isPhone || isMax ? 0 : 24,
-        boxShadow: isDark
-          ? '0 24px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(168, 85, 247, 0.25)'
-          : '0 24px 60px rgba(15, 23, 42, 0.15), 0 0 40px rgba(168, 85, 247, 0.15)',
+        boxShadow: 'var(--v-shadow-spatial)',
         overflow: 'hidden',
         color: 'var(--text-primary)',
         fontFamily: 'var(--font-system)',
@@ -1572,8 +1572,10 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '12px 16px',
-          background: isDark ? 'rgba(24, 20, 42, 0.8)' : 'rgba(248, 250, 252, 0.92)',
-          borderBottom: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(15, 23, 42, 0.1)'),
+          background: isDark ? 'rgba(20, 20, 28, 0.72)' : 'rgba(248, 250, 252, 0.88)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderBottom: '1px solid var(--v-glass-border-subtle)',
           userSelect: 'none',
         }}
       >
@@ -1585,20 +1587,21 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             title={isSidebarOpen ? 'Close chat sidebar' : 'Open chat history'}
             style={{
               background: isSidebarOpen
-                ? (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(168, 85, 247, 0.18)')
-                : (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.06)'),
+                ? 'var(--accent-glow)'
+                : 'var(--v-glass-bg-subtle)',
               border: isSidebarOpen
-                ? (isDark ? '1px solid rgba(216, 180, 254, 0.5)' : '1px solid rgba(168, 85, 247, 0.4)')
-                : (isDark ? '1px solid rgba(255, 255, 255, 0.12)' : '1px solid rgba(15, 23, 42, 0.1)'),
+                ? '1px solid var(--accent-color)'
+                : '1px solid var(--v-glass-border-subtle)',
               borderRadius: 8,
               padding: 6,
               color: isSidebarOpen
-                ? (isDark ? '#e9d5ff' : '#7c3aed')
-                : (isDark ? '#cbd5e1' : '#475569'),
+                ? 'var(--accent-color)'
+                : 'var(--text-secondary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              transition: 'all 0.15s ease',
             }}
           >
             <Menu style={{ width: 16, height: 16 }} />
@@ -1609,17 +1612,15 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
               width: 32,
               height: 32,
               borderRadius: 10,
-              background: isDark
-                ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(56, 189, 248, 0.35))'
-                : 'linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(56, 189, 248, 0.2))',
-              border: isDark ? '1px solid rgba(216, 180, 254, 0.5)' : '1px solid rgba(168, 85, 247, 0.4)',
+              background: 'var(--accent-glow)',
+              border: '1.5px solid var(--accent-color)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: isDark ? '0 0 14px rgba(168, 85, 247, 0.3)' : '0 0 10px rgba(168, 85, 247, 0.15)',
+              boxShadow: '0 0 14px var(--accent-glow)',
             }}
           >
-            <Moon style={{ width: 17, height: 17, color: isDark ? '#e9d5ff' : '#7c3aed', transform: 'rotate(-15deg)' }} />
+            <Moon style={{ width: 17, height: 17, color: 'var(--accent-color)', transform: 'rotate(-15deg)' }} />
           </div>
 
           <div>
@@ -1634,9 +1635,9 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                   textTransform: 'uppercase',
                   padding: '1px 5px',
                   borderRadius: 6,
-                  background: isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(168, 85, 247, 0.15)',
-                  border: isDark ? '1px solid rgba(168, 85, 247, 0.45)' : '1px solid rgba(168, 85, 247, 0.3)',
-                  color: isDark ? '#d8b4fe' : '#7c3aed',
+                  background: 'var(--v-glass-bg-subtle)',
+                  border: '1px solid var(--v-glass-border-subtle)',
+                  color: 'var(--accent-color)',
                   letterSpacing: '0.05em',
                 }}
               >
@@ -1674,20 +1675,21 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             title="Toggle Voice Mode"
             style={{
               background: isVoiceModeActive
-                ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.5), rgba(56, 189, 248, 0.5))'
-                : isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.06)',
+                ? 'var(--accent-glow)'
+                : 'var(--v-glass-bg-subtle)',
               border: isVoiceModeActive
-                ? '1px solid rgba(216, 180, 254, 0.6)'
-                : '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.1)'),
+                ? '1px solid var(--accent-color)'
+                : '1px solid var(--v-glass-border-subtle)',
               borderRadius: 8,
               padding: '5px 8px',
-              color: isVoiceModeActive ? '#ffffff' : 'var(--text-secondary)',
+              color: isVoiceModeActive ? 'var(--accent-color)' : 'var(--text-secondary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 4,
               fontSize: 11,
-              fontWeight: 500,
+              fontWeight: 600,
+              transition: 'all 0.15s ease',
             }}
           >
             <Headphones style={{ width: 14, height: 14 }} />
@@ -1701,18 +1703,19 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             title="Configure Gateway URL & Unified API Key"
             style={{
               background: showSettingsModal
-                ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.4), rgba(56, 189, 248, 0.4))'
-                : isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.06)',
+                ? 'var(--accent-glow)'
+                : 'var(--v-glass-bg-subtle)',
               border: showSettingsModal
-                ? '1px solid rgba(216, 180, 254, 0.6)'
-                : '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.1)'),
+                ? '1px solid var(--accent-color)'
+                : '1px solid var(--v-glass-border-subtle)',
               borderRadius: 8,
               padding: 6,
-              color: showSettingsModal ? '#ffffff' : 'var(--text-secondary)',
+              color: showSettingsModal ? 'var(--accent-color)' : 'var(--text-secondary)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              transition: 'all 0.15s ease',
             }}
           >
             <Settings style={{ width: 14, height: 14 }} />

@@ -385,46 +385,33 @@ export function BookAnalyticsModal({
 
   return (
     <div
+      className="v-modal-backdrop"
       style={{
-        position: 'fixed',
-        inset: 0,
         zIndex: 90,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-        background: 'rgba(0,0,0,0.82)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
       }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="ba-modal-title"
     >
       <div
-        className="v-card"
+        className="v-modal-dialog"
         style={{
           width: '100%',
           maxWidth: 960,
           maxHeight: '92vh',
           display: 'flex',
           flexDirection: 'column',
-          borderRadius: 20,
-          background: 'var(--v-glass-bg)',
-          borderColor: 'var(--v-glass-border)',
-          overflow: 'hidden',
-          boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
         }}
       >
         {/* Modal Header */}
         <div
           style={{
             padding: '18px 22px',
-            borderBottom: '1px solid var(--v-glass-border)',
+            borderBottom: '1px solid var(--v-glass-border-subtle)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'rgba(255,255,255,0.02)',
+            background: 'var(--v-glass-bg-subtle)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -433,12 +420,13 @@ export function BookAnalyticsModal({
                 width: 38,
                 height: 38,
                 borderRadius: 10,
-                background: 'rgba(99, 102, 241, 0.18)',
-                border: '1px solid rgba(99, 102, 241, 0.4)',
+                background: 'var(--accent-glow)',
+                border: '1.5px solid var(--accent-color)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#818cf8',
+                color: 'var(--accent-color)',
+                boxShadow: '0 0 14px var(--accent-glow)',
               }}
             >
               <BarChart3 size={20} />
@@ -809,7 +797,7 @@ export function BookAnalyticsModal({
                     <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
                       <button
                         type="button"
-                        className="v-pill-btn"
+                        className="v-pill-btn v-pill-btn-accent"
                         disabled={sendingAssignmentId === nextPendingAssignment.id}
                         onClick={() => void handleSendNowInternal(nextPendingAssignment)}
                         style={{
@@ -817,9 +805,6 @@ export function BookAnalyticsModal({
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 6,
-                          background: 'rgba(59, 130, 246, 0.25)',
-                          borderColor: 'rgba(59, 130, 246, 0.5)',
-                          color: '#93c5fd',
                           fontWeight: 600,
                         }}
                       >
@@ -1368,7 +1353,7 @@ export function BookAnalyticsModal({
 
                             <button
                               type="button"
-                              className="v-pill-btn"
+                              className={`v-pill-btn ${isDelivered ? 'v-pill-btn-success' : 'v-pill-btn-accent'}`}
                               disabled={sendingAssignmentId === assignment.id}
                               onClick={() => void handleSendNowInternal(assignment)}
                               style={{
@@ -1378,9 +1363,6 @@ export function BookAnalyticsModal({
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 5,
-                                background: isDelivered ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.2)',
-                                borderColor: isDelivered ? 'rgba(34, 197, 94, 0.4)' : 'rgba(59, 130, 246, 0.4)',
-                                color: isDelivered ? '#4ade80' : '#60a5fa',
                               }}
                             >
                               {sendingAssignmentId === assignment.id ? (

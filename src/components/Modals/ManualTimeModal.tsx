@@ -43,24 +43,16 @@ export function ManualTimeModal({ taskId, taskTitle, isOpen, onClose }: ManualTi
 
   return (
     <div
+      className="v-modal-backdrop"
       style={{
-        position: 'fixed',
-        inset: 0,
         zIndex: 60,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-        background: 'rgba(0,0,0,0.75)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
       }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="manual-time-title"
     >
       <div
-        className="g-card"
+        className="v-modal-dialog"
         style={{
           width: '100%',
           maxWidth: 380,

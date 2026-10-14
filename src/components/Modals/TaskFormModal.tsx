@@ -347,9 +347,9 @@ export function TaskFormModal({
         display: 'flex',
         justifyContent: isPhone ? 'center' : 'flex-end',
         alignItems: isPhone ? 'flex-end' : 'stretch',
-        background: 'rgba(0,0,0,0.75)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+        background: 'rgba(0,0,0,0.7)',
+        backdropFilter: 'blur(12px) saturate(140%)',
+        WebkitBackdropFilter: 'blur(12px) saturate(140%)',
       }}
       role="dialog"
       aria-modal="true"

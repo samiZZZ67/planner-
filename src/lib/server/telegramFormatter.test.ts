@@ -21,7 +21,7 @@ import {
 import type { BookAssignmentRecord, BookPageRecord, BookRecord } from '../books/types';
 
 const testBook: BookRecord = {
-  id: 'test-book-1',
+  id: 'test-book-formatter',
   userId: 'owner',
   title: 'Clean Architecture in TypeScript',
   author: 'Robert Martin & Co.',
@@ -46,9 +46,9 @@ const testBook: BookRecord = {
 };
 
 const testAssignment: BookAssignmentRecord = {
-  id: 'test-assignment-1',
+  id: 'test-assignment-formatter',
   userId: 'owner',
-  bookId: 'test-book-1',
+  bookId: 'test-book-formatter',
   dayNumber: 1,
   scheduledDate: '2026-10-15',
   startPdfPage: 1,

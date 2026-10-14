@@ -29,17 +29,16 @@ function SendNowButton({
   return (
     <button
       type="button"
-      className="v-pill-btn"
+      className={`v-pill-btn ${isDelivered ? 'v-pill-btn-success' : 'v-pill-btn-accent'}`}
       disabled={sending}
       onClick={onSend}
       style={{
-        padding: '8px 14px',
+        padding: '7px 14px',
+        minHeight: 34,
+        fontSize: 12,
         display: 'inline-flex',
         alignItems: 'center',
         gap: 6,
-        background: isDelivered ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.2)',
-        borderColor: isDelivered ? 'rgba(34, 197, 94, 0.45)' : 'rgba(59, 130, 246, 0.5)',
-        color: isDelivered ? '#4ade80' : '#60a5fa',
         fontWeight: 600,
         cursor: sending ? 'wait' : 'pointer',
       }}
@@ -56,7 +55,7 @@ function SendNowButton({
         </>
       ) : isDelivered ? (
         <>
-          <CheckCircle2 size={14} color="#4ade80" />
+          <CheckCircle2 size={14} />
           <span>Sent to Telegram · Resend</span>
         </>
       ) : (
@@ -484,16 +483,15 @@ export function BookPlannerScreen() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <button
                 type="button"
-                className="v-pill-btn"
+                className="v-pill-btn v-pill-btn-accent"
                 onClick={() => void openBookAnalytics(book)}
                 style={{
                   padding: '7px 12px',
                   display: 'inline-flex',
                   gap: 6,
                   alignItems: 'center',
-                  background: 'rgba(99, 102, 241, 0.2)',
-                  borderColor: 'rgba(99, 102, 241, 0.45)',
-                  color: '#a5b4fc',
+                  minHeight: 34,
+                  fontSize: 12,
                   fontWeight: 600,
                 }}
               >

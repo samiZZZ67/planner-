@@ -42,12 +42,12 @@ export function LoginModal({ isOpen = true, onClose }: LoginModalProps) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
-      <div className="g-card" style={{ width: '100%', maxWidth: 360, padding: 32 }}>
+    <div className="v-modal-backdrop" style={{ zIndex: 80 }}>
+      <div className="v-modal-dialog" style={{ width: '100%', maxWidth: 360, padding: 32 }}>
         {/* Icon */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Shield size={20} style={{ color: 'rgba(139,92,246,0.8)' }} />
+          <div style={{ width: 44, height: 44, borderRadius: 14, background: 'var(--accent-glow)', border: '1.5px solid var(--accent-color)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Shield size={20} style={{ color: 'var(--accent-color)' }} />
           </div>
           <div>
             <div className="font-bloody" style={{ fontSize: 20, color: 'var(--text-primary)', lineHeight: 1 }}>Cloud Sync</div>
@@ -90,7 +90,7 @@ export function LoginModal({ isOpen = true, onClose }: LoginModalProps) {
           </div>
         </form>
 
-        <p style={{ marginTop: 18, fontSize: 11, color: 'rgba(255,255,255,0.2)', textAlign: 'center', lineHeight: 1.6 }}>
+        <p style={{ marginTop: 18, fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.6 }}>
           The app works offline without logging in. Login is only needed for cloud sync between devices.
         </p>
       </div>
