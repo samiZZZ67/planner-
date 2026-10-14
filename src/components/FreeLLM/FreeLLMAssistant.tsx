@@ -2926,31 +2926,58 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
 
                   {/* Retry Button on Error */}
                   {msg.id.startsWith('err-') && (
-                    <button
-                      onClick={() => {
-                        const lastUser = [...messages].reverse().find(m => m.role === 'user');
-                        if (lastUser) {
-                          handleSendMessage(lastUser.content);
-                        } else {
-                          testGatewayConnection();
-                        }
-                      }}
-                      title="Retry this request"
-                      style={{
-                        background: 'rgba(239, 68, 68, 0.2)',
-                        border: '1px solid rgba(239, 68, 68, 0.4)',
-                        color: '#fca5a5',
-                        fontSize: 11,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        padding: '2px 8px',
-                        borderRadius: 6,
-                      }}
-                    >
-                      <RotateCcw style={{ width: 11, height: 11 }} /> Retry
-                    </button>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <button
+                        onClick={() => {
+                          const lastUser = [...messages].reverse().find(m => m.role === 'user');
+                          if (lastUser) {
+                            updateMessages(prev => prev.filter(m => m.id !== msg.id && m.id !== lastUser.id));
+                            handleSendMessage(lastUser.content);
+                          } else {
+                            testGatewayConnection();
+                          }
+                        }}
+                        title="Retry this request"
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.2)',
+                          border: '1px solid rgba(239, 68, 68, 0.4)',
+                          color: '#fca5a5',
+                          fontSize: 11,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                        }}
+                      >
+                        <RotateCcw style={{ width: 11, height: 11 }} /> Retry
+                      </button>
+                      <button
+                        onClick={() => {
+                          const lastUser = [...messages].reverse().find(m => m.role === 'user');
+                          if (lastUser) {
+                            setInput(lastUser.content);
+                            updateMessages(prev => prev.filter(m => m.id !== msg.id && m.id !== lastUser.id));
+                          }
+                        }}
+                        title="Edit original prompt"
+                        style={{
+                          background: 'var(--v-glass-bg-subtle)',
+                          border: '1px solid var(--v-glass-border-subtle)',
+                          color: 'var(--text-secondary)',
+                          fontSize: 11,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                        }}
+                      >
+                        <Edit2 style={{ width: 11, height: 11 }} /> Edit prompt
+                      </button>
+                    </div>
                   )}
                 </div>
               )}

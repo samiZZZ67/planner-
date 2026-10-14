@@ -1860,6 +1860,63 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                         </>
                       )}
                     </button>
+
+                    {msg.content.startsWith('⚠️') && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const lastUser = [...messages].reverse().find(m => m.role === 'user');
+                            if (lastUser) {
+                              setMessages(prev => prev.filter(m => m.id !== msg.id && m.id !== lastUser.id));
+                              void handleSendMessage(lastUser.content);
+                            }
+                          }}
+                          title="Retry this request"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.15)',
+                            border: '1px solid rgba(239, 68, 68, 0.4)',
+                            color: '#fca5a5',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                          }}
+                        >
+                          <RefreshCw size={11} />
+                          <span>Retry</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const lastUser = [...messages].reverse().find(m => m.role === 'user');
+                            if (lastUser) {
+                              setInput(lastUser.content);
+                              setMessages(prev => prev.filter(m => m.id !== msg.id && m.id !== lastUser.id));
+                            }
+                          }}
+                          title="Edit original prompt"
+                          style={{
+                            background: 'var(--v-glass-bg-subtle)',
+                            border: '1px solid var(--v-glass-border-subtle)',
+                            color: 'var(--text-secondary)',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                          }}
+                        >
+                          <Edit2 size={11} />
+                          <span>Edit prompt</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

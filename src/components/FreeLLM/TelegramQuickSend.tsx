@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image as ImageIcon, Mic, Send, X } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
 
@@ -30,6 +30,12 @@ export function TelegramQuickSend({
   const isDark = theme !== 'light';
   const viewportHeight = typeof window === 'undefined' ? 800 : window.innerHeight;
   const panelAboveAnchor = Boolean(anchor && anchor.y > viewportHeight * 0.55);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(''), 7000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   async function sendMessage() {
     if ((!text.trim() && !media) || sending) return;

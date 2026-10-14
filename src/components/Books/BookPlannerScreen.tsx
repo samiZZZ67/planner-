@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BookOpen, ChevronDown, ChevronUp, Clock3, FileUp, LockKeyhole, Pencil, Save, Send, Trash2, TriangleAlert, X } from 'lucide-react';
+import { BookOpen, CheckCircle2, ChevronDown, ChevronUp, Clock3, FileUp, LoaderCircle, LockKeyhole, Pencil, Save, Send, Trash2, TriangleAlert, X } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
+import { notifyFeedback } from '@/lib/utils/actionFeedback';
 import type { BookAssignmentRecord, BookPageRecord, BookRecord, BookStudyNotes } from '@/lib/books/types';
 
 const fieldStyle: React.CSSProperties = { display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 };
@@ -14,10 +15,70 @@ interface AssignmentDetail {
   originalPages: BookPageRecord[];
 }
 
+function SendNowButton({
+  assignment,
+  sending,
+  onSend,
+}: {
+  assignment: BookAssignmentRecord;
+  sending: boolean;
+  onSend: () => void;
+}) {
+  const isDelivered = assignment.status === 'completed';
+  return (
+    <button
+      type="button"
+      className="v-pill-btn"
+      disabled={sending}
+      onClick={onSend}
+      style={{
+        padding: '8px 14px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        background: isDelivered ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.2)',
+        borderColor: isDelivered ? 'rgba(34, 197, 94, 0.45)' : 'rgba(59, 130, 246, 0.5)',
+        color: isDelivered ? '#4ade80' : '#60a5fa',
+        fontWeight: 600,
+        cursor: sending ? 'wait' : 'pointer',
+      }}
+      title={
+        isDelivered
+          ? 'Section already delivered to Telegram. Click to send again.'
+          : 'Immediately dispatch this reading section to your Telegram channel regardless of scheduled time'
+      }
+    >
+      {sending ? (
+        <>
+          <LoaderCircle size={14} style={{ animation: 'sams-action-spin .8s linear infinite' }} />
+          <span>Sending to Telegram…</span>
+        </>
+      ) : isDelivered ? (
+        <>
+          <CheckCircle2 size={14} color="#4ade80" />
+          <span>Sent to Telegram · Resend</span>
+        </>
+      ) : (
+        <>
+          <Send size={14} />
+          <span>Send Now</span>
+        </>
+      )}
+    </button>
+  );
+}
+
 export function BookPlannerScreen() {
   const [books, setBooks] = useState<BookRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [generatingPlanBookId, setGeneratingPlanBookId] = useState<string | null>(null);
+  const [loadingAssignmentsBookId, setLoadingAssignmentsBookId] = useState<string | null>(null);
+  const [generatingNotesAssignmentId, setGeneratingNotesAssignmentId] = useState<string | null>(null);
+  const [savingNotesAssignmentId, setSavingNotesAssignmentId] = useState<string | null>(null);
+  const [savingBookEditId, setSavingBookEditId] = useState<string | null>(null);
+  const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
+  const [loadingPreviewsBookId, setLoadingPreviewsBookId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [startPage, setStartPage] = useState(1);
@@ -33,6 +94,22 @@ export function BookPlannerScreen() {
   const [bookDraft, setBookDraft] = useState<Partial<BookRecord>>({});
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const previewUrlsRef = useRef<Record<string, string>>({});
+
+  const showNotice = useCallback((msg: string) => {
+    setNotice(msg);
+    notifyFeedback('success', msg);
+  }, []);
+
+  const showError = useCallback((msg: string) => {
+    setError(msg);
+    notifyFeedback('error', msg);
+  }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(''), 7000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => { previewUrlsRef.current = previewUrls; }, [previewUrls]);
   useEffect(() => () => Object.values(previewUrlsRef.current).forEach(url => URL.revokeObjectURL(url)), []);
@@ -86,9 +163,9 @@ export function BookPlannerScreen() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'PDF extraction failed.');
       setBooks(current => current.map(item => item.id === book.id ? data.book : item));
-      setNotice(data.book.extractionMessage);
+      showNotice(data.book.extractionMessage || 'PDF extraction complete.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'PDF extraction failed.');
+      showError(err instanceof Error ? err.message : 'PDF extraction failed.');
       await refresh();
     } finally {
       setProcessingId(null);
@@ -97,6 +174,7 @@ export function BookPlannerScreen() {
 
   async function previewPages(book: BookRecord) {
     setError('');
+    setLoadingPreviewsBookId(book.id);
     const from = book.startPage;
     const to = Math.min(book.endPage, from + 99);
     try {
@@ -106,7 +184,9 @@ export function BookPlannerScreen() {
       setPagesByBook(current => ({ ...current, [book.id]: data.pages || [] }));
       await loadPagePreviews(book.id, data.pages || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not retrieve extracted pages.');
+      showError(err instanceof Error ? err.message : 'Could not retrieve extracted pages.');
+    } finally {
+      setLoadingPreviewsBookId(null);
     }
   }
 
@@ -120,27 +200,32 @@ export function BookPlannerScreen() {
       if (!response.ok) throw new Error(data.error || 'Could not record the page review.');
       setBooks(current => current.map(item => item.id === book.id ? data.book : item));
       setPagesByBook(current => ({ ...current, [book.id]: (current[book.id] || []).map(page => page.pdfPage === pdfPage ? data.page : page) }));
+      showNotice(`Page ${pdfPage} marked as visually reviewed.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not record the page review.');
+      showError(err instanceof Error ? err.message : 'Could not record the page review.');
     }
   }
 
   async function loadAssignments(book: BookRecord) {
     setError('');
+    setLoadingAssignmentsBookId(book.id);
     try {
       const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not load the plan.');
       setAssignmentsByBook(current => ({ ...current, [book.id]: data.assignments || [] }));
+      showNotice(`Loaded plan with ${data.assignments?.length || 0} assignments.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the plan.');
+      showError(err instanceof Error ? err.message : 'Could not load the plan.');
+    } finally {
+      setLoadingAssignmentsBookId(null);
     }
   }
 
   async function generatePlan(book: BookRecord) {
     setError('');
     setNotice('');
-    setBusy(true);
+    setGeneratingPlanBookId(book.id);
     try {
       const model = localStorage.getItem('np_freellm_selected_model') || 'auto';
       const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments`, {
@@ -149,13 +234,13 @@ export function BookPlannerScreen() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Reading plan generation failed.');
       setAssignmentsByBook(current => ({ ...current, [book.id]: data.assignments || [] }));
-      setNotice(`Draft plan created with ${data.assignments.length} reading assignments using ${data.model} via ${data.provider}.`);
-      if (data.issues?.length) setError(data.issues.join(' '));
+      showNotice(`Draft plan created with ${data.assignments.length} reading assignments using ${data.model} via ${data.provider}.`);
+      if (data.issues?.length) showError(data.issues.join(' '));
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Reading plan generation failed.');
+      showError(err instanceof Error ? err.message : 'Reading plan generation failed.');
     } finally {
-      setBusy(false);
+      setGeneratingPlanBookId(null);
     }
   }
 
@@ -170,7 +255,7 @@ export function BookPlannerScreen() {
       await loadPagePreviews(book.id, detail.originalPages || []);
       if (detail.assignment.studyNotes) setNotesDrafts(current => ({ ...current, [assignment.id]: detail.assignment.studyNotes! }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load this assignment.');
+      showError(err instanceof Error ? err.message : 'Could not load this assignment.');
     }
   }
 
@@ -199,9 +284,9 @@ export function BookPlannerScreen() {
       const msgIds = data.delivery?.telegramMessageIds?.length
         ? ` (Telegram message ID: ${data.delivery.telegramMessageIds.join(', ')})`
         : '';
-      setNotice(`🚀 Sent Day ${assignment.dayNumber} section to ${channel}! Original schedule remains unchanged.${msgIds}`);
+      showNotice(`🚀 Sent Day ${assignment.dayNumber} section to ${channel}! Original schedule remains unchanged.${msgIds}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send this section to Telegram.');
+      showError(err instanceof Error ? err.message : 'Could not send this section to Telegram.');
     } finally {
       setSendingAssignmentId(null);
     }
@@ -209,7 +294,7 @@ export function BookPlannerScreen() {
 
   async function generateNotes(book: BookRecord, assignment: BookAssignmentRecord) {
     setError('');
-    setBusy(true);
+    setGeneratingNotesAssignmentId(assignment.id);
     try {
       const model = localStorage.getItem('np_freellm_selected_model') || 'auto';
       const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(assignment.id)}/notes`, {
@@ -218,11 +303,11 @@ export function BookPlannerScreen() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Study note generation failed.');
       updateAssignmentState(book.id, data.assignment);
-      setNotice(`Study notes generated with ${data.model} via ${data.provider}. Original page text was not sent back as generated text.`);
+      showNotice(`Study notes generated with ${data.model} via ${data.provider}. Original page text was not sent back as generated text.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Study note generation failed.');
+      showError(err instanceof Error ? err.message : 'Study note generation failed.');
     } finally {
-      setBusy(false);
+      setGeneratingNotesAssignmentId(null);
     }
   }
 
@@ -230,6 +315,7 @@ export function BookPlannerScreen() {
     const studyNotes = notesDrafts[assignment.id];
     if (!studyNotes) return;
     setError('');
+    setSavingNotesAssignmentId(assignment.id);
     try {
       const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(assignment.id)}/notes`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, studyNotes }),
@@ -237,9 +323,11 @@ export function BookPlannerScreen() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not save study notes.');
       updateAssignmentState(book.id, data.assignment);
-      setNotice(status === 'approved' ? `Day ${assignment.dayNumber} is approved and queued for Telegram publishing.` : 'Study-note edits saved as a draft.');
+      showNotice(status === 'approved' ? `Day ${assignment.dayNumber} is approved and queued for Telegram publishing.` : 'Study-note edits saved as a draft.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save study notes.');
+      showError(err instanceof Error ? err.message : 'Could not save study notes.');
+    } finally {
+      setSavingNotesAssignmentId(null);
     }
   }
 
@@ -248,7 +336,7 @@ export function BookPlannerScreen() {
     const formElement = event.currentTarget;
     setError('');
     setNotice('');
-    setBusy(true);
+    setIsUploading(true);
     try {
       const form = new FormData(formElement);
       const response = await apiFetch('/api/books', { method: 'POST', body: form });
@@ -256,14 +344,14 @@ export function BookPlannerScreen() {
       if (!response.ok) throw new Error(data.error || 'Could not save this book.');
       setBooks(current => [data.book, ...current]);
       setCollapsedBooks(current => { const next = new Set(current); next.delete(data.book.id); return next; });
-      setNotice('PDF saved privately. Automatic extraction, daily study posts, and Telegram scheduling are queued.');
+      showNotice('PDF saved privately. Automatic extraction, daily study posts, and Telegram scheduling are queued.');
       formElement.reset();
       setStartPage(1);
       setCurrentPage(1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save this book.');
+      showError(err instanceof Error ? err.message : 'Could not save this book.');
     } finally {
-      setBusy(false);
+      setIsUploading(false);
     }
   }
 
@@ -274,21 +362,25 @@ export function BookPlannerScreen() {
 
   async function saveBookEdit(book: BookRecord) {
     setError('');
+    setSavingBookEditId(book.id);
     try {
       const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bookDraft) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not update this book.');
       setBooks(current => current.map(item => item.id === book.id ? data.book : item));
       setEditingBookId(null);
-      setNotice(`Updated “${data.book.title}”.`);
+      showNotice(`Updated “${data.book.title}”.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update this book.');
+      showError(err instanceof Error ? err.message : 'Could not update this book.');
+    } finally {
+      setSavingBookEditId(null);
     }
   }
 
   async function removeBook(book: BookRecord) {
     if (!window.confirm(`Delete “${book.title}” and its extracted pages, plans, and saved delivery records? This cannot be undone.`)) return;
     setError('');
+    setDeletingBookId(book.id);
     try {
       const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}`, { method: 'DELETE' });
       const data = await response.json();
@@ -296,9 +388,11 @@ export function BookPlannerScreen() {
       setBooks(current => current.filter(item => item.id !== book.id));
       setPagesByBook(current => { const next = { ...current }; delete next[book.id]; return next; });
       setAssignmentsByBook(current => { const next = { ...current }; delete next[book.id]; return next; });
-      setNotice(`Deleted “${book.title}”.`);
+      showNotice(`Deleted “${book.title}”.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not delete this book.');
+      showError(err instanceof Error ? err.message : 'Could not delete this book.');
+    } finally {
+      setDeletingBookId(null);
     }
   }
 
@@ -311,6 +405,20 @@ export function BookPlannerScreen() {
           <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: 13 }}>Upload a book once; Moon prepares its daily Telegram lessons at your chosen time.</p>
         </div>
       </header>
+
+      {/* Persistent visible feedback banners */}
+      {notice && (
+        <div className="v-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderColor: 'rgba(74, 222, 128, 0.45)', background: 'rgba(34, 197, 94, 0.12)' }}>
+          <span style={{ color: '#86efac', fontSize: 13 }}>{notice}</span>
+          <button type="button" onClick={() => setNotice('')} className="v-circle-btn" style={{ width: 24, height: 24 }} aria-label="Dismiss message"><X size={13} /></button>
+        </div>
+      )}
+      {error && (
+        <div className="v-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderColor: 'rgba(248, 113, 113, 0.45)', background: 'rgba(239, 68, 68, 0.12)' }}>
+          <span style={{ color: '#fca5a5', fontSize: 13 }}>{error}</span>
+          <button type="button" onClick={() => setError('')} className="v-circle-btn" style={{ width: 24, height: 24 }} aria-label="Dismiss error"><X size={13} /></button>
+        </div>
+      )}
 
       <div className="v-card" style={{ padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start', borderColor: 'rgba(251,191,36,.45)' }}>
         <TriangleAlert size={19} color="#fbbf24" style={{ flexShrink: 0, marginTop: 2 }} />
@@ -339,8 +447,8 @@ export function BookPlannerScreen() {
           <label style={fieldStyle}>Timezone<input name="timezone" defaultValue="Africa/Nairobi" required style={inputStyle} /></label>
           <label style={fieldStyle}>Current PDF page<input name="currentPage" type="number" min={startPage} value={currentPage} onChange={event => setCurrentPage(Math.max(startPage, Number(event.target.value) || startPage))} required style={inputStyle} /></label>
         </div>
-        <button className="v-pill-btn" type="submit" disabled={busy} style={{ minHeight: 44, display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 8, cursor: busy ? 'wait' : 'pointer' }}>
-          <FileUp size={17} /> {busy ? 'Saving PDF…' : 'Queue daily Telegram delivery'}
+        <button className="v-pill-btn" type="submit" disabled={isUploading} style={{ minHeight: 44, display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 8, cursor: isUploading ? 'wait' : 'pointer' }}>
+          <FileUp size={17} /> {isUploading ? 'Saving PDF…' : 'Queue daily Telegram delivery'}
         </button>
         {notice && <p role="status" style={{ margin: 0, color: '#86efac', fontSize: 13 }}>{notice}</p>}
         {error && <p role="alert" style={{ margin: 0, color: '#fca5a5', fontSize: 13 }}>{error}</p>}
@@ -357,7 +465,9 @@ export function BookPlannerScreen() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className="v-pill-btn" aria-expanded={!collapsedBooks.has(book.id)} onClick={() => setCollapsedBooks(current => { const next = new Set(current); if (next.has(book.id)) next.delete(book.id); else next.add(book.id); return next; })} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center' }}>{collapsedBooks.has(book.id) ? <><ChevronDown size={15} /> Expand</> : <><ChevronUp size={15} /> Collapse</>}</button>
               <button type="button" className="v-pill-btn" onClick={() => beginEdit(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center' }}><Pencil size={14} /> Edit</button>
-              <button type="button" className="v-pill-btn" onClick={() => void removeBook(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center', color: '#fca5a5' }}><Trash2 size={14} /> Delete</button>
+              <button type="button" className="v-pill-btn" disabled={deletingBookId === book.id} onClick={() => void removeBook(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center', color: '#fca5a5', cursor: deletingBookId === book.id ? 'wait' : 'pointer' }}>
+                <Trash2 size={14} /> {deletingBookId === book.id ? 'Deleting…' : 'Delete'}
+              </button>
             </div>
             {!collapsedBooks.has(book.id) && <>
             {editingBookId === book.id && <section style={{ display: 'grid', gap: 12, padding: 14, borderRadius: 12, background: 'var(--v-glass-bg-subtle)', border: '1px solid var(--v-glass-border)' }}>
@@ -373,7 +483,12 @@ export function BookPlannerScreen() {
                 <label style={fieldStyle}>Timezone<input style={inputStyle} value={String(bookDraft.timezone || '')} onChange={event => setBookDraft(current => ({ ...current, timezone: event.target.value }))} /></label>
                 <label style={fieldStyle}>Current PDF page<input type="number" min={book.startPage} max={book.endPage} style={inputStyle} value={Number(bookDraft.currentPage || book.startPage)} onChange={event => setBookDraft(current => ({ ...current, currentPage: Number(event.target.value) }))} /></label>
               </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button type="button" className="v-pill-btn" onClick={() => void saveBookEdit(book)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center' }}><Save size={14} /> Save changes</button><button type="button" className="v-pill-btn" onClick={() => setEditingBookId(null)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center' }}><X size={14} /> Cancel</button></div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" className="v-pill-btn" disabled={savingBookEditId === book.id} onClick={() => void saveBookEdit(book)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center', cursor: savingBookEditId === book.id ? 'wait' : 'pointer' }}>
+                  <Save size={14} /> {savingBookEditId === book.id ? 'Saving changes…' : 'Save changes'}
+                </button>
+                <button type="button" className="v-pill-btn" onClick={() => setEditingBookId(null)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center' }}><X size={14} /> Cancel</button>
+              </div>
             </section>}
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', color: 'var(--text-secondary)', fontSize: 12 }}>
               <span>PDF pages {book.startPage}–{book.endPage}</span><span>Current page {book.currentPage}</span><span>{book.durationDays} days</span><span><Clock3 size={13} style={{ verticalAlign: 'middle' }} /> {book.postingTime} · {book.timezone}</span><span><LockKeyhole size={13} style={{ verticalAlign: 'middle' }} /> Private server file</span>
@@ -382,7 +497,11 @@ export function BookPlannerScreen() {
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5 }}>{book.extractionMessage}</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className="v-pill-btn" disabled={processingId !== null} onClick={() => void extractBook(book)} style={{ padding: '8px 12px', cursor: processingId !== null ? 'wait' : 'pointer' }}>{processingId === book.id ? 'Extracting…' : book.extractionStatus === 'pending' ? 'Extract PDF text / OCR' : book.extractionStatus === 'processing' ? 'Resume / retry extraction' : 'Re-extract PDF pages'}</button>
-              {(book.extractionStatus === 'completed' || book.extractionStatus === 'needs_review') && <button type="button" className="v-pill-btn" onClick={() => void previewPages(book)} style={{ padding: '8px 12px' }}>Preview extracted pages</button>}
+              {(book.extractionStatus === 'completed' || book.extractionStatus === 'needs_review') && (
+                <button type="button" className="v-pill-btn" disabled={loadingPreviewsBookId === book.id} onClick={() => void previewPages(book)} style={{ padding: '8px 12px', cursor: loadingPreviewsBookId === book.id ? 'wait' : 'pointer' }}>
+                  {loadingPreviewsBookId === book.id ? 'Loading previews…' : 'Preview extracted pages'}
+                </button>
+              )}
             </div>
             {pagesByBook[book.id]?.map(page => (
               <section key={page.pdfPage} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 12, padding: 12 }}>
@@ -394,8 +513,12 @@ export function BookPlannerScreen() {
               </section>
             ))}
             {book.extractionStatus === 'completed' && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" className="v-pill-btn" disabled={busy} onClick={() => void generatePlan(book)} style={{ padding: '8px 12px' }}>{busy ? 'Generating plan…' : 'Generate concept-based plan'}</button>
-              <button type="button" className="v-pill-btn" onClick={() => void loadAssignments(book)} style={{ padding: '8px 12px' }}>Load saved plan</button>
+              <button type="button" className="v-pill-btn" disabled={generatingPlanBookId === book.id} onClick={() => void generatePlan(book)} style={{ padding: '8px 12px', cursor: generatingPlanBookId === book.id ? 'wait' : 'pointer' }}>
+                {generatingPlanBookId === book.id ? 'Generating plan…' : 'Generate concept-based plan'}
+              </button>
+              <button type="button" className="v-pill-btn" disabled={loadingAssignmentsBookId === book.id} onClick={() => void loadAssignments(book)} style={{ padding: '8px 12px', cursor: loadingAssignmentsBookId === book.id ? 'wait' : 'pointer' }}>
+                {loadingAssignmentsBookId === book.id ? 'Loading plan…' : 'Load saved plan'}
+              </button>
             </div>}
             {assignmentsByBook[book.id]?.map(assignment => (
               <section key={assignment.id} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
@@ -405,27 +528,11 @@ export function BookPlannerScreen() {
                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>Why this section: {assignment.rationale}</p>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <button type="button" className="v-pill-btn" onClick={() => void openAssignment(book, assignment)} style={{ padding: '8px 12px' }}>Review original reading and notes</button>
-                  <button
-                    type="button"
-                    className="v-pill-btn"
-                    disabled={sendingAssignmentId !== null}
-                    onClick={() => void sendAssignmentNow(book, assignment)}
-                    style={{
-                      padding: '8px 14px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      background: 'rgba(59, 130, 246, 0.2)',
-                      borderColor: 'rgba(59, 130, 246, 0.5)',
-                      color: '#60a5fa',
-                      fontWeight: 600,
-                      cursor: sendingAssignmentId !== null ? 'wait' : 'pointer',
-                    }}
-                    title="Immediately dispatch this reading section to your Telegram channel regardless of scheduled time"
-                  >
-                    <Send size={14} />
-                    {sendingAssignmentId === assignment.id ? 'Sending to Telegram…' : 'Send Now'}
-                  </button>
+                  <SendNowButton
+                    assignment={assignment}
+                    sending={sendingAssignmentId === assignment.id}
+                    onSend={() => void sendAssignmentNow(book, assignment)}
+                  />
                 </div>
                 {assignmentDetails[assignment.id] && (() => {
                   const detail = assignmentDetails[assignment.id];
@@ -453,54 +560,30 @@ export function BookPlannerScreen() {
                       <label style={fieldStyle}>Study notes<textarea style={{ ...inputStyle, minHeight: 120 }} value={draft.notes} onChange={event => setNotesDrafts(current => ({ ...current, [assignment.id]: { ...draft, notes: event.target.value } }))} /></label>
                       <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Generated by {draft.generatedByModel}. {assignment.status === 'approved' ? 'Approved; change status to draft before editing.' : 'Review and edit this supplement before approval.'}</span>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <button type="button" className="v-pill-btn" disabled={busy || assignment.status === 'approved'} onClick={() => void generateNotes(book, assignment)} style={{ padding: '8px 12px' }}>{busy ? 'Generating…' : assignment.studyNotes ? 'Regenerate notes' : 'Generate study notes'}</button>
-                        <button type="button" className="v-pill-btn" disabled={assignment.status === 'approved'} onClick={() => void saveNotes(book, assignment, 'draft')} style={{ padding: '8px 12px' }}>Save edits</button>
-                        <button type="button" className="v-pill-btn" disabled={assignment.status === 'approved'} onClick={() => void saveNotes(book, assignment, 'approved')} style={{ padding: '8px 12px' }}>Approve assignment</button>
-                        <button
-                          type="button"
-                          className="v-pill-btn"
-                          disabled={sendingAssignmentId !== null}
-                          onClick={() => void sendAssignmentNow(book, assignment)}
-                          style={{
-                            padding: '8px 14px',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            background: 'rgba(59, 130, 246, 0.2)',
-                            borderColor: 'rgba(59, 130, 246, 0.5)',
-                            color: '#60a5fa',
-                            fontWeight: 600,
-                            cursor: sendingAssignmentId !== null ? 'wait' : 'pointer',
-                          }}
-                          title="Immediately dispatch this reading section to your Telegram channel regardless of scheduled time"
-                        >
-                          <Send size={14} />
-                          {sendingAssignmentId === assignment.id ? 'Sending to Telegram…' : 'Send Now'}
+                        <button type="button" className="v-pill-btn" disabled={generatingNotesAssignmentId === assignment.id || assignment.status === 'approved'} onClick={() => void generateNotes(book, assignment)} style={{ padding: '8px 12px', cursor: generatingNotesAssignmentId === assignment.id ? 'wait' : 'pointer' }}>
+                          {generatingNotesAssignmentId === assignment.id ? 'Generating…' : assignment.studyNotes ? 'Regenerate notes' : 'Generate study notes'}
                         </button>
+                        <button type="button" className="v-pill-btn" disabled={savingNotesAssignmentId === assignment.id || assignment.status === 'approved'} onClick={() => void saveNotes(book, assignment, 'draft')} style={{ padding: '8px 12px', cursor: savingNotesAssignmentId === assignment.id ? 'wait' : 'pointer' }}>
+                          {savingNotesAssignmentId === assignment.id ? 'Saving…' : 'Save edits'}
+                        </button>
+                        <button type="button" className="v-pill-btn" disabled={savingNotesAssignmentId === assignment.id || assignment.status === 'approved'} onClick={() => void saveNotes(book, assignment, 'approved')} style={{ padding: '8px 12px', cursor: savingNotesAssignmentId === assignment.id ? 'wait' : 'pointer' }}>
+                          {savingNotesAssignmentId === assignment.id ? 'Approving…' : 'Approve assignment'}
+                        </button>
+                        <SendNowButton
+                          assignment={assignment}
+                          sending={sendingAssignmentId === assignment.id}
+                          onSend={() => void sendAssignmentNow(book, assignment)}
+                        />
                       </div>
                     </div> : <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <button type="button" className="v-pill-btn" disabled={busy} onClick={() => void generateNotes(book, assignment)} style={{ justifySelf: 'start', padding: '8px 12px' }}>{busy ? 'Generating…' : 'Generate study notes'}</button>
-                      <button
-                        type="button"
-                        className="v-pill-btn"
-                        disabled={sendingAssignmentId !== null}
-                        onClick={() => void sendAssignmentNow(book, assignment)}
-                        style={{
-                          padding: '8px 14px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 6,
-                          background: 'rgba(59, 130, 246, 0.2)',
-                          borderColor: 'rgba(59, 130, 246, 0.5)',
-                          color: '#60a5fa',
-                          fontWeight: 600,
-                          cursor: sendingAssignmentId !== null ? 'wait' : 'pointer',
-                        }}
-                        title="Immediately dispatch this reading section to your Telegram channel regardless of scheduled time"
-                      >
-                        <Send size={14} />
-                        {sendingAssignmentId === assignment.id ? 'Sending to Telegram…' : 'Send Now'}
+                      <button type="button" className="v-pill-btn" disabled={generatingNotesAssignmentId === assignment.id} onClick={() => void generateNotes(book, assignment)} style={{ justifySelf: 'start', padding: '8px 12px', cursor: generatingNotesAssignmentId === assignment.id ? 'wait' : 'pointer' }}>
+                        {generatingNotesAssignmentId === assignment.id ? 'Generating…' : 'Generate study notes'}
                       </button>
+                      <SendNowButton
+                        assignment={assignment}
+                        sending={sendingAssignmentId === assignment.id}
+                        onSend={() => void sendAssignmentNow(book, assignment)}
+                      />
                     </div>}
                   </div>;
                 })()}

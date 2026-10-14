@@ -49,6 +49,7 @@ export function AIPlanModal({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   
   const [generating, setGenerating] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [planResult, setPlanResult] = useState<AIPlanGenerationResult | null>(null);
   const [selectedTaskIndices, setSelectedTaskIndices] = useState<Set<number>>(new Set());
   const [sections, setSections] = useState<Section[]>([]);
@@ -264,11 +265,16 @@ export function AIPlanModal({
       status: 'not_started',
     }));
 
-    await db.tasks.bulkPut(newTasks);
-    syncEngine.notifyLocalMutation();
-
-    onTasksScheduled();
-    onClose();
+    if (isApproving) return;
+    setIsApproving(true);
+    try {
+      await db.tasks.bulkPut(newTasks);
+      syncEngine.notifyLocalMutation();
+      onTasksScheduled();
+      onClose();
+    } finally {
+      setIsApproving(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -792,10 +798,10 @@ export function AIPlanModal({
                   onClick={() => handleGenerate(true)}
                   disabled={generating || interviewLoading}
                   className="v-pill-btn"
-                  style={{ padding: '8px 16px', gap: 6 }}
+                  style={{ padding: '8px 16px', gap: 6, cursor: (generating || interviewLoading) ? 'wait' : 'pointer' }}
                   title="Generate plan immediately using default recommended choices"
                 >
-                  ⚡ Quick Plan (Defaults)
+                  {generating ? 'Planning…' : '⚡ Quick Plan (Defaults)'}
                 </button>
 
                 <button
@@ -803,9 +809,9 @@ export function AIPlanModal({
                   onClick={() => handleGenerate(false)}
                   disabled={generating || interviewLoading}
                   className="v-pill-btn v-pill-btn-primary"
-                  style={{ padding: '8px 22px', gap: 6 }}
+                  style={{ padding: '8px 22px', gap: 6, cursor: (generating || interviewLoading) ? 'wait' : 'pointer' }}
                 >
-                  <Sparkles size={15} /> Generate Goal-Aligned Plan
+                  <Sparkles size={15} /> {generating ? 'Generating Plan…' : 'Generate Goal-Aligned Plan'}
                 </button>
               </div>
             </>
@@ -814,6 +820,7 @@ export function AIPlanModal({
               <button
                 type="button"
                 onClick={() => setStage('interview')}
+                disabled={generating || isApproving}
                 className="v-pill-btn"
                 style={{ padding: '8px 16px', gap: 6 }}
               >
@@ -824,21 +831,21 @@ export function AIPlanModal({
                 <button
                   type="button"
                   onClick={() => handleGenerate(false)}
-                  disabled={generating}
+                  disabled={generating || isApproving}
                   className="v-pill-btn"
-                  style={{ padding: '8px 16px', gap: 6 }}
+                  style={{ padding: '8px 16px', gap: 6, cursor: generating ? 'wait' : 'pointer' }}
                 >
-                  <RefreshCw size={14} color="var(--accent-color)" /> Re-generate
+                  <RefreshCw size={14} color="var(--accent-color)" /> {generating ? 'Re-generating…' : 'Re-generate'}
                 </button>
 
                 <button
                   type="button"
                   onClick={handleApprove}
-                  disabled={generating || !planResult || selectedTaskIndices.size === 0}
+                  disabled={generating || isApproving || !planResult || selectedTaskIndices.size === 0}
                   className="v-pill-btn v-pill-btn-primary"
-                  style={{ padding: '8px 22px', gap: 6 }}
+                  style={{ padding: '8px 22px', gap: 6, cursor: isApproving ? 'wait' : 'pointer' }}
                 >
-                  <Check size={15} /> Approve & Apply ({selectedTaskIndices.size} Tasks)
+                  <Check size={15} /> {isApproving ? 'Applying Plan…' : `Approve & Apply (${selectedTaskIndices.size} Tasks)`}
                 </button>
               </div>
             </>

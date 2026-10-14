@@ -29,6 +29,7 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
   });
 
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
 
   // Subscribe to sync countdown
@@ -72,29 +73,35 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
   }, [currentDate]);
 
   const saveToDb = async (newNotes: string, newReview: DayReview, triggerSync = false) => {
-    const existing = await db.days.get(currentDate);
-    const now = Date.now();
-    await db.days.put({
-      id: currentDate,
-      date: currentDate,
-      freeHours: existing?.freeHours ?? 8,
-      sheetData: {
-        ...(existing?.sheetData || {}),
-        notes: newNotes,
-      },
-      review: newReview,
-      updatedAt: now,
-      deleted: false,
-      isSample: false,
-      synced: 0,
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (triggerSync && isSaving) return;
+    if (triggerSync) setIsSaving(true);
+    try {
+      const existing = await db.days.get(currentDate);
+      const now = Date.now();
+      await db.days.put({
+        id: currentDate,
+        date: currentDate,
+        freeHours: existing?.freeHours ?? 8,
+        sheetData: {
+          ...(existing?.sheetData || {}),
+          notes: newNotes,
+        },
+        review: newReview,
+        updatedAt: now,
+        deleted: false,
+        isSample: false,
+        synced: 0,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
 
-    if (triggerSync) {
-      await syncEngine.triggerSync();
-    } else {
-      syncEngine.notifyLocalMutation();
+      if (triggerSync) {
+        await syncEngine.triggerSync();
+      } else {
+        syncEngine.notifyLocalMutation();
+      }
+    } finally {
+      if (triggerSync) setIsSaving(false);
     }
   };
 
@@ -204,12 +211,13 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
 
           <button
             type="button"
-            onClick={() => saveToDb(quickNote, review, true)}
+            disabled={isSaving}
+            onClick={() => void saveToDb(quickNote, review, true)}
             className="v-pill-btn v-pill-btn-primary"
-            style={{ padding: '6px 14px', fontSize: 12, minHeight: 32, gap: 5, fontWeight: 700 }}
+            style={{ padding: '6px 14px', fontSize: 12, minHeight: 32, gap: 5, fontWeight: 700, cursor: isSaving ? 'wait' : 'pointer' }}
             title="Save immediately without waiting for the 2-minute timer"
           >
-            <Save size={12} /> Save Now
+            <Save size={12} /> {isSaving ? 'Saving…' : 'Save Now'}
           </button>
         </div>
       </div>

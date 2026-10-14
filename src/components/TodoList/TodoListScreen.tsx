@@ -210,6 +210,7 @@ export function TodoListScreen({
 
   const handleToggleTask = async (task: Task) => {
     const nextCompleted = !task.isCompleted;
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, isCompleted: nextCompleted, status: nextCompleted ? 'completed' : 'not_started' } : t));
     await db.tasks.update(task.id, {
       isCompleted: nextCompleted,
       completedAt: nextCompleted ? Date.now() : null,
@@ -217,7 +218,6 @@ export function TodoListScreen({
       updatedAt: Date.now(),
       synced: 0,
     });
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, isCompleted: nextCompleted, status: nextCompleted ? 'completed' : 'not_started' } : t));
     syncEngine.notifyLocalMutation();
   };
 

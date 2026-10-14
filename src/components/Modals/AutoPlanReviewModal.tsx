@@ -24,6 +24,7 @@ export function AutoPlanReviewModal({
   sections,
   onTasksImported,
 }: AutoPlanReviewModalProps) {
+  const [isImporting, setIsImporting] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(() => {
     return new Set(candidateTasks.map(t => t.id));
   });
@@ -40,10 +41,16 @@ export function AutoPlanReviewModal({
   };
 
   const handleConfirm = async () => {
+    if (isImporting) return;
     const tasksToCopy = candidateTasks.filter(t => selectedTaskIds.has(t.id));
     if (tasksToCopy.length > 0) {
-      await copyTasksToDate(tasksToCopy, targetDate);
-      onTasksImported();
+      setIsImporting(true);
+      try {
+        await copyTasksToDate(tasksToCopy, targetDate);
+        onTasksImported();
+      } finally {
+        setIsImporting(false);
+      }
     }
     onClose();
   };
@@ -196,12 +203,20 @@ export function AutoPlanReviewModal({
             </button>
             <button
               onClick={handleConfirm}
-              disabled={selectedTaskIds.size === 0}
+              disabled={selectedTaskIds.size === 0 || isImporting}
               className="g-btn g-btn-primary"
-              style={{ padding: '7px 16px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, opacity: selectedTaskIds.size === 0 ? 0.4 : 1 }}
+              style={{
+                padding: '7px 16px',
+                fontSize: 12,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                opacity: (selectedTaskIds.size === 0 || isImporting) ? 0.45 : 1,
+                cursor: isImporting ? 'wait' : selectedTaskIds.size === 0 ? 'not-allowed' : 'pointer',
+              }}
             >
               <CheckSquare size={13} />
-              <span>Import {selectedTaskIds.size} Tasks</span>
+              <span>{isImporting ? 'Importing…' : `Import ${selectedTaskIds.size} Tasks`}</span>
             </button>
           </div>
         </div>

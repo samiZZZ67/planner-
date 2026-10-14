@@ -349,7 +349,8 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
     setGoals(prev => prev.map(g => g.id === id ? { ...g, completed: !g.completed } : g));
   };
 
-  const handleDeleteGoal = (id: string) => {
+  const handleDeleteGoal = (id: string, text?: string) => {
+    if (text && !window.confirm(`Delete milestone "${text}"?`)) return;
     setGoals(prev => prev.filter(g => g.id !== id));
   };
 
@@ -572,8 +573,9 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
               <button
                 type="button"
                 onClick={handleAddGoal}
+                disabled={!newGoalInput.trim()}
                 className="v-pill-btn v-pill-btn-primary"
-                style={{ padding: '0 16px', fontSize: 13 }}
+                style={{ padding: '0 16px', fontSize: 13, opacity: !newGoalInput.trim() ? 0.6 : 1 }}
               >
                 <Plus size={14} /> Add Goal
               </button>
@@ -624,9 +626,10 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleDeleteGoal(g.id)}
+                    onClick={() => handleDeleteGoal(g.id, g.text)}
                     className="v-circle-btn"
                     style={{ width: 26, height: 26, color: '#f87171' }}
+                    title="Delete goal milestone"
                   >
                     <Trash2 size={11} />
                   </button>

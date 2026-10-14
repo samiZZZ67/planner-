@@ -238,6 +238,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
   };
 
   const deleteTask = async (taskId: string) => {
+    if (!window.confirm('Delete this task? This cannot be undone.')) return;
     setAllTasks(prev => prev.filter(t => t.id !== taskId));
     await db.tasks.update(taskId, { deleted: true, updatedAt: Date.now(), synced: 0 });
     syncEngine.notifyLocalMutation();

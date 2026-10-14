@@ -20,6 +20,7 @@ import {
   Sparkles,
   Shield,
   Flame,
+  LoaderCircle,
 } from 'lucide-react';
 import type { Task, Section, PriorityLevel, DraftTask } from '@/types';
 
@@ -62,6 +63,8 @@ export function TaskFormModal({
   const [mustDoWarning, setMustDoWarning] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const strategyEditorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -251,78 +254,88 @@ export function TaskFormModal({
   };
 
   // Save Task
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!title.trim() || isSaving) return;
 
-    const now = Date.now();
+    setIsSaving(true);
+    try {
+      const now = Date.now();
 
-    if (existingTask) {
-      await db.tasks.update(existingTask.id, {
-        title: title.trim(),
-        sectionId,
-        description: description.trim(),
-        strategy,
-        doneMeans: doneMeans.trim(),
-        estimatedMinutes: Number(estimatedMinutes) || 30,
-        priority,
-        mustDo,
-        tags,
-        icon,
-        textColor,
-        image,
-        updatedAt: now,
-        synced: 0,
-      });
-    } else {
-      const existingInDay = await db.tasks
-        .filter(t => t.date === currentDate && !t.deleted)
-        .count();
+      if (existingTask) {
+        await db.tasks.update(existingTask.id, {
+          title: title.trim(),
+          sectionId,
+          description: description.trim(),
+          strategy,
+          doneMeans: doneMeans.trim(),
+          estimatedMinutes: Number(estimatedMinutes) || 30,
+          priority,
+          mustDo,
+          tags,
+          icon,
+          textColor,
+          image,
+          updatedAt: now,
+          synced: 0,
+        });
+      } else {
+        const existingInDay = await db.tasks
+          .filter(t => t.date === currentDate && !t.deleted)
+          .count();
 
-      const newTask: Task = {
-        id: crypto.randomUUID(),
-        date: currentDate,
-        sectionId,
-        title: title.trim(),
-        description: description.trim(),
-        strategy,
-        doneMeans: doneMeans.trim(),
-        estimatedMinutes: Number(estimatedMinutes) || 30,
-        priority,
-        mustDo,
-        tags,
-        icon,
-        textColor,
-        image,
-        isCompleted: false,
-        completedAt: null,
-        order: existingInDay,
-        createdAt: now,
-        updatedAt: now,
-        deleted: false,
-        isSample: false,
-        synced: 0,
-      };
+        const newTask: Task = {
+          id: crypto.randomUUID(),
+          date: currentDate,
+          sectionId,
+          title: title.trim(),
+          description: description.trim(),
+          strategy,
+          doneMeans: doneMeans.trim(),
+          estimatedMinutes: Number(estimatedMinutes) || 30,
+          priority,
+          mustDo,
+          tags,
+          icon,
+          textColor,
+          image,
+          isCompleted: false,
+          completedAt: null,
+          order: existingInDay,
+          createdAt: now,
+          updatedAt: now,
+          deleted: false,
+          isSample: false,
+          synced: 0,
+        };
 
-      await db.tasks.put(newTask);
-      await clearTaskDraft();
+        await db.tasks.put(newTask);
+        await clearTaskDraft();
+      }
+
+      syncEngine.notifyLocalMutation();
+      onClose();
+    } finally {
+      setIsSaving(false);
     }
-
-    syncEngine.notifyLocalMutation();
-    onClose();
   };
 
   const handleDelete = async () => {
-    if (!existingTask) return;
-    if (!confirm('Delete this task?')) return;
+    if (!existingTask || isDeleting) return;
+    if (!confirm('Delete this task? This cannot be undone.')) return;
 
-    await db.tasks.update(existingTask.id, {
-      deleted: true,
-      updatedAt: Date.now(),
-      synced: 0,
-    });
-    syncEngine.notifyLocalMutation();
-    onClose();
+    setIsDeleting(true);
+    try {
+      await db.tasks.update(existingTask.id, {
+        deleted: true,
+        updatedAt: Date.now(),
+        synced: 0,
+      });
+      syncEngine.notifyLocalMutation();
+      onClose();
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -383,16 +396,25 @@ export function TaskFormModal({
             {existingTask && (
               <button
                 type="button"
+                disabled={isDeleting || isSaving}
                 onClick={event => { void withActionFeedback('Deleting task', handleDelete, event.currentTarget); }}
                 className="g-btn"
-                style={{ padding: '6px 12px', fontSize: 12, color: 'rgba(239,68,68,0.8)', borderColor: 'rgba(239,68,68,0.2)' }}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  color: 'rgba(239,68,68,0.8)',
+                  borderColor: 'rgba(239,68,68,0.2)',
+                  opacity: isDeleting ? 0.5 : 1,
+                  cursor: isDeleting ? 'wait' : 'pointer',
+                }}
                 aria-label="Delete task"
               >
-                Delete
+                {isDeleting ? 'Deleting…' : 'Delete'}
               </button>
             )}
             <button
               onClick={onClose}
+              disabled={isSaving || isDeleting}
               className="g-icon-btn"
               style={{ width: 32, height: 32 }}
               aria-label="Close task form (Esc)"
@@ -403,7 +425,11 @@ export function TaskFormModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={event => { void withActionFeedback(existingTask ? 'Updating task' : 'Adding task', () => handleSave(event), event.currentTarget); }} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 18, flex: 1, overflowY: 'auto' }}>
+        <form
+          id="task-form"
+          onSubmit={event => { void withActionFeedback(existingTask ? 'Updating task' : 'Adding task', () => handleSave(event), event.currentTarget); }}
+          style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 18, flex: 1, overflowY: 'auto' }}
+        >
           {mustDoWarning && (
             <div style={{ padding: '10px 14px', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.25)', borderRadius: 12, fontSize: 12, color: 'rgba(234,179,8,0.9)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <AlertCircle size={15} style={{ flexShrink: 0 }} />
@@ -848,12 +874,30 @@ export function TaskFormModal({
 
           <button
             type="submit"
-            disabled={!title.trim()}
+            form="task-form"
+            onClick={e => {
+              // Ensure clicking footer button submits even if browser form association fails
+              if (!isSaving && title.trim()) {
+                void withActionFeedback(existingTask ? 'Updating task' : 'Adding task', () => handleSave(e), e.currentTarget);
+              }
+            }}
+            disabled={!title.trim() || isSaving}
             className="g-btn g-btn-primary"
-            style={{ padding: '9px 24px', display: 'flex', alignItems: 'center', gap: 7, opacity: !title.trim() ? 0.4 : 1 }}
+            style={{
+              padding: '9px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+              opacity: (!title.trim() || isSaving) ? 0.45 : 1,
+              cursor: isSaving ? 'wait' : !title.trim() ? 'not-allowed' : 'pointer',
+            }}
           >
-            <CheckCircle size={15} />
-            <span>{existingTask ? 'Save Changes' : 'Confirm & Schedule'}</span>
+            {isSaving ? (
+              <LoaderCircle size={15} style={{ animation: 'sams-action-spin .8s linear infinite' }} />
+            ) : (
+              <CheckCircle size={15} />
+            )}
+            <span>{isSaving ? (existingTask ? 'Saving…' : 'Scheduling…') : (existingTask ? 'Save Changes' : 'Confirm & Schedule')}</span>
           </button>
         </div>
       </div>

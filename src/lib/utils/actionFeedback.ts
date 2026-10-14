@@ -12,6 +12,15 @@ function emit(detail: ActionFeedbackEventDetail) {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('samsspace:action-feedback', { detail }));
 }
 
+/** Direct trigger for feedback notices without wrapping a callback. */
+export function notifyFeedback(status: ActionFeedbackStatus, message: string, id?: string) {
+  emit({
+    id: id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    status,
+    message,
+  });
+}
+
 /** Wrap a user action with shared progress, completion, and duplicate-submit feedback. */
 export async function withActionFeedback<T>(
   label: string,
