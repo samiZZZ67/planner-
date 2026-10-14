@@ -28,6 +28,60 @@ function isSendLoadPlanIntent(text: string): boolean {
   return false;
 }
 
+export function isReferentialTelegramSend(text: string): boolean {
+  const cleaned = text.trim().toLowerCase().replace(/^[\/:\-\s]+|[\/:\-\s]+$/g, '');
+  if (!cleaned) return false;
+  if (/^(?:(?:the|teh)\s+)?(?:above|previous|last|prior)\s+(?:explanation|explainstion|message|response|text|answer|notes?|post|summary|content|quote)?$/i.test(cleaned)) return true;
+  if (/^(?:what\s+you\s+(?:just\s+)?(?:said|wrote|generated|explained)|that\s+explanation)$/i.test(cleaned)) return true;
+  if (/^(?:this|that|it|this message|that message|the message|a message|the following)$/i.test(cleaned)) return true;
+  if (/^(?:please\s+)?(?:send|post|publish|share|forward|deliver)\s+(?:(?:the|teh)\s+)?(?:above|previous|last|prior)\s+(?:explanation|explainstion|message|response|text|answer|notes?|post|summary|content)?(?:\s+(?:to|on|into)\s+(?:(?:the|teh|my|your)\s+)?(?:telegram(?:\s+(?:bot|channel))?|bot|channel))?$/i.test(cleaned)) return true;
+  if (/^(?:please\s+)?(?:send|post|publish|share|forward|deliver)\s+(?:what\s+you\s+(?:just\s+)?(?:said|wrote|generated|explained))(?:\s+(?:to|on|into)\s+(?:(?:the|teh|my|your)\s+)?(?:telegram(?:\s+(?:bot|channel))?|bot|channel))?$/i.test(cleaned)) return true;
+  return false;
+}
+
+export function findPreviousAssistantContent(messages: any[]): string | null {
+  if (!Array.isArray(messages) || messages.length <= 1) return null;
+  const past = messages.slice(0, -1).reverse();
+  const found = past.find(m =>
+    m?.role === 'assistant' &&
+    typeof m?.content === 'string' &&
+    m.content.trim().length > 0 &&
+    !m.content.startsWith('🚀 Telegram Message Delivered Successfully') &&
+    !m.content.startsWith('🚀 Previous Explanation Delivered') &&
+    !m.content.includes('🌟 Moon-Shaped AI has full granted access')
+  );
+  if (!found?.content) return null;
+  let text = String(found.content).trim();
+  const footerIdx = text.indexOf('\n\n---\n🚀 **Telegram Delivery Confirmed:**');
+  if (footerIdx !== -1) {
+    text = text.substring(0, footerIdx).trim();
+  }
+  text = text.replace(/^🤖\s*\*Moon Assistant Insight\*\s*\n+/i, '').trim();
+  return text || null;
+}
+
+export function detectGenerateAndSendTelegramIntent(text: string): { isGenerateAndSend: boolean; promptToGenerate: string } {
+  const trimmed = text.trim();
+  if (isSendLoadPlanIntent(trimmed)) return { isGenerateAndSend: false, promptToGenerate: '' };
+
+  // Match: <prompt> and (send/post/share) (it/them) to (telegram/bot/channel)
+  const andSendMatch = /^([\s\S]+?)\s+(?:and\s+)?(?:then\s+)?(?:send|post|publish|share|forward|deliver|dispatch)\s+(?:it|them|this|the\s+(?:result|explanation|summary|notes?|answer|response))?\s*(?:to|on|into)\s+(?:(?:the|teh|my|your)\s+)?(?:telegram(?:\s+(?:bot|channel))?|bot|channel)\s*$/i.exec(trimmed);
+  if (andSendMatch && andSendMatch[1]) {
+    const prompt = andSendMatch[1].trim();
+    if (prompt.length > 5 && !/^(?:send|post|publish|share|forward|deliver)\b/i.test(prompt)) {
+      return { isGenerateAndSend: true, promptToGenerate: prompt };
+    }
+  }
+
+  // Match: (send/post) (an explanation/summary) (about/on) <topic> to (telegram/bot/channel)
+  const sendTopicMatch = /^(?:please\s+)?(?:send|post|publish|share|deliver|dispatch)\s+(?:an?\s+)?(?:explanation|summary|essay|poem|joke|story|guide|notes?|comparison|write-up)\s+(?:about|on|for|regarding)\s+([\s\S]+?)\s+(?:to|on|into)\s+(?:(?:the|teh|my|your)\s+)?(?:telegram(?:\s+(?:bot|channel))?|bot|channel)\s*$/i.exec(trimmed);
+  if (sendTopicMatch && sendTopicMatch[1]) {
+    return { isGenerateAndSend: true, promptToGenerate: `Explain in detail about ${sendTopicMatch[1].trim()}` };
+  }
+
+  return { isGenerateAndSend: false, promptToGenerate: '' };
+}
+
 function telegramPostContent(text: string): string | null {
   if (isSendLoadPlanIntent(text)) return null;
   if (!/^\s*(?:please\s+)?(?:send|post|publish|share|dispatch|msg|message)\b/i.test(text) && !/^\s*(?:telegram|bot|channel)\s*[:\-]/i.test(text)) return null;
@@ -35,8 +89,7 @@ function telegramPostContent(text: string): string | null {
   const directDestination = /^\s*(?:telegram(?:\s+(?:bot|channel))?|channel|bot)\s*(?::|-)\s*([\s\S]+)$/i.exec(text);
   const trailingDestination = /^\s*(?:please\s+)?(?:send|post|publish|share)\s+([\s\S]+?)\s+(?:to|on)\s+(?:(?:my|the|your)\s+)?(?:telegram(?:\s+(?:bot|channel))?|channel|bot)\s*$/i.exec(text);
   const raw = toDestination?.[1] || directDestination?.[1] || trailingDestination?.[1] || '';
-  const content = raw.trim().replace(/^[:\-,\s]+|[:\-,\s]+$/g, '').replace(/^(["'])([\s\S]*)["']$/, '$2').trim();
-  if (/^(?:this|that|it|this message|that message|the message|a message|the following)$/i.test(content)) return null;
+  const content = raw.trim().replace(/^[:\-,\s\/]+|[:\-,\s\/]+$/g, '').replace(/^(["'])([\s\S]*)["']$/, '$2').trim();
   return content || null;
 }
 
@@ -45,6 +98,7 @@ export function detectMoonBookIntent(text: string): Intent | null {
   if (!value) return null;
   if (/\b\d{8,12}:[A-Za-z0-9_-]{35}\b/.test(value) || /\b(?:configure|set|update|save)\s+(?:the\s+)?telegram\s+(?:bot\s+token|token|bot|credentials|chat\s*id)\b/i.test(value)) return 'configure_telegram';
   if (isSendLoadPlanIntent(value)) return 'send_load_plan';
+  if (isReferentialTelegramSend(value)) return 'send_telegram';
   if (telegramPostContent(value)) return 'send_telegram';
   if (/(?:delivery\s+status|did(?:n't| not)\s+(?:get|receive|see)|not\s+(?:got|gotten|received|delivered)|never\s+(?:got|received)|where\s+is\s+(?:the\s+)?(?:message|post)|did\s+(?:you\s+)?(?:it\s+)?(?:send|post)|was\s+(?:it|that|the\s+message)\s+(?:sent|posted)|what\s+did\s+you\s+(?:send|post)|check\s+(?:if|whether|the|telegram).{0,30}(?:sent|delivered|delivery|message|post)|resend\b)/i.test(value)
     && /(?:telegram|bot|channel|message|post|it)/i.test(value)) return 'delivery_status';
@@ -125,7 +179,12 @@ async function ownedBook(userId: string, text: string) {
   return { books, book };
 }
 
-export async function executeMoonBookIntent(userId: string, text: string, model: string): Promise<{ handled: boolean; content: string }> {
+export async function executeMoonBookIntent(
+  userId: string,
+  text: string,
+  model: string,
+  messages?: any[]
+): Promise<{ handled: boolean; content: string }> {
   const intent = detectMoonBookIntent(text);
   if (!intent) return { handled: false, content: '' };
   if (intent === 'configure_telegram') {
@@ -145,12 +204,32 @@ export async function executeMoonBookIntent(userId: string, text: string, model:
     };
   }
   if (intent === 'send_telegram') {
-    const content = telegramPostContent(text);
+    let content = telegramPostContent(text);
+    if (!content && isReferentialTelegramSend(text)) {
+      content = text;
+    }
     if (!content) throw new Error('Include the exact post text after a colon, for example: Post to Telegram: Your message.');
+
+    let isReferential = false;
+    if (isReferentialTelegramSend(content) || isReferentialTelegramSend(text)) {
+      const prev = findPreviousAssistantContent(messages || []);
+      if (!prev) {
+        return {
+          handled: true,
+          content: '⚠️ There is no previous explanation in our chat to send to Telegram yet. Ask me to explain something first (or say: "Explain about human or AI intelligence and send it to Telegram"), and I will generate and dispatch it directly!'
+        };
+      }
+      content = prev;
+      isReferential = true;
+    }
+
     const result = await sendTelegramTextToChannel(content, userId);
+    const previewSnippet = content.length > 200 ? `${content.slice(0, 200)}...` : content;
     return {
       handled: true,
-      content: `🚀 Telegram Message Delivered Successfully!\n\n• Recipient: ${result.channel}\n• Message: "${content}"\n• Telegram Message ID: ${result.messageId}\n• Delivery Receipt ID: ${result.receiptId}\n• Timestamp: ${new Date().toISOString()}\n\nMoon confirmed acceptance directly via Telegram Bot API.`
+      content: isReferential
+        ? `🚀 Previous Explanation Delivered to Telegram!\n\n• Recipient: ${result.channel}\n• Message Sent: "${previewSnippet}"\n• Telegram Message ID: ${result.messageId}\n• Delivery Receipt ID: ${result.receiptId}\n• Timestamp: ${new Date().toISOString()}\n\nMoon retrieved the previous explanation from your conversation and successfully delivered it via Telegram Bot API.`
+        : `🚀 Telegram Message Delivered Successfully!\n\n• Recipient: ${result.channel}\n• Message Sent: "${previewSnippet}"\n• Telegram Message ID: ${result.messageId}\n• Delivery Receipt ID: ${result.receiptId}\n• Timestamp: ${new Date().toISOString()}\n\nMoon confirmed acceptance directly via Telegram Bot API.`
     };
   }
   if (intent === 'delivery_status') {

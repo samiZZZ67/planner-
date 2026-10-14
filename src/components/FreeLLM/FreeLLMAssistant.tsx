@@ -485,7 +485,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     setIsTestingGateway(true);
     setGatewayError(null);
     try {
-      const res = await fetchWithTimeout('/api/ai/freellm/status', {}, 15000);
+      const res = await fetchWithTimeout('/api/ai/freellm/status', {}, 45000);
       const data = await res.json().catch(() => null);
 
       if (res.ok && data?.ok) {
@@ -520,7 +520,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                 }
           ),
         },
-        15000
+        45000
       );
       const data = await res.json().catch(() => null);
       if (res.ok && data?.ok) {

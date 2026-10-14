@@ -19,20 +19,23 @@ interface SavedGatewayOverride {
   apiKey?: string;
 }
 
+export const DEFAULT_FREELLM_BASE_URL = 'https://free-llm-api-7fue.onrender.com/v1';
+export const DEFAULT_FREELLM_API_KEY = 'freellmapi-088b87239315cf2c06640ca2cfe75678e861e14c4189263f';
+
 let runtimeOverride: SavedGatewayOverride | null = null;
 const CONFIG_FILE_PATH = path.join(process.cwd(), '.data', 'freellm_config.json');
 
 function loadRuntimeOverride(): SavedGatewayOverride {
   if (process.env.VITEST) return runtimeOverride || {};
-  if (runtimeOverride) return runtimeOverride;
+  if (runtimeOverride && runtimeOverride.apiKey) return runtimeOverride;
   try {
     if (fs.existsSync(CONFIG_FILE_PATH)) {
       const raw = fs.readFileSync(CONFIG_FILE_PATH, 'utf8');
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object') {
         runtimeOverride = {
-          baseUrl: typeof parsed.baseUrl === 'string' && parsed.baseUrl.trim() ? parsed.baseUrl.trim() : undefined,
-          apiKey: typeof parsed.apiKey === 'string' && parsed.apiKey.trim() ? parsed.apiKey.trim() : undefined,
+          baseUrl: typeof parsed.baseUrl === 'string' && parsed.baseUrl.trim() ? parsed.baseUrl.trim() : DEFAULT_FREELLM_BASE_URL,
+          apiKey: typeof parsed.apiKey === 'string' && parsed.apiKey.trim() ? parsed.apiKey.trim() : DEFAULT_FREELLM_API_KEY,
         };
         return runtimeOverride;
       }
@@ -40,7 +43,10 @@ function loadRuntimeOverride(): SavedGatewayOverride {
   } catch {
     // Ignore file read errors in serverless/test environments
   }
-  runtimeOverride = {};
+  runtimeOverride = {
+    baseUrl: process.env.FREELLM_API_BASE_URL?.trim() || process.env.FREE_LLM_API_URL?.trim() || DEFAULT_FREELLM_BASE_URL,
+    apiKey: process.env.FREELLM_API_KEY?.trim() || process.env.FREE_LLM_API_KEY?.trim() || DEFAULT_FREELLM_API_KEY,
+  };
   return runtimeOverride;
 }
 
@@ -80,25 +86,27 @@ export async function loadGatewayConfigFromDb(): Promise<void> {
       const diskConfig = loadRuntimeOverride();
       if (dbUrl || dbKey) {
         runtimeOverride = {
-          baseUrl: dbUrl || diskConfig.baseUrl,
-          apiKey: dbKey || diskConfig.apiKey,
+          baseUrl: dbUrl || diskConfig.baseUrl || DEFAULT_FREELLM_BASE_URL,
+          apiKey: dbKey || diskConfig.apiKey || DEFAULT_FREELLM_API_KEY,
         };
-      } else if (diskConfig.baseUrl || diskConfig.apiKey) {
+      } else {
+        const urlToSeed = diskConfig.baseUrl || process.env.FREELLM_API_BASE_URL || DEFAULT_FREELLM_BASE_URL;
+        const keyToSeed = diskConfig.apiKey || process.env.FREELLM_API_KEY || process.env.FREE_LLM_API_KEY || DEFAULT_FREELLM_API_KEY;
         const now = Date.now();
-        if (diskConfig.baseUrl) {
-          await sql`
-            INSERT INTO gateway_settings (key, value, updated_at)
-            VALUES ('gateway_base_url', ${diskConfig.baseUrl}, ${now})
-            ON CONFLICT (key) DO NOTHING
-          `;
-        }
-        if (diskConfig.apiKey) {
-          await sql`
-            INSERT INTO gateway_settings (key, value, updated_at)
-            VALUES ('gateway_api_key', ${diskConfig.apiKey}, ${now})
-            ON CONFLICT (key) DO NOTHING
-          `;
-        }
+        await sql`
+          INSERT INTO gateway_settings (key, value, updated_at)
+          VALUES ('gateway_base_url', ${urlToSeed}, ${now})
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+        `;
+        await sql`
+          INSERT INTO gateway_settings (key, value, updated_at)
+          VALUES ('gateway_api_key', ${keyToSeed}, ${now})
+          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+        `;
+        runtimeOverride = {
+          baseUrl: urlToSeed,
+          apiKey: keyToSeed,
+        };
       }
       dbLoaded = true;
     } catch (err) {
@@ -242,7 +250,7 @@ export function getGatewayConfig(): FreeLLMGatewayConfig {
     process.env.FREELLM_API_URL ||
     process.env.FREE_LLM_GATEWAY_URL ||
     process.env.FREE_LLM_API_BASE_URL ||
-    'https://free-llm-api-7fue.onrender.com/v1';
+    DEFAULT_FREELLM_BASE_URL;
 
   // Normalize: remove trailing slash
   url = url.trim().replace(/\/+$/, '');
@@ -254,7 +262,7 @@ export function getGatewayConfig(): FreeLLMGatewayConfig {
     process.env.FREE_LLM_GATEWAY_KEY ||
     process.env.UNIFIED_API_KEY ||
     process.env.FREEAPI_UNIFIED_KEY ||
-    '';
+    (process.env.VITEST ? '' : DEFAULT_FREELLM_API_KEY);
 
   const defaultModel = process.env.FREE_LLM_MODEL || process.env.FREELLM_MODEL || 'auto';
 
@@ -345,8 +353,8 @@ export async function checkGatewayStatus(
 
   try {
     const controller = new AbortController();
-    // 15s timeout to accommodate cold starts on free cloud hosting
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    // 45s timeout to accommodate cold starts on free cloud hosting
+    const timeout = setTimeout(() => controller.abort(), 45000);
 
     const res = await fetch(readyModelsUrl, {
       method: 'GET',

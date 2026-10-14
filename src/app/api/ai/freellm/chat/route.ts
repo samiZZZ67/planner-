@@ -11,7 +11,8 @@ import {
 } from '@/lib/server/freellm/multimodal';
 import { isVisionModel, isImageGenModel, isVideoGenModel, getModelById } from '@/lib/server/freellm/catalog';
 import { getSessionUser } from '@/lib/server/auth';
-import { detectMoonBookIntent, executeMoonBookIntent, getMoonApplicationContext } from '@/lib/server/moonBookTools';
+import { detectMoonBookIntent, executeMoonBookIntent, getMoonApplicationContext, detectGenerateAndSendTelegramIntent } from '@/lib/server/moonBookTools';
+import { sendTelegramTextToChannel } from '@/lib/server/telegram';
 
 function corsHeaders() {
   return {
@@ -55,20 +56,71 @@ export async function POST(req: NextRequest) {
     const latestUserText = [...messages].reverse().find((message: any) => message?.role === 'user')?.content;
     const directUserText = typeof latestUserText === 'string' ? latestUserText.trim() : '';
     if (directUserText) {
+      // 1. Check for Generate-And-Send Telegram Intent
+      // e.g. "explain about human or ai which is intelligent and send it to telegram"
+      const genAndSend = detectGenerateAndSendTelegramIntent(directUserText);
+      if (genAndSend.isGenerateAndSend) {
+        const genMessages: ChatMessage[] = [
+          ...messages.slice(0, -1).map((m: any) => ({ role: m.role, content: String(m.content || '') })),
+          { role: 'user', content: genAndSend.promptToGenerate },
+        ];
+
+        let genResult: any;
+        try {
+          genResult = await sendChatCompletionWithFallback({
+            messages: genMessages,
+            model: selectedModel,
+            temperature: typeof temperature === 'number' ? temperature : 0.7,
+          });
+        } catch (err: any) {
+          return NextResponse.json({
+            ok: false,
+            error: `Failed to generate explanation: ${err?.message || 'AI generation failed'}`
+          }, { status: 500, headers: corsHeaders() });
+        }
+
+        const generatedContent = String(genResult.content || '');
+        const telegramPayload = `🤖 *Moon Assistant Insight*\n\n${generatedContent.slice(0, 3400)}`;
+
+        let telegramDelivery: any = null;
+        let telegramError: string | null = null;
+        try {
+          telegramDelivery = await sendTelegramTextToChannel(telegramPayload, userId);
+        } catch (tErr: any) {
+          telegramError = tErr instanceof Error ? tErr.message : 'Could not deliver to Telegram.';
+        }
+
+        const deliveryFooter = telegramDelivery
+          ? `\n\n---\n🚀 **Telegram Delivery Confirmed:** Dispatched directly to **${telegramDelivery.channel}** (@SamSpac) via **@SamISpace_bot**\n• **Telegram Message ID:** ${telegramDelivery.messageId}\n• **Receipt ID:** ${telegramDelivery.receiptId}`
+          : `\n\n---\n⚠️ **Telegram Delivery Notice:** ${telegramError || 'Could not send to Telegram.'}`;
+
+        return NextResponse.json({
+          ok: true,
+          message: {
+            role: 'assistant',
+            content: `${generatedContent}${deliveryFooter}`,
+          },
+          model: genResult.model,
+          provider: genResult.providerUsed || 'FreeLLMAPI Gateway',
+          telegramSent: Boolean(telegramDelivery),
+          operation: true,
+        }, { headers: corsHeaders() });
+      }
+
       const attachedFiles = Array.isArray(latestMessage?.attachments) ? latestMessage.attachments : [];
       if (detectMoonBookIntent(directUserText) === 'send_telegram' && attachedFiles.length > 0) {
         return NextResponse.json({ ok: false, error: 'Moon direct-send supports text posts only. Use the Telegram Quick Send control to post an image or voice attachment.' }, { status: 422, headers: corsHeaders() });
       }
       let intentResult: { handled: boolean; content: string };
       try {
-        intentResult = await executeMoonBookIntent(userId, directUserText, selectedModel);
+        intentResult = await executeMoonBookIntent(userId, directUserText, selectedModel, messages);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Moon could not complete that operation.';
         return NextResponse.json({
           ok: true,
           message: {
             role: 'assistant',
-            content: `⚠️ ${errorMsg}\n\n💡 **Tips to use Telegram with Moon:**\n• **Direct Message:** \`Post to Telegram: your message here\`\n• **Check Access:** \`Check Telegram bot status\`\n• **Send Load Plan:** \`Send extracted pages based on the load plan\` or \`Send Day 1 to Telegram\``,
+            content: `⚠️ ${errorMsg}\n\n💡 **Tips to use Telegram with Moon:**\n• **Direct Message:** \`Post to Telegram: your message here\`\n• **Send Previous:** \`Post to Telegram: the above explanation\`\n• **Generate & Send:** \`Explain about human or AI intelligence and send it to Telegram\`\n• **Send Load Plan:** \`Send extracted pages based on the load plan\``,
           },
           model: 'Sam\'Space Telegram Dispatcher',
           provider: 'Sam\'Space',
