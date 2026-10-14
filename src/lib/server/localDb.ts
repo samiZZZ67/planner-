@@ -250,6 +250,23 @@ export function deleteLocalTask(taskId: string): boolean {
 }
 
 /**
+ * Retrieve a specific Day record from local DB
+ */
+export function getLocalDay(date: string): Day | null {
+  const db = getDb();
+  const day = db.days[date];
+  if (!day || day.deleted) return null;
+  return day;
+}
+
+/**
+ * Direct accessor to local server DB state
+ */
+export function getLocalDb(): ServerDbData {
+  return getDb();
+}
+
+/**
  * Retrieve uploaded files from local DB (filtered by userId and resourceType)
  */
 export function getLocalFiles(filter?: { userId?: string; resourceType?: string }): UploadedFile[] {

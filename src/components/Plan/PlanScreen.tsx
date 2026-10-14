@@ -10,9 +10,11 @@ import {
   Calendar, Clock, Sparkles, Star, ChevronLeft, ChevronRight,
   Edit2, Trash2, CheckSquare, Square, Plus, Coffee, Utensils,
   Phone, ShoppingBag, ListTodo, Play, Pause, X, ChevronUp, ChevronDown,
-  Tag as TagIcon, RotateCcw
+  Tag as TagIcon, RotateCcw, AlertTriangle
 } from 'lucide-react';
 import type { Task, Section, Day, DaySheetData, PriorityLevel } from '@/types';
+import { detectScheduleConflicts } from '@/lib/plan/scheduleConflict';
+import { ScheduleConflictModal } from '@/components/Modals/ScheduleConflictModal';
 
 interface PlanScreenProps {
   currentDate: string;
@@ -88,6 +90,7 @@ export function PlanScreen({
   const [prevUnfinished, setPrevUnfinished] = useState<Task[]>([]);
   const [prevDate, setPrevDate] = useState<string>('');
   const [yesterdayReflection, setYesterdayReflection] = useState<string | null>(null);
+  const [showConflictModal, setShowConflictModal] = useState(false);
 
   // 1. Initial Load & Non-intrusive Refresh
   const loadData = async () => {
@@ -354,6 +357,7 @@ export function PlanScreen({
   const totalEstimatedMins = useMemo(() => tasks.reduce((s, t) => s + (t.estimatedMinutes || 0), 0), [tasks]);
   const totalPlannedHrs = Math.round((totalEstimatedMins / 60) * 10) / 10;
   const isOverBudget = totalPlannedHrs > freeHours;
+  const conflictAnalysis = useMemo(() => detectScheduleConflicts(tasks, freeHours), [tasks, freeHours]);
 
   // ══════════════════════════════════════════════════════════════════
   // REUSABLE TASK ITEM WITH INLINE TIME & HARD / MEDIUM / LOW SELECTORS
@@ -472,6 +476,31 @@ export function PlanScreen({
               }}
             >
               {sec.icon} {sec.name}
+            </span>
+          )}
+
+          {/* Collision Warning Badge */}
+          {conflictAnalysis.conflictingTaskIds.has(t.id) && (
+            <span
+              onClick={() => setShowConflictModal(true)}
+              style={{
+                fontSize: 9,
+                padding: '1px 6px',
+                borderRadius: 4,
+                background: 'rgba(239, 68, 68, 0.22)',
+                border: '1px solid rgba(239, 68, 68, 0.55)',
+                color: '#fca5a5',
+                cursor: 'pointer',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 3,
+                flexShrink: 0,
+              }}
+              title="Time overlap detected with another scheduled task. Click to resolve."
+            >
+              <AlertTriangle size={10} style={{ color: '#ef4444' }} />
+              Overlap
             </span>
           )}
 
@@ -724,6 +753,60 @@ export function PlanScreen({
           </div>
         </div>
       </div>
+
+      {/* Schedule Conflicts Banner */}
+      {conflictAnalysis.hasConflicts && (
+        <div
+          className="v-card"
+          style={{
+            padding: '10px 16px',
+            background: 'rgba(239, 68, 68, 0.12)',
+            borderColor: 'rgba(239, 68, 68, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertTriangle size={16} style={{ color: '#f87171', flexShrink: 0 }} />
+            <div style={{ fontSize: 12, color: '#fee2e2' }}>
+              <strong>
+                {conflictAnalysis.timeCollisions.length > 0
+                  ? `${conflictAnalysis.timeCollisions.length} Time Overlap${conflictAnalysis.timeCollisions.length > 1 ? 's' : ''}`
+                  : ''}
+              </strong>
+              {conflictAnalysis.timeCollisions.length > 0 && conflictAnalysis.isOverBudget ? ' · ' : ''}
+              <strong>
+                {conflictAnalysis.isOverBudget
+                  ? `${Math.round(conflictAnalysis.budgetOverflowMinutes / 6) / 10}h Over Focus Budget`
+                  : ''}
+              </strong>
+              <span style={{ color: 'rgba(255,255,255,0.7)', marginLeft: 6 }}>
+                Schedule collisions detected on today&apos;s timeline.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowConflictModal(true)}
+            className="v-pill-btn"
+            style={{
+              padding: '5px 14px',
+              fontSize: 11,
+              background: 'rgba(245, 158, 11, 0.25)',
+              borderColor: '#fbbf24',
+              color: '#ffffff',
+              fontWeight: 700,
+              gap: 5,
+            }}
+          >
+            <Sparkles size={12} style={{ color: '#facc15' }} />
+            Auto-Resolve Conflicts with AI
+          </button>
+        </div>
+      )}
 
       {/* Unfinished Tasks Rollover Banner */}
       {prevUnfinished.length > 0 && (
@@ -1649,6 +1732,14 @@ export function PlanScreen({
           </div>
         </div>
       </div>
+
+      <ScheduleConflictModal
+        isOpen={showConflictModal}
+        onClose={() => setShowConflictModal(false)}
+        tasks={tasks}
+        freeHours={freeHours}
+        onApplied={updated => setTasks(updated)}
+      />
     </div>
   );
 }

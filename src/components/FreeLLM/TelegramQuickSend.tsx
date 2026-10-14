@@ -103,6 +103,65 @@ export function TelegramQuickSend({
           <div><strong style={{ fontSize: 14 }}>Send to Telegram</strong><div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 3 }}>Your bot posts text, images, and voice files to its configured channel.</div></div>
           <button type="button" onClick={() => setOpen(false)} aria-label="Close Telegram message" className="v-circle-btn" style={{ width: 26, height: 26 }}><X size={14} /></button>
         </header>
+
+        {/* 1-Click Task Digest Quick Actions */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            disabled={sending}
+            onClick={async () => {
+              setSending(true);
+              setError('');
+              setNotice('');
+              try {
+                const res = await apiFetch('/api/telegram/task-alerts', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'morning_briefing' }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to send morning briefing');
+                setNotice(`🌅 Morning briefing sent to ${data.channel || '@SamSpac'}! (ID: ${data.messageId})`);
+              } catch (e: any) {
+                setError(e?.message || 'Could not send morning briefing');
+              } finally {
+                setSending(false);
+              }
+            }}
+            className="v-pill-btn"
+            style={{ fontSize: 11, padding: '4px 10px', gap: 4 }}
+          >
+            🌅 Send Morning Briefing
+          </button>
+          <button
+            type="button"
+            disabled={sending}
+            onClick={async () => {
+              setSending(true);
+              setError('');
+              setNotice('');
+              try {
+                const res = await apiFetch('/api/telegram/task-alerts', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'evening_review' }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to send evening review');
+                setNotice(`🌙 Evening review sent to ${data.channel || '@SamSpac'}! (ID: ${data.messageId})`);
+              } catch (e: any) {
+                setError(e?.message || 'Could not send evening review');
+              } finally {
+                setSending(false);
+              }
+            }}
+            className="v-pill-btn"
+            style={{ fontSize: 11, padding: '4px 10px', gap: 4 }}
+          >
+            🌙 Send Evening Review
+          </button>
+        </div>
+
         <textarea
           autoFocus
           value={text}

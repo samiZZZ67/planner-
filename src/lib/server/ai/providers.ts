@@ -652,3 +652,256 @@ export async function executeAIRequestWithFallback(
   error.attempts = errorsEncountered;
   throw error;
 }
+
+export interface StreamAIResult {
+  stream: ReadableStream<Uint8Array>;
+  provider: string;
+  model: string;
+}
+
+/**
+ * Executes a streaming AI request through Groq or Gemini with automatic provider failover.
+ * Yields standard OpenAI-compatible SSE events: data: {"choices":[{"delta":{"content":"..."}}]}\n\n
+ */
+export async function streamAIRequestWithFallback(
+  prompt: string,
+  systemInstruction?: string,
+  requestedProviderId?: string,
+  clientSignal?: AbortSignal
+): Promise<StreamAIResult> {
+  const config = getStoredAIConfig();
+  const chosenProvider = requestedProviderId || config.activeProviderId;
+  const now = Date.now();
+
+  const groqKeys: Record<string, string> = {
+    'groq-1': process.env.GROQ_API_KEY_1 || process.env.GROQ_API_KEY || '',
+    'groq-2': process.env.GROQ_API_KEY_2 || '',
+    'groq-3': process.env.GROQ_API_KEY_3 || '',
+  };
+  const geminiKeys: Record<string, string> = {
+    'gemini-1': process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY || '',
+    'gemini-2': process.env.GEMINI_API_KEY_2 || '',
+    'gemini-3': process.env.GEMINI_API_KEY_3 || '',
+  };
+
+  const allProviderIds = ['groq-1', 'groq-2', 'groq-3', 'gemini-1', 'gemini-2', 'gemini-3'];
+  let candidateOrder: string[] = [];
+
+  if (chosenProvider && chosenProvider !== 'auto') {
+    if (config.fallbackEnabled) {
+      candidateOrder = [chosenProvider, ...allProviderIds.filter(id => id !== chosenProvider)];
+    } else {
+      candidateOrder = [chosenProvider];
+    }
+  } else {
+    candidateOrder = allProviderIds;
+  }
+
+  const availableCandidates = candidateOrder.filter(id => {
+    let hasKey = false;
+    if (id.startsWith('groq')) hasKey = isValidApiKey(groqKeys[id]);
+    else if (id.startsWith('gemini')) hasKey = isValidApiKey(geminiKeys[id]);
+    if (!hasKey) return false;
+    const cooldown = cooldowns.get(id);
+    if (cooldown && cooldown.until > now) return false;
+    return true;
+  });
+
+  const attemptedKeyStrings = new Set<string>();
+
+  for (const candidateId of availableCandidates) {
+    let candidateKey = '';
+    if (candidateId.startsWith('groq')) candidateKey = groqKeys[candidateId];
+    else if (candidateId.startsWith('gemini')) candidateKey = geminiKeys[candidateId];
+    const trimmedKey = (candidateKey || '').trim();
+    if (trimmedKey && attemptedKeyStrings.has(trimmedKey)) continue;
+    if (trimmedKey) attemptedKeyStrings.add(trimmedKey);
+
+    const controller = new AbortController();
+    const abortHandler = () => controller.abort(clientSignal?.reason);
+    if (clientSignal?.aborted) abortHandler();
+    else clientSignal?.addEventListener('abort', abortHandler, { once: true });
+    const timeout = setTimeout(() => controller.abort(new Error('AI stream provider timed out')), 35000);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      clientSignal?.removeEventListener('abort', abortHandler);
+    };
+
+    try {
+      if (candidateId.startsWith('groq')) {
+        const defaultGroq = getDefaultGroqModel();
+        const model = config.modelOverrides[candidateId] || defaultGroq;
+        const keyIndex = parseInt(candidateId.replace('groq-', ''), 10) || 1;
+        const messages: any[] = [];
+        if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+        messages.push({ role: 'user', content: prompt });
+
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${candidateKey.trim()}`,
+            Accept: 'text/event-stream',
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            temperature: 0.3,
+            stream: true,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok || !res.body) {
+          cleanup();
+          continue;
+        }
+
+        const reader = res.body.getReader();
+        const stream = new ReadableStream<Uint8Array>({
+          async pull(streamController) {
+            try {
+              const { value, done } = await reader.read();
+              if (done) {
+                cleanup();
+                streamController.close();
+              } else {
+                streamController.enqueue(value);
+              }
+            } catch (err) {
+              cleanup();
+              streamController.error(err);
+            }
+          },
+          async cancel(reason) {
+            cleanup();
+            controller.abort(reason);
+            await reader.cancel(reason).catch(() => undefined);
+          },
+        });
+
+        return {
+          stream,
+          provider: `Groq Cloud (Key ${keyIndex})`,
+          model,
+        };
+      } else if (candidateId.startsWith('gemini')) {
+        const defaultGemini = getDefaultGeminiModel();
+        const model = config.modelOverrides[candidateId] || defaultGemini;
+        const keyIndex = parseInt(candidateId.replace('gemini-', ''), 10) || 1;
+        const body: any = {
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 2500 },
+        };
+        if (systemInstruction) {
+          body.systemInstruction = { parts: [{ text: systemInstruction }] };
+        }
+
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(candidateKey.trim())}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': candidateKey.trim(),
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          }
+        );
+
+        if (!res.ok || !res.body) {
+          cleanup();
+          continue;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        const encoder = new TextEncoder();
+        let buffer = '';
+
+        const stream = new ReadableStream<Uint8Array>({
+          async pull(streamController) {
+            try {
+              const { value, done } = await reader.read();
+              if (done) {
+                streamController.enqueue(encoder.encode('data: [DONE]\n\n'));
+                cleanup();
+                streamController.close();
+                return;
+              }
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split(/\r?\n/);
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (!line.startsWith('data:')) continue;
+                const payload = line.slice(5).trim();
+                if (!payload || payload === '[DONE]') continue;
+                try {
+                  const data = JSON.parse(payload);
+                  const deltaText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                  if (typeof deltaText === 'string' && deltaText) {
+                    const sseChunk = `data: ${JSON.stringify({
+                      choices: [{ delta: { content: deltaText } }],
+                      provider: `Google Gemini (Key ${keyIndex})`,
+                      model,
+                    })}\n\n`;
+                    streamController.enqueue(encoder.encode(sseChunk));
+                  }
+                } catch {}
+              }
+            } catch (err) {
+              cleanup();
+              streamController.error(err);
+            }
+          },
+          async cancel(reason) {
+            cleanup();
+            controller.abort(reason);
+            await reader.cancel(reason).catch(() => undefined);
+          },
+        });
+
+        return {
+          stream,
+          provider: `Google Gemini (Key ${keyIndex})`,
+          model,
+        };
+      }
+    } catch {
+      cleanup();
+      continue;
+    }
+  }
+
+  // Fallback to static call wrapped in SSE
+  const staticResult = await executeAIRequestWithFallback(prompt, systemInstruction, requestedProviderId, { jsonMode: false });
+  const encoder = new TextEncoder();
+  const chunkText = staticResult.text || '';
+  let emitted = false;
+
+  const fallbackStream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (!emitted) {
+        emitted = true;
+        const sseLine = `data: ${JSON.stringify({
+          choices: [{ delta: { content: chunkText } }],
+          provider: staticResult.provider,
+          model: staticResult.model,
+        })}\n\n`;
+        controller.enqueue(encoder.encode(sseLine));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      }
+      controller.close();
+    },
+  });
+
+  return {
+    stream: fallbackStream,
+    provider: staticResult.provider,
+    model: staticResult.model,
+  };
+}

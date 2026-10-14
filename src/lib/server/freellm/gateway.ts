@@ -711,6 +711,349 @@ export async function openChatCompletionStream(
 }
 
 /**
+ * Open direct SSE stream to Groq Cloud (Ultra-Fast OpenAI-compatible stream)
+ */
+async function openGroqStream(
+  options: SendChatOptions,
+  clientSignal?: AbortSignal,
+  preferredModel?: string
+): Promise<{ stream: ReadableStream<Uint8Array>; model: string } | null> {
+  const groqKeys = getProviderKeys('GROQ_API_KEY');
+  if (groqKeys.length === 0) return null;
+
+  const validGroqModels = [
+    'openai/gpt-oss-20b',
+    'openai/gpt-oss-120b',
+    'qwen/qwen3.8-27b',
+    'allam-2-7b',
+    'llama-3.3-70b-versatile',
+  ];
+  const modelsToTry: string[] = [];
+  if (preferredModel && validGroqModels.includes(preferredModel)) modelsToTry.push(preferredModel);
+  for (const m of validGroqModels) {
+    if (!modelsToTry.includes(m)) modelsToTry.push(m);
+  }
+
+  for (const rawKey of groqKeys) {
+    const cleanKey = rawKey.trim();
+    for (const model of modelsToTry) {
+      const controller = new AbortController();
+      const abortHandler = () => controller.abort(clientSignal?.reason);
+      if (clientSignal?.aborted) abortHandler();
+      else clientSignal?.addEventListener('abort', abortHandler, { once: true });
+      const timeout = setTimeout(() => controller.abort(new Error('Groq stream timed out after 30 seconds')), 30000);
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        clientSignal?.removeEventListener('abort', abortHandler);
+      };
+
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${cleanKey}`,
+            Accept: 'text/event-stream',
+          },
+          body: JSON.stringify({
+            model,
+            messages: options.messages.map(m => ({
+              role: m.role === 'assistant' ? 'assistant' : m.role === 'system' ? 'system' : 'user',
+              content: m.content,
+            })),
+            temperature: options.temperature ?? 0.7,
+            stream: true,
+          }),
+          signal: controller.signal,
+        });
+
+        if (!res.ok || !res.body) {
+          cleanup();
+          continue;
+        }
+
+        const reader = res.body.getReader();
+        const stream = new ReadableStream<Uint8Array>({
+          async pull(streamController) {
+            try {
+              const { value, done } = await reader.read();
+              if (done) {
+                cleanup();
+                streamController.close();
+              } else {
+                streamController.enqueue(value);
+              }
+            } catch (err) {
+              cleanup();
+              streamController.error(err);
+            }
+          },
+          async cancel(reason) {
+            cleanup();
+            controller.abort(reason);
+            await reader.cancel(reason).catch(() => undefined);
+          },
+        });
+
+        console.info(`[FreeLLM Fallback] Groq streaming succeeded with model ${model}.`);
+        return { stream, model };
+      } catch {
+        cleanup();
+        continue;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Open direct SSE stream to Google Gemini AI Studio and transform to OpenAI-compatible SSE
+ */
+async function openGeminiStream(
+  options: SendChatOptions,
+  clientSignal?: AbortSignal,
+  preferredModel?: string
+): Promise<{ stream: ReadableStream<Uint8Array>; model: string } | null> {
+  const geminiKeys = getProviderKeys('GEMINI_API_KEY');
+  if (geminiKeys.length === 0) return null;
+
+  const validGeminiModels = [
+    'gemini-3.6-flash',
+    'gemini-3.8-flash',
+    'gemini-3.5-flash',
+  ];
+  const modelsToTry: string[] = [];
+  if (preferredModel && validGeminiModels.includes(preferredModel)) modelsToTry.push(preferredModel);
+  for (const m of validGeminiModels) {
+    if (!modelsToTry.includes(m)) modelsToTry.push(m);
+  }
+
+  const promptText = options.messages
+    .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+    .join('\n\n');
+
+  for (const rawKey of geminiKeys) {
+    const cleanKey = rawKey.trim();
+    for (const model of modelsToTry) {
+      const controller = new AbortController();
+      const abortHandler = () => controller.abort(clientSignal?.reason);
+      if (clientSignal?.aborted) abortHandler();
+      else clientSignal?.addEventListener('abort', abortHandler, { once: true });
+      const timeout = setTimeout(() => controller.abort(new Error('Gemini stream timed out after 35 seconds')), 35000);
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        clientSignal?.removeEventListener('abort', abortHandler);
+      };
+
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(cleanKey)}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': cleanKey,
+            },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: promptText }] }],
+              generationConfig: {
+                temperature: options.temperature ?? 0.7,
+                maxOutputTokens: 4096,
+              },
+            }),
+            signal: controller.signal,
+          }
+        );
+
+        if (!res.ok || !res.body) {
+          cleanup();
+          continue;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        const encoder = new TextEncoder();
+        let buffer = '';
+
+        const stream = new ReadableStream<Uint8Array>({
+          async pull(streamController) {
+            try {
+              const { value, done } = await reader.read();
+              if (done) {
+                streamController.enqueue(encoder.encode('data: [DONE]\n\n'));
+                cleanup();
+                streamController.close();
+                return;
+              }
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split(/\r?\n/);
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (!line.startsWith('data:')) continue;
+                const payload = line.slice(5).trim();
+                if (!payload || payload === '[DONE]') continue;
+                try {
+                  const data = JSON.parse(payload);
+                  const deltaText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                  if (typeof deltaText === 'string' && deltaText) {
+                    const sseChunk = `data: ${JSON.stringify({
+                      choices: [{ delta: { content: deltaText } }],
+                      model: `${model} (Gemini Stream)`,
+                    })}\n\n`;
+                    streamController.enqueue(encoder.encode(sseChunk));
+                  }
+                } catch {
+                  // Ignore JSON parse errors in malformed/interrupted lines
+                }
+              }
+            } catch (err) {
+              cleanup();
+              streamController.error(err);
+            }
+          },
+          async cancel(reason) {
+            cleanup();
+            controller.abort(reason);
+            await reader.cancel(reason).catch(() => undefined);
+          },
+        });
+
+        console.info(`[FreeLLM Fallback] Gemini streaming succeeded with model ${model}.`);
+        return { stream, model };
+      } catch {
+        cleanup();
+        continue;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Open chat completion stream with resilient failover to direct Groq or Gemini providers
+ * when the external FreeLLM gateway is cold-starting, rate-limited, or unavailable.
+ */
+export async function streamChatCompletionWithFallback(
+  options: SendChatOptions,
+  clientSignal?: AbortSignal
+): Promise<{ stream: ReadableStream<Uint8Array>; providerUsed: string; model: string }> {
+  await loadGatewayConfigFromDb();
+  const requestedModel = options.model || 'auto';
+  const effectiveModel = !requestedModel || requestedModel === 'auto' ? 'gemini-3.6-flash' : requestedModel;
+  const isGoogleTarget =
+    effectiveModel.startsWith('gemini-') ||
+    effectiveModel.includes('google') ||
+    effectiveModel.includes('deep-research') ||
+    effectiveModel === 'auto';
+
+  // 1. Try FreeLLM Gateway stream first
+  for (const gatewayKey of getGatewayKeys()) {
+    const keyOverride = gatewayKey !== undefined && options.customKey === undefined ? { customKey: gatewayKey } : {};
+    try {
+      const stream = await openChatCompletionStream(
+        { ...options, model: requestedModel, ...keyOverride },
+        clientSignal
+      );
+      console.info(`[FreeLLM Stream Fallback] Gateway stream connected successfully.`);
+      return {
+        stream,
+        providerUsed: 'FreeLLMAPI Gateway',
+        model: requestedModel,
+      };
+    } catch (gatewayErr: any) {
+      console.warn('[FreeLLM Stream Fallback] Gateway stream attempt failed:', gatewayErr?.message || gatewayErr);
+    }
+  }
+
+  // 2. Try direct provider streams (in capability/preference order)
+  if (isGoogleTarget) {
+    try {
+      const gemini = await openGeminiStream(options, clientSignal, effectiveModel);
+      if (gemini) {
+        return {
+          stream: gemini.stream,
+          providerUsed: 'Google AI Studio (Direct Stream)',
+          model: gemini.model,
+        };
+      }
+    } catch (err) {
+      console.warn('[FreeLLM Stream Fallback] Gemini direct stream attempt failed:', err);
+    }
+
+    try {
+      const groq = await openGroqStream(options, clientSignal);
+      if (groq) {
+        return {
+          stream: groq.stream,
+          providerUsed: 'Groq Cloud (Direct Stream)',
+          model: groq.model,
+        };
+      }
+    } catch (err) {
+      console.warn('[FreeLLM Stream Fallback] Groq direct stream attempt failed:', err);
+    }
+  } else {
+    try {
+      const groq = await openGroqStream(options, clientSignal, effectiveModel);
+      if (groq) {
+        return {
+          stream: groq.stream,
+          providerUsed: 'Groq Cloud (Direct Stream)',
+          model: groq.model,
+        };
+      }
+    } catch (err) {
+      console.warn('[FreeLLM Stream Fallback] Groq direct stream attempt failed:', err);
+    }
+
+    try {
+      const gemini = await openGeminiStream(options, clientSignal, 'gemini-3.6-flash');
+      if (gemini) {
+        return {
+          stream: gemini.stream,
+          providerUsed: 'Google AI Studio (Direct Stream)',
+          model: gemini.model,
+        };
+      }
+    } catch (err) {
+      console.warn('[FreeLLM Stream Fallback] Gemini direct stream attempt failed:', err);
+    }
+  }
+
+  // 3. Fallback: buffer with resilient chat fallback and yield as an SSE stream
+  console.info('[FreeLLM Stream Fallback] Direct streams failed; falling back to buffered completion wrapped in SSE.');
+  const staticResult = await sendChatCompletionWithFallback(options);
+  const encoder = new TextEncoder();
+  const chunkText = staticResult.content || '';
+  let emitted = false;
+
+  const fallbackStream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (!emitted) {
+        emitted = true;
+        const sseLine = `data: ${JSON.stringify({
+          choices: [{ delta: { content: chunkText } }],
+          model: staticResult.model,
+        })}\n\n`;
+        controller.enqueue(encoder.encode(sseLine));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      }
+      controller.close();
+    },
+  });
+
+  return {
+    stream: fallbackStream,
+    providerUsed: staticResult.providerUsed || 'FreeLLM Fallback Engine',
+    model: staticResult.model,
+  };
+}
+
+/**
  * Execute direct fallback to Google Gemini AI Studio (730M+ token capacity)
  */
 async function callGeminiDirect(

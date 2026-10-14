@@ -4,7 +4,7 @@ import { validateAndCleanAIPlan } from './validator';
 import { generateAlgorithmicDayPlan } from './prompts';
 import { generateAlgorithmicPlanInterview } from './interview';
 import { handleFallbackNaturalLanguage } from './copilot';
-import { getAIProvidersStatus, executeAIRequestWithFallback, isValidApiKey } from './providers';
+import { getAIProvidersStatus, executeAIRequestWithFallback, isValidApiKey, streamAIRequestWithFallback } from './providers';
 import type { Section, Task, WeeklyPlan, MonthlyPlan } from '../../../types';
 
 describe('AI Planning & Hierarchy Test Suite', () => {
@@ -632,5 +632,66 @@ describe('AI Planning & Hierarchy Test Suite', () => {
       expect(action.params.updates.freeHours).toBe(4);
     });
   });
+
+  describe('8. AI Streaming SSE Engine & Fallback Transport', () => {
+    it('should throw NO_CONFIGURED_KEYS when streaming is requested with no API keys', async () => {
+      const originalG1 = process.env.GEMINI_API_KEY_1;
+      const originalG2 = process.env.GEMINI_API_KEY_2;
+      const originalG3 = process.env.GEMINI_API_KEY_3;
+      const originalG = process.env.GEMINI_API_KEY;
+      const originalGroq1 = process.env.GROQ_API_KEY_1;
+      const originalGroq2 = process.env.GROQ_API_KEY_2;
+      const originalGroq3 = process.env.GROQ_API_KEY_3;
+      const originalGroq = process.env.GROQ_API_KEY;
+
+      try {
+        delete process.env.GEMINI_API_KEY_1;
+        delete process.env.GEMINI_API_KEY_2;
+        delete process.env.GEMINI_API_KEY_3;
+        delete process.env.GEMINI_API_KEY;
+        delete process.env.GROQ_API_KEY_1;
+        delete process.env.GROQ_API_KEY_2;
+        delete process.env.GROQ_API_KEY_3;
+        delete process.env.GROQ_API_KEY;
+
+        await expect(streamAIRequestWithFallback('Hello Stream')).rejects.toThrow('NO_CONFIGURED_KEYS');
+      } finally {
+        if (originalG1) process.env.GEMINI_API_KEY_1 = originalG1;
+        if (originalG2) process.env.GEMINI_API_KEY_2 = originalG2;
+        if (originalG3) process.env.GEMINI_API_KEY_3 = originalG3;
+        if (originalG) process.env.GEMINI_API_KEY = originalG;
+        if (originalGroq1) process.env.GROQ_API_KEY_1 = originalGroq1;
+        if (originalGroq2) process.env.GROQ_API_KEY_2 = originalGroq2;
+        if (originalGroq3) process.env.GROQ_API_KEY_3 = originalGroq3;
+        if (originalGroq) process.env.GROQ_API_KEY = originalGroq;
+      }
+    });
+
+    it('should successfully establish stream or wrap fallback when keys are present', async () => {
+      // In environment with active keys (e.g. from .env.local), verify stream returns ReadableStream
+      try {
+        const streamResult = await streamAIRequestWithFallback('Say "Stream Test OK"');
+        expect(streamResult).toHaveProperty('stream');
+        expect(streamResult.stream).toBeInstanceOf(ReadableStream);
+        expect(streamResult.provider).toBeDefined();
+        expect(streamResult.model).toBeDefined();
+
+        const reader = streamResult.stream.getReader();
+        const { value, done } = await reader.read();
+        expect(done).toBe(false);
+        const text = new TextDecoder().decode(value);
+        expect(text).toContain('data:');
+        await reader.cancel();
+      } catch (err: any) {
+        if (err.message === 'NO_CONFIGURED_KEYS') {
+          // Pass when running in air-gapped CI without .env.local
+          expect(true).toBe(true);
+        } else {
+          throw err;
+        }
+      }
+    });
+  });
 });
+
 

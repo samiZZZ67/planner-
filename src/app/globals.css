@@ -731,4 +731,32 @@ button:disabled {
   transform: scale(1.08);
 }
 
+/* ================================================================
+   TYPING & ACTIVITY INDICATOR ANIMATION
+   Polished, lightweight pulsing dots with reduced-motion support
+   ================================================================ */
+@keyframes typingBounce {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.typing-dot {
+  display: inline-block;
+  animation: typingBounce 1.4s infinite ease-in-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot {
+    animation: none !important;
+    opacity: 0.8 !important;
+  }
+}
+
+
 

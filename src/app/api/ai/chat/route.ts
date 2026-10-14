@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/server/auth';
-import { executeAIRequestWithFallback } from '@/lib/server/ai/providers';
+import { executeAIRequestWithFallback, streamAIRequestWithFallback } from '@/lib/server/ai/providers';
 import {
   extractActionsAndCleanText,
   handleFallbackNaturalLanguage,
@@ -119,7 +119,10 @@ export async function POST(req: NextRequest) {
       currentPlanContext = null,
       context = null,
       preferredProvider,
+      stream = false,
     } = body;
+
+    const isStreamRequested = stream === true || req.headers.get('accept')?.includes('text/event-stream');
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json({ error: 'Messages are required' }, { status: 400 });
@@ -237,6 +240,133 @@ SAFETY & INTEGRITY RULES:
     // Append chat history
     for (const m of messages) {
       conversationPrompt += `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}\n`;
+    }
+
+    if (isStreamRequested) {
+      try {
+        const streamResult = await streamAIRequestWithFallback(
+          conversationPrompt,
+          systemInstruction,
+          preferredProvider,
+          req.signal
+        );
+
+        const reader = streamResult.stream.getReader();
+        const decoder = new TextDecoder();
+        const encoder = new TextEncoder();
+        let accumulatedText = '';
+        let streamBuffer = '';
+
+        const clientStream = new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            try {
+              const { value, done } = await reader.read();
+              if (done) {
+                // Stream finished - parse any actions from accumulated text
+                const { cleanText: extractedCleanText, actions: extractedActions } = extractActionsAndCleanText(accumulatedText);
+                let finalActions = extractedActions;
+                let verifiedFeedback: string | null = null;
+                let errorFeedback: string | null = null;
+
+                if (extractedActions.length > 0) {
+                  const exec = await executeServerActions(extractedActions, mergedContext);
+                  finalActions = exec.executedActions;
+                  verifiedFeedback = exec.verifiedFeedback;
+                  errorFeedback = exec.errorFeedback;
+                }
+
+                // Emit actions receipt event
+                const actionPayload = `data: ${JSON.stringify({
+                  type: 'done',
+                  actions: finalActions,
+                  verifiedFeedback,
+                  errorFeedback,
+                  provider: streamResult.provider,
+                  model: streamResult.model,
+                })}\n\n`;
+                controller.enqueue(encoder.encode(actionPayload));
+                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                controller.close();
+                return;
+              }
+
+              // Decode incoming SSE line to accumulate raw text
+              const chunkStr = decoder.decode(value, { stream: true });
+              streamBuffer += chunkStr;
+              const lines = streamBuffer.split(/\r?\n/);
+              streamBuffer = lines.pop() || '';
+
+              for (const line of lines) {
+                if (!line.startsWith('data:')) continue;
+                const payload = line.slice(5).trim();
+                if (!payload || payload === '[DONE]') continue;
+                try {
+                  const parsed = JSON.parse(payload);
+                  const delta = parsed.choices?.[0]?.delta?.content;
+                  if (typeof delta === 'string') {
+                    accumulatedText += delta;
+                  }
+                } catch {}
+              }
+
+              controller.enqueue(value);
+            } catch (err) {
+              controller.error(err);
+            }
+          },
+          async cancel(reason) {
+            await reader.cancel(reason).catch(() => undefined);
+          },
+        });
+
+        return new Response(clientStream, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          },
+        });
+      } catch (streamErr: any) {
+        console.warn('AI streaming dispatch notice, falling back:', streamErr.message);
+        // Fallback engine execution yielded as SSE
+        const fallbackResult = handleFallbackNaturalLanguage(latestUserMessage, mergedContext);
+        let finalActions = fallbackResult.actions;
+        let finalContent = fallbackResult.content;
+
+        if (fallbackResult.actions.length > 0) {
+          const { executedActions, verifiedFeedback, errorFeedback } = await executeServerActions(fallbackResult.actions, mergedContext);
+          finalActions = executedActions;
+          if (errorFeedback) finalContent = errorFeedback;
+          else if (verifiedFeedback) finalContent = verifiedFeedback;
+        }
+
+        const encoder = new TextEncoder();
+        const fallbackStream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              choices: [{ delta: { content: finalContent } }],
+              provider: 'Sam’s AI (Deterministic Engine)',
+              model: 'local-assistant',
+              type: 'done',
+              actions: finalActions,
+            })}\n\n`));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          },
+        });
+
+        return new Response(fallbackStream, {
+          status: 200,
+          headers: {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          },
+        });
+      }
     }
 
     try {

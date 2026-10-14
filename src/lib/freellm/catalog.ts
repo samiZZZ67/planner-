@@ -906,6 +906,32 @@ export function isVideoGenModel(id: string): boolean {
 }
 
 /**
+ * Detects if the prompt is an explicit image generation request
+ */
+export function isImageGenerationRequest(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  const patterns = [
+    /^(generate|create|draw|paint|render|make)\s+(an?\s+)?([\w\s-]{0,30}\s+)?(image|picture|photo|illustration|drawing|artwork|logo|wallpaper|portrait|banner|icon)\b/i,
+    /^(image|picture|photo)\s+(of|showing|depicting)\b/i,
+    /\b(generate|create|draw|paint)\s+(an?\s+)?([\w\s-]{0,20}\s+)?(image|picture|artwork|illustration)\b/i,
+  ];
+  return patterns.some(p => p.test(t));
+}
+
+/**
+ * Detects if the prompt is an explicit video generation request
+ */
+export function isVideoGenerationRequest(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  const patterns = [
+    /^(generate|create|render|make)\s+(an?\s+)?([\w\s-]{0,30}\s+)?(video|animation|clip|movie)\b/i,
+    /^(video|animation|clip)\s+(of|showing)\b/i,
+    /\b(generate|create)\s+(an?\s+)?([\w\s-]{0,20}\s+)?(video|clip)\b/i,
+  ];
+  return patterns.some(p => p.test(t));
+}
+
+/**
  * Returns all models matching a given capability filter
  */
 export function getModelsByCapability(cap: ModelCapability): CatalogModel[] {

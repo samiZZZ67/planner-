@@ -8,7 +8,8 @@ import {
   CheckCircle2, AlertTriangle, ArrowRight, RefreshCw, Clock,
   Maximize2, Minimize2, Check, CheckSquare, PlusCircle,
   Menu, Plus, Search, Edit2, Square, Mic, MicOff,
-  Volume2, VolumeX, Paperclip, FileText, Image as ImageIcon
+  Volume2, VolumeX, Paperclip, FileText, Image as ImageIcon,
+  Play, Pause, LoaderCircle, Sliders, Headphones, Radio
 } from 'lucide-react';
 import type { Task, Section, WeeklyPlan, MonthlyPlan, AIConversation, AIMessageItem } from '@/types';
 import { apiFetch } from '@/lib/api/apiClient';
@@ -41,6 +42,20 @@ export interface AttachedFile {
   size: number;
   textContent?: string;
   dataUrl?: string;
+}
+function cleanMarkdownForSpeech(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/```[\s\S]*?```/g, ' [Code snippet omitted] ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/#{1,6}\s+/g, '')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[-*+]\s+/g, '')
+    .replace(/\n+/g, ' ')
+    .trim();
 }
 
 interface Message {
@@ -148,13 +163,105 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [lifecycleState, setLifecycleState] = useState<
+    'idle' | 'submitting' | 'connecting' | 'thinking' | 'using_tool' | 'streaming' | 'completed' | 'failed' | 'cancelled'
+  >('idle');
+  const [activityLabel, setActivityLabel] = useState<string>('');
   const [activeProviderName, setActiveProviderName] = useState<string>('Google Gemini');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
-  // ── Voice & Audio ──
+  // ── Voice & Audio (Unified Modular Neural Voice) ──
   const [isDictating, setIsDictating] = useState(false);
   const [isSpeakingMessageId, setIsSpeakingMessageId] = useState<string | null>(null);
+  const [isPausedMessageId, setIsPausedMessageId] = useState<string | null>(null);
+  const [speechLoadingId, setSpeechLoadingId] = useState<string | null>(null);
+  const [speechError, setSpeechError] = useState<{ messageId: string; error: string; canFallbackToBrowser: boolean } | null>(null);
+  const [speechFallbackNotice, setSpeechFallbackNotice] = useState<{ messageId: string; providerName: string } | null>(null);
+  const [selectedVoiceProvider, setSelectedVoiceProvider] = useState<string>('elevenlabs');
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('C1npRmjB19a6yNkEucvx');
+  const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
+  const [voiceConfigData, setVoiceConfigData] = useState<any>(null);
+  const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState(false);
+  const [autoSpeakResponses, setAutoSpeakResponses] = useState(false);
+  const autoSpeakResponsesRef = useRef(false);
+  const [isTestingVoice, setIsTestingVoice] = useState(false);
+
+  // ── Hands-Free Continuous Duplex Live Voice Call ──
+  const [isLiveCallActive, setIsLiveCallActive] = useState(false);
+  const isLiveCallActiveRef = useRef(false);
+  const [callStatus, setCallStatus] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
+  const callStatusRef = useRef<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
+  const [callSubtitle, setCallSubtitle] = useState('Listening... Speak naturally.');
+  const [isCallMuted, setIsCallMuted] = useState(false);
+  const isCallMutedRef = useRef(false);
+  const callRecognitionRef = useRef<any>(null);
+  const callSilenceTimerRef = useRef<any>(null);
+  const callTranscriptRef = useRef<string>('');
+
+  useEffect(() => {
+    isLiveCallActiveRef.current = isLiveCallActive;
+  }, [isLiveCallActive]);
+
+  useEffect(() => {
+    callStatusRef.current = callStatus;
+  }, [callStatus]);
+
+  useEffect(() => {
+    isCallMutedRef.current = isCallMuted;
+  }, [isCallMuted]);
+
   const recognitionRef = useRef<any>(null);
+  const chatAudioRef = useRef<HTMLAudioElement | null>(null);
+  const chatAudioUrlRef = useRef<string | null>(null);
+  const chatAudioAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    autoSpeakResponsesRef.current = autoSpeakResponses;
+  }, [autoSpeakResponses]);
+
+  const saveVoiceSettings = useCallback((provider: string, voiceId: string, speed: number) => {
+    setSelectedVoiceProvider(provider);
+    setSelectedVoiceId(voiceId);
+    setVoiceSpeed(speed);
+    try {
+      localStorage.setItem('np_voice_provider', provider);
+      localStorage.setItem('np_voice_id', voiceId);
+      localStorage.setItem('np_voice_speed', String(speed));
+    } catch {}
+  }, []);
+
+  // Load voice settings on mount
+  useEffect(() => {
+    try {
+      const savedProvider = localStorage.getItem('np_voice_provider');
+      if (savedProvider) setSelectedVoiceProvider(savedProvider);
+      const savedVoice = localStorage.getItem('np_voice_id');
+      if (savedVoice) setSelectedVoiceId(savedVoice);
+      const savedSpeed = localStorage.getItem('np_voice_speed');
+      if (savedSpeed) setVoiceSpeed(Number(savedSpeed) || 1.0);
+      const savedAuto = localStorage.getItem('np_voice_auto_speak');
+      if (savedAuto) setAutoSpeakResponses(savedAuto === 'true');
+    } catch {}
+
+    apiFetch('/api/voice/config')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.ok) {
+          setVoiceConfigData(data);
+          try {
+            const savedProv = localStorage.getItem('np_voice_provider');
+            if (!savedProv && data.activeProvider) {
+              setSelectedVoiceProvider(data.activeProvider);
+            }
+            const savedV = localStorage.getItem('np_voice_id');
+            if (!savedV && data.activeVoiceId) {
+              setSelectedVoiceId(data.activeVoiceId);
+            }
+          } catch {}
+        }
+      })
+      .catch(() => null);
+  }, []);
 
   // ── Avatar Profile ──
   const [profileAvatar, setProfileAvatar] = useState<string>('/icons/icon-192.png');
@@ -358,12 +465,30 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
     }
   }, [isOpen, messages]);
 
-  // Clean up speech and abort on unmount
+  // Clean up speech, live call, and abort on unmount
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      if (callSilenceTimerRef.current) {
+        clearTimeout(callSilenceTimerRef.current);
+        callSilenceTimerRef.current = null;
+      }
+      if (callRecognitionRef.current) {
+        try { callRecognitionRef.current.abort(); } catch {}
+        callRecognitionRef.current = null;
+      }
+      if (chatAudioRef.current) {
+        chatAudioRef.current.pause();
+        chatAudioRef.current.src = '';
+        chatAudioRef.current = null;
+      }
+      if (chatAudioUrlRef.current) {
+        URL.revokeObjectURL(chatAudioUrlRef.current);
+        chatAudioUrlRef.current = null;
+      }
+      chatAudioAbortRef.current?.abort();
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
@@ -854,6 +979,18 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
     const content = (textToSend || input).trim();
     if ((!content && attachedFiles.length === 0) || loading) return;
 
+    if (chatAudioRef.current) {
+      chatAudioRef.current.pause();
+      chatAudioRef.current.src = '';
+      chatAudioRef.current = null;
+    }
+    if (chatAudioUrlRef.current) {
+      URL.revokeObjectURL(chatAudioUrlRef.current);
+      chatAudioUrlRef.current = null;
+    }
+    chatAudioAbortRef.current?.abort();
+    setIsSpeakingMessageId(null);
+
     let convId = activeConversationId;
     if (!convId) {
       const generatedTitle = (content || attachedFiles[0]?.name || 'Chat').slice(0, 32);
@@ -895,6 +1032,8 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
     if (!textToSend) setInput('');
     setAttachedFiles([]);
     setLoading(true);
+    setLifecycleState('submitting');
+    setActivityLabel('Analyzing workspace data...');
 
     // Save user message to Dexie and sync to server
     const userMsgItem: AIMessageItem = {
@@ -920,82 +1059,210 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
 
     try {
       const fullContext = await gatherFullContext();
+      setLifecycleState('connecting');
+      setActivityLabel('Consulting Sam’s AI...');
 
       const res = await apiFetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream, application/json' },
         body: JSON.stringify({
           messages: updatedMessages.map(m => ({
             role: m.role,
             content: m.content,
           })),
           context: fullContext,
+          stream: true,
         }),
         signal: controller.signal,
       });
 
-      const data = await res.json().catch(() => null);
+      if (res.headers.get('content-type')?.includes('text/event-stream')) {
+        if (!res.ok || !res.body) {
+          throw new Error(`AI stream error (${res.status}).`);
+        }
+        setLifecycleState('thinking');
+        setActivityLabel('Thinking...');
+        const streamedMsgId = crypto.randomUUID();
+        let streamedContent = '';
+        let streamedProvider = activeProviderName;
+        let finalActions: any[] = [];
+        let verifiedFeedback: string | null = null;
+        let errorFeedback: string | null = null;
 
-      if (!res.ok) {
-        let errDesc = data?.error;
-        if (!errDesc) {
-          if (res.status === 401) {
-            errDesc = 'Please log in with your app password to use Sam’s AI.';
-          } else if (res.status === 429) {
-            errDesc = 'AI providers are currently rate-limited. Please wait a moment and try again.';
-          } else if (res.status === 502) {
-            errDesc = 'AI provider service is temporarily unreachable.';
-          } else {
-            errDesc = `Chat service error (${res.status}).`;
+        setMessages(prev => [...prev, {
+          id: streamedMsgId,
+          role: 'assistant',
+          content: '',
+          timestamp: Date.now(),
+          provider: streamedProvider,
+        }]);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let ended = false;
+
+        const processLine = (line: string) => {
+          if (!line.startsWith('data:')) return;
+          const payload = line.slice(5).trim();
+          if (payload === '[DONE]') {
+            ended = true;
+            return;
+          }
+          try {
+            const event = JSON.parse(payload);
+            if (event.provider) {
+              streamedProvider = event.provider;
+              setActiveProviderName(event.provider);
+            }
+            if (event.type === 'done') {
+              if (Array.isArray(event.actions)) finalActions = event.actions;
+              if (event.verifiedFeedback) verifiedFeedback = event.verifiedFeedback;
+              if (event.errorFeedback) errorFeedback = event.errorFeedback;
+            }
+            const delta = event.choices?.[0]?.delta?.content;
+            if (typeof delta === 'string' && delta) {
+              setLifecycleState('streaming');
+              streamedContent += delta;
+              setMessages(prev => prev.map(m => m.id === streamedMsgId
+                ? { ...m, content: streamedContent, provider: streamedProvider }
+                : m
+              ));
+            }
+          } catch {}
+        };
+
+        while (!ended) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split(/\r?\n/);
+          buffer = lines.pop() || '';
+          for (const line of lines) processLine(line);
+        }
+        buffer += decoder.decode();
+        if (buffer.trim()) processLine(buffer);
+
+        if (controller.signal.aborted) throw new DOMException('Request cancelled', 'AbortError');
+
+        // Execute any returned actions on local Dexie
+        const actionReceipts: ActionReceipt[] = [];
+        if (finalActions.length > 0) {
+          setLifecycleState('using_tool');
+          setActivityLabel('Executing actions in workspace...');
+          for (const act of finalActions) {
+            const receipt = await executeLocalAction(act);
+            actionReceipts.push(receipt);
           }
         }
-        throw new Error(errDesc);
+
+        const finalAssistantText = errorFeedback || verifiedFeedback || streamedContent || 'Task completed.';
+        const assistantMsg: Message = {
+          id: streamedMsgId,
+          role: 'assistant',
+          content: finalAssistantText,
+          timestamp: Date.now(),
+          provider: streamedProvider,
+          actions: actionReceipts.length > 0 ? actionReceipts : undefined,
+        };
+
+        setMessages(prev => prev.map(m => m.id === streamedMsgId ? assistantMsg : m));
+        setLifecycleState('completed');
+
+        // Save assistant message to Dexie and sync to server
+        const assistantMsgItem: AIMessageItem = {
+          id: assistantMsg.id,
+          conversationId: convId,
+          role: assistantMsg.role,
+          content: assistantMsg.content,
+          timestamp: assistantMsg.timestamp,
+          provider: assistantMsg.provider,
+          actions: assistantMsg.actions,
+        };
+        await saveAIMessage(assistantMsgItem);
+        apiFetch('/api/ai/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assistant: 'sams_ai',
+            action: 'save_message',
+            message: assistantMsgItem,
+          }),
+        }).catch(() => null);
+
+        if ((autoSpeakResponsesRef.current || isLiveCallActiveRef.current) && assistantMsg.content.trim()) {
+          void handleSpeakMessage(assistantMsg);
+        }
+      } else {
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          let errDesc = data?.error;
+          if (!errDesc) {
+            if (res.status === 401) {
+              errDesc = 'Please log in with your app password to use Sam’s AI.';
+            } else if (res.status === 429) {
+              errDesc = 'AI providers are currently rate-limited. Please wait a moment and try again.';
+            } else if (res.status === 502) {
+              errDesc = 'AI provider service is temporarily unreachable.';
+            } else {
+              errDesc = `Chat service error (${res.status}).`;
+            }
+          }
+          throw new Error(errDesc);
+        }
+
+        if (data?.provider) setActiveProviderName(data.provider);
+
+        // Execute returned actions locally on Dexie
+        const rawActions = data?.actions || [];
+        const actionReceipts: ActionReceipt[] = [];
+
+        for (const act of rawActions) {
+          const receipt = await executeLocalAction(act);
+          actionReceipts.push(receipt);
+        }
+
+        const assistantMsg: Message = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: data?.message?.content || 'No response received from Sam’s AI.',
+          timestamp: Date.now(),
+          provider: data?.provider || 'Sam’s AI',
+          actions: actionReceipts.length > 0 ? actionReceipts : undefined,
+        };
+
+        setMessages(prev => [...prev, assistantMsg]);
+        setLifecycleState('completed');
+
+        // Save assistant message to Dexie and sync to server
+        const assistantMsgItem: AIMessageItem = {
+          id: assistantMsg.id,
+          conversationId: convId,
+          role: assistantMsg.role,
+          content: assistantMsg.content,
+          timestamp: assistantMsg.timestamp,
+          provider: assistantMsg.provider,
+          actions: assistantMsg.actions,
+        };
+        await saveAIMessage(assistantMsgItem);
+        apiFetch('/api/ai/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assistant: 'sams_ai',
+            action: 'save_message',
+            message: assistantMsgItem,
+          }),
+        }).catch(() => null);
+
+        if ((autoSpeakResponsesRef.current || isLiveCallActiveRef.current) && assistantMsg.content.trim()) {
+          void handleSpeakMessage(assistantMsg);
+        }
       }
-
-      if (data?.provider) setActiveProviderName(data.provider);
-
-      // Execute returned actions locally on Dexie
-      const rawActions = data?.actions || [];
-      const actionReceipts: ActionReceipt[] = [];
-
-      for (const act of rawActions) {
-        const receipt = await executeLocalAction(act);
-        actionReceipts.push(receipt);
-      }
-
-      const assistantMsg: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: data?.message?.content || 'No response received from Sam’s AI.',
-        timestamp: Date.now(),
-        provider: data?.provider || 'Sam’s AI',
-        actions: actionReceipts.length > 0 ? actionReceipts : undefined,
-      };
-
-      setMessages(prev => [...prev, assistantMsg]);
-
-      // Save assistant message to Dexie and sync to server
-      const assistantMsgItem: AIMessageItem = {
-        id: assistantMsg.id,
-        conversationId: convId,
-        role: assistantMsg.role,
-        content: assistantMsg.content,
-        timestamp: assistantMsg.timestamp,
-        provider: assistantMsg.provider,
-        actions: assistantMsg.actions,
-      };
-      await saveAIMessage(assistantMsgItem);
-      apiFetch('/api/ai/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assistant: 'sams_ai',
-          action: 'save_message',
-          message: assistantMsgItem,
-        }),
-      }).catch(() => null);
     } catch (err: any) {
       if (err.name === 'AbortError') {
+        setLifecycleState('cancelled');
         const stopMsg: Message = {
           id: crypto.randomUUID(),
           role: 'assistant',
@@ -1021,6 +1288,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
           }),
         }).catch(() => null);
       } else {
+        setLifecycleState('failed');
         const errorMsg: Message = {
           id: crypto.randomUUID(),
           role: 'assistant',
@@ -1028,9 +1296,16 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
           timestamp: Date.now(),
         };
         setMessages(prev => [...prev, errorMsg]);
+        if (isLiveCallActiveRef.current) {
+          setCallStatus('listening');
+          callStatusRef.current = 'listening';
+          setCallSubtitle('Could not get response. Listening for your voice...');
+          startCallRecognition();
+        }
       }
     } finally {
       setLoading(false);
+      setActivityLabel('');
       abortControllerRef.current = null;
       setTimeout(() => textareaRef.current?.focus(), 50);
     }
@@ -1100,27 +1375,359 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
     }
   };
 
-  // ── Text-to-Speech (Spoken AI response) ──
-  const handleSpeakMessage = (msg: Message) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+  // ── Hands-Free Continuous Duplex Live Voice Call Functions ──
+  const stopLiveVoiceCall = useCallback(() => {
+    isLiveCallActiveRef.current = false;
+    setIsLiveCallActive(false);
+    setCallStatus('idle');
+    callStatusRef.current = 'idle';
+    setCallSubtitle('Listening... Speak naturally.');
+    callTranscriptRef.current = '';
+    if (callSilenceTimerRef.current) {
+      clearTimeout(callSilenceTimerRef.current);
+      callSilenceTimerRef.current = null;
+    }
+    if (callRecognitionRef.current) {
+      try { callRecognitionRef.current.abort(); } catch {}
+      callRecognitionRef.current = null;
+    }
+    if (chatAudioRef.current) {
+      chatAudioRef.current.pause();
+      chatAudioRef.current.src = '';
+      chatAudioRef.current = null;
+    }
+    if (chatAudioUrlRef.current) {
+      URL.revokeObjectURL(chatAudioUrlRef.current);
+      chatAudioUrlRef.current = null;
+    }
+    chatAudioAbortRef.current?.abort();
+    setIsSpeakingMessageId(null);
+    setIsPausedMessageId(null);
+  }, []);
 
-    if (isSpeakingMessageId === msg.id) {
-      window.speechSynthesis.cancel();
-      setIsSpeakingMessageId(null);
+  const startCallRecognition = useCallback(() => {
+    if (!isLiveCallActiveRef.current || isCallMutedRef.current) return;
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setCallSubtitle('Speech recognition is not supported in this browser. Try Chrome or Safari.');
       return;
     }
 
-    window.speechSynthesis.cancel();
-    const cleanText = msg.content.replace(/[*#`_~]/g, '');
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
+    try {
+      if (callRecognitionRef.current) {
+        try { callRecognitionRef.current.abort(); } catch {}
+        callRecognitionRef.current = null;
+      }
 
-    utterance.onend = () => setIsSpeakingMessageId(null);
-    utterance.onerror = () => setIsSpeakingMessageId(null);
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
 
-    setIsSpeakingMessageId(msg.id);
-    window.speechSynthesis.speak(utterance);
+      recognition.onstart = () => {
+        if (!isLiveCallActiveRef.current) {
+          try { recognition.abort(); } catch {}
+          return;
+        }
+        setCallStatus('listening');
+        callStatusRef.current = 'listening';
+      };
+
+      recognition.onresult = (event: any) => {
+        let interim = '';
+        let final = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const item = event.results[i];
+          if (item.isFinal) {
+            final += item[0].transcript;
+          } else {
+            interim += item[0].transcript;
+          }
+        }
+        const currentText = (final || interim).trim();
+        if (currentText) {
+          callTranscriptRef.current = currentText;
+          setCallSubtitle(currentText);
+
+          // 1500ms silence auto-submits speech
+          if (callSilenceTimerRef.current) clearTimeout(callSilenceTimerRef.current);
+          callSilenceTimerRef.current = setTimeout(() => {
+            if (!isLiveCallActiveRef.current) return;
+            const phrase = callTranscriptRef.current.trim();
+            if (phrase) {
+              try { recognition.stop(); } catch {}
+              setCallStatus('thinking');
+              callStatusRef.current = 'thinking';
+              setCallSubtitle('Thinking...');
+              callTranscriptRef.current = '';
+              void handleSendMessage(phrase);
+            }
+          }, 1500);
+        }
+      };
+
+      recognition.onerror = (e: any) => {
+        console.warn('[Live Call] Speech recognition notice:', e.error);
+        if (e.error === 'not-allowed') {
+          alert('Microphone access was denied. Please allow microphone permissions in browser settings.');
+          stopLiveVoiceCall();
+        }
+      };
+
+      recognition.onend = () => {
+        if (isLiveCallActiveRef.current && callStatusRef.current === 'listening' && !isCallMutedRef.current) {
+          try { recognition.start(); } catch {}
+        }
+      };
+
+      callRecognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
+      console.warn('[Live Call] Could not start speech recognition:', err);
+    }
+  }, [stopLiveVoiceCall, handleSendMessage]);
+
+  const toggleLiveVoiceCall = useCallback(() => {
+    if (isLiveCallActive) {
+      stopLiveVoiceCall();
+    } else {
+      isLiveCallActiveRef.current = true;
+      setIsLiveCallActive(true);
+      setIsCallMuted(false);
+      isCallMutedRef.current = false;
+      setCallStatus('listening');
+      callStatusRef.current = 'listening';
+      setCallSubtitle('Listening... Speak naturally.');
+      callTranscriptRef.current = '';
+      setTimeout(() => {
+        startCallRecognition();
+      }, 150);
+    }
+  }, [isLiveCallActive, stopLiveVoiceCall, startCallRecognition]);
+
+  const interruptCall = useCallback(() => {
+    if (chatAudioRef.current) {
+      chatAudioRef.current.pause();
+      chatAudioRef.current.src = '';
+      chatAudioRef.current = null;
+    }
+    if (chatAudioUrlRef.current) {
+      URL.revokeObjectURL(chatAudioUrlRef.current);
+      chatAudioUrlRef.current = null;
+    }
+    chatAudioAbortRef.current?.abort();
+    abortControllerRef.current?.abort();
+    setIsSpeakingMessageId(null);
+    setIsPausedMessageId(null);
+    setCallStatus('listening');
+    callStatusRef.current = 'listening';
+    setCallSubtitle('Interrupted. Listening again...');
+    callTranscriptRef.current = '';
+    startCallRecognition();
+  }, [startCallRecognition]);
+
+  // ── Text-to-Speech (Spoken AI response via Modular Neural TTS) ──
+  const handleSpeakMessage = async (msg: Message | { id: string; content: string }, forceBrowser = false) => {
+    // If clicking the same message currently playing: toggle pause / resume
+    if (isSpeakingMessageId === msg.id) {
+      if (isPausedMessageId === msg.id && chatAudioRef.current) {
+        chatAudioRef.current.play().catch(() => null);
+        setIsPausedMessageId(null);
+        return;
+      } else if (chatAudioRef.current && !chatAudioRef.current.paused) {
+        chatAudioRef.current.pause();
+        setIsPausedMessageId(msg.id);
+        return;
+      }
+    }
+
+    // Stop any active audio
+    if (chatAudioRef.current) {
+      chatAudioRef.current.pause();
+      chatAudioRef.current.src = '';
+      chatAudioRef.current = null;
+    }
+    if (chatAudioUrlRef.current) {
+      URL.revokeObjectURL(chatAudioUrlRef.current);
+      chatAudioUrlRef.current = null;
+    }
+    chatAudioAbortRef.current?.abort();
+    chatAudioAbortRef.current = null;
+    if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
+    setIsSpeakingMessageId(null);
+    setIsPausedMessageId(null);
+    setSpeechError(null);
+    setSpeechFallbackNotice(null);
+
+    // If user explicitly chose browser speech synthesis
+    if (forceBrowser) {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        const clean = cleanMarkdownForSpeech(msg.content);
+        const utterance = new SpeechSynthesisUtterance(clean);
+        utterance.rate = voiceSpeed;
+        utterance.onend = () => {
+          setIsSpeakingMessageId(null);
+          setIsPausedMessageId(null);
+          if (isLiveCallActiveRef.current) {
+            setCallStatus('listening');
+            callStatusRef.current = 'listening';
+            setCallSubtitle('Listening... Speak naturally.');
+            callTranscriptRef.current = '';
+            startCallRecognition();
+          }
+        };
+        utterance.onerror = () => {
+          setIsSpeakingMessageId(null);
+          setIsPausedMessageId(null);
+          if (isLiveCallActiveRef.current) {
+            setCallStatus('listening');
+            callStatusRef.current = 'listening';
+            setCallSubtitle('Listening... Speak naturally.');
+            callTranscriptRef.current = '';
+            startCallRecognition();
+          }
+        };
+        setIsSpeakingMessageId(msg.id);
+        window.speechSynthesis.speak(utterance);
+      }
+      return;
+    }
+
+    const cleanText = cleanMarkdownForSpeech(msg.content);
+    if (!cleanText) return;
+
+    if (isLiveCallActiveRef.current) {
+      setCallStatus('speaking');
+      callStatusRef.current = 'speaking';
+      setCallSubtitle('Preparing spoken response...');
+    }
+
+    setSpeechLoadingId(msg.id);
+    const controller = new AbortController();
+    chatAudioAbortRef.current = controller;
+
+    try {
+      const response = await apiFetch('/api/voice/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          text: cleanText,
+          voiceId: selectedVoiceId,
+          provider: selectedVoiceProvider,
+          speed: voiceSpeed,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMsg = 'Neural voice synthesis failed.';
+        try {
+          const errJson = await response.json();
+          errorMsg = errJson.error || errorMsg;
+        } catch {
+          errorMsg = `Server error ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMsg);
+      }
+
+      const blob = await response.blob();
+      if (controller.signal.aborted) return;
+
+      const fallbackTriggered = response.headers.get('X-Voice-Fallback') === 'true';
+      const providerName = response.headers.get('X-Voice-Provider') || 'Neural Voice';
+      if (fallbackTriggered) {
+        setSpeechFallbackNotice({ messageId: msg.id, providerName });
+      }
+
+      const url = URL.createObjectURL(blob);
+      chatAudioUrlRef.current = url;
+      const audio = new Audio(url);
+      chatAudioRef.current = audio;
+      audio.playbackRate = voiceSpeed;
+
+      audio.onplay = () => {
+        setSpeechLoadingId(null);
+        setIsSpeakingMessageId(msg.id);
+        setIsPausedMessageId(null);
+        if (isLiveCallActiveRef.current) {
+          setCallStatus('speaking');
+          callStatusRef.current = 'speaking';
+          setCallSubtitle('Sam’s AI is speaking...');
+        }
+      };
+
+      audio.onpause = () => {
+        if (chatAudioRef.current?.paused && !chatAudioRef.current.ended) {
+          setIsPausedMessageId(msg.id);
+        }
+      };
+
+      audio.onended = () => {
+        setIsSpeakingMessageId(null);
+        setIsPausedMessageId(null);
+        if (chatAudioUrlRef.current) {
+          URL.revokeObjectURL(chatAudioUrlRef.current);
+          chatAudioUrlRef.current = null;
+        }
+        chatAudioRef.current = null;
+        if (isLiveCallActiveRef.current) {
+          setCallStatus('listening');
+          callStatusRef.current = 'listening';
+          setCallSubtitle('Listening... Speak naturally.');
+          callTranscriptRef.current = '';
+          startCallRecognition();
+        }
+      };
+
+      audio.onerror = () => {
+        setIsSpeakingMessageId(null);
+        setIsPausedMessageId(null);
+        setSpeechLoadingId(null);
+        setSpeechError({
+          messageId: msg.id,
+          error: 'Audio playback failed in browser element.',
+          canFallbackToBrowser: typeof window !== 'undefined' && 'speechSynthesis' in window,
+        });
+        if (isLiveCallActiveRef.current) {
+          setCallStatus('listening');
+          callStatusRef.current = 'listening';
+          setCallSubtitle('Voice playback error. Listening again...');
+          callTranscriptRef.current = '';
+          startCallRecognition();
+        }
+      };
+
+      await audio.play();
+    } catch (err: any) {
+      if (controller.signal.aborted) return;
+      console.warn('[AIChatPanel] Neural voice synthesis error:', err);
+      setSpeechLoadingId(null);
+      setIsSpeakingMessageId(null);
+      setIsPausedMessageId(null);
+      setSpeechError({
+        messageId: msg.id,
+        error: err?.message || 'Neural voice unavailable.',
+        canFallbackToBrowser: typeof window !== 'undefined' && 'speechSynthesis' in window,
+      });
+      if (isLiveCallActiveRef.current) {
+        setCallStatus('listening');
+        callStatusRef.current = 'listening';
+        setCallSubtitle('Voice error. Listening for your voice...');
+        callTranscriptRef.current = '';
+        startCallRecognition();
+      }
+    }
+  };
+
+  const testVoiceAudio = () => {
+    setIsTestingVoice(true);
+    void handleSpeakMessage({
+      id: 'sams-ai-voice-test',
+      content: 'Hello! This is a preview of your NightPlanner neural voice assistant powered by ElevenLabs.',
+    }).finally(() => setIsTestingVoice(false));
   };
 
   // ── File Attachments ──
@@ -1536,6 +2143,43 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              {/* Hands-Free Live Voice Call Toggle */}
+              <button
+                type="button"
+                onClick={toggleLiveVoiceCall}
+                className="v-circle-btn"
+                style={{
+                  width: 32,
+                  height: 32,
+                  color: isLiveCallActive ? '#38bdf8' : undefined,
+                  borderColor: isLiveCallActive ? 'rgba(56, 189, 248, 0.6)' : undefined,
+                  background: isLiveCallActive ? 'rgba(56, 189, 248, 0.2)' : undefined,
+                  boxShadow: isLiveCallActive ? '0 0 12px rgba(56, 189, 248, 0.4)' : undefined,
+                }}
+                title={isLiveCallActive ? "End Live Voice Call" : "Start Live Voice Call (Hands-Free Duplex)"}
+                aria-label="Live Voice Call"
+              >
+                <Headphones size={13} />
+              </button>
+
+              {/* Voice & Speech Settings Toggle */}
+              <button
+                type="button"
+                onClick={() => setIsVoiceSettingsOpen(prev => !prev)}
+                className="v-circle-btn"
+                style={{
+                  width: 32,
+                  height: 32,
+                  color: isVoiceSettingsOpen ? '#c084fc' : undefined,
+                  borderColor: isVoiceSettingsOpen ? 'rgba(168, 85, 247, 0.4)' : undefined,
+                  background: isVoiceSettingsOpen ? 'rgba(168, 85, 247, 0.15)' : undefined,
+                }}
+                title="Voice & Speech Settings"
+                aria-label="Voice & Speech Settings"
+              >
+                <Volume2 size={13} />
+              </button>
+
               {/* Expand / Minimize Toggle */}
               <button
                 type="button"
@@ -1551,7 +2195,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
               {/* Close Button */}
               <button
                 type="button"
-                onClick={onClose}
+                onClick={() => {
+                  stopLiveVoiceCall();
+                  onClose();
+                }}
                 className="v-circle-btn"
                 style={{ width: 32, height: 32 }}
                 title="Close Sam’s AI (Esc)"
@@ -1561,6 +2208,519 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
               </button>
             </div>
           </div>
+
+          {/* Voice Settings Drawer */}
+          {isVoiceSettingsOpen && (
+            <div
+              style={{
+                padding: '12px 16px',
+                background: isDark ? 'rgba(20, 20, 35, 0.95)' : 'rgba(245, 247, 250, 0.97)',
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
+                borderBottom: '1px solid var(--v-glass-border-subtle)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#c084fc' }}>
+                  <Sliders size={13} />
+                  <span>Neural Voice Assistant Settings</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsVoiceSettingsOpen(false)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  title="Close voice settings"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+                {/* Voice Provider */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                    TTS Provider:
+                  </label>
+                  <select
+                    value={selectedVoiceProvider}
+                    onChange={e => {
+                      const newProv = e.target.value;
+                      const defaultVoice =
+                        newProv === 'elevenlabs'
+                          ? (voiceConfigData?.activeVoiceId || 'C1npRmjB19a6yNkEucvx')
+                          : newProv === 'piper'
+                          ? 'en_US-lessac-medium'
+                          : newProv === 'openai'
+                          ? 'coral'
+                          : 'en-US';
+                      saveVoiceSettings(newProv, defaultVoice, voiceSpeed);
+                    }}
+                    style={{
+                      width: '100%',
+                      background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                      border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                      color: 'var(--text-primary)',
+                      borderRadius: 6,
+                      padding: '6px 8px',
+                      fontSize: 11.5,
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="elevenlabs">ElevenLabs Neural (Key Rotation & 20+ Models)</option>
+                    <option value="piper">Piper Self-Hosted (Offline, Zero Quota)</option>
+                    <option value="free_tts">Free Neural Audio (Zero Setup Required)</option>
+                    <option value="openai">OpenAI Audio Speech (TTS-1)</option>
+                  </select>
+                </div>
+
+                {/* Voice Persona / Model */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                    Voice Persona / Model:
+                  </label>
+                  <select
+                    value={selectedVoiceId}
+                    onChange={e => saveVoiceSettings(selectedVoiceProvider, e.target.value, voiceSpeed)}
+                    style={{
+                      width: '100%',
+                      background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                      border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                      color: 'var(--text-primary)',
+                      borderRadius: 6,
+                      padding: '6px 8px',
+                      fontSize: 11.5,
+                      outline: 'none',
+                    }}
+                  >
+                    {(() => {
+                      const currentProviderInfo = voiceConfigData?.providers?.find(
+                        (p: any) => p.id === selectedVoiceProvider
+                      );
+                      const voices = currentProviderInfo?.voices || [];
+                      const hasSelectedInList = voices.some((v: any) => v.id === selectedVoiceId);
+                      return (
+                        <>
+                          {!hasSelectedInList && selectedVoiceId && (
+                            <option value={selectedVoiceId}>
+                              Custom Voice ({selectedVoiceId.slice(0, 10)}...)
+                            </option>
+                          )}
+                          {voices.map((v: any) => (
+                            <option key={v.id} value={v.id}>
+                              {v.name}
+                            </option>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </select>
+
+                  {/* Direct Custom Voice ID Input */}
+                  {selectedVoiceProvider === 'elevenlabs' && (
+                    <div style={{ marginTop: 4, display: 'flex', gap: 6 }}>
+                      <input
+                        type="text"
+                        placeholder="Custom Voice ID (e.g. C1npRmjB19a6yNkEucvx)"
+                        id="sams-custom-voice-id-input"
+                        style={{
+                          flex: 1,
+                          background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(15, 23, 42, 0.15)'),
+                          color: 'var(--text-primary)',
+                          borderRadius: 6,
+                          padding: '4px 8px',
+                          fontSize: 10.5,
+                          outline: 'none',
+                          fontFamily: 'monospace',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const inputEl = document.getElementById('sams-custom-voice-id-input') as HTMLInputElement;
+                          const val = inputEl?.value?.trim();
+                          if (val && val.length > 5) {
+                            saveVoiceSettings(selectedVoiceProvider, val, voiceSpeed);
+                            inputEl.value = '';
+                          }
+                        }}
+                        style={{
+                          background: 'rgba(168, 85, 247, 0.2)',
+                          border: '1px solid rgba(168, 85, 247, 0.4)',
+                          borderRadius: 6,
+                          padding: '3px 8px',
+                          color: '#c084fc',
+                          fontSize: 10.5,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Set Voice ID
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Speed, Auto-read, and Test Button */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', paddingTop: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                      Speed:
+                    </label>
+                    <select
+                      value={voiceSpeed}
+                      onChange={e => saveVoiceSettings(selectedVoiceProvider, selectedVoiceId, Number(e.target.value) || 1.0)}
+                      style={{
+                        background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                        border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                        color: 'var(--text-primary)',
+                        borderRadius: 6,
+                        padding: '4px 6px',
+                        fontSize: 11,
+                        outline: 'none',
+                      }}
+                    >
+                      <option value={0.8}>0.8x</option>
+                      <option value={1.0}>1.0x</option>
+                      <option value={1.2}>1.2x</option>
+                      <option value={1.5}>1.5x</option>
+                    </select>
+                  </div>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)' }}>
+                    <input
+                      type="checkbox"
+                      checked={autoSpeakResponses}
+                      onChange={e => {
+                        setAutoSpeakResponses(e.target.checked);
+                        try {
+                          localStorage.setItem('np_voice_auto_speak', String(e.target.checked));
+                        } catch {}
+                      }}
+                      style={{ accentColor: '#a855f7' }}
+                    />
+                    <span>Auto-speak responses</span>
+                  </label>
+                </div>
+
+                {/* Test Audio Button */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {isSpeakingMessageId === 'sams-ai-voice-test' || isPausedMessageId === 'sams-ai-voice-test' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (chatAudioRef.current) {
+                          if (chatAudioRef.current.paused) {
+                            void chatAudioRef.current.play();
+                            setIsPausedMessageId(null);
+                          } else {
+                            chatAudioRef.current.pause();
+                            setIsPausedMessageId('sams-ai-voice-test');
+                          }
+                        }
+                      }}
+                      style={{
+                        background: 'rgba(168, 85, 247, 0.2)',
+                        border: '1px solid rgba(168, 85, 247, 0.4)',
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        color: '#c084fc',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      {isPausedMessageId === 'sams-ai-voice-test' ? <Play size={12} /> : <Pause size={12} />}
+                      <span>{isPausedMessageId === 'sams-ai-voice-test' ? 'Resume' : 'Pause'}</span>
+                    </button>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={testVoiceAudio}
+                    disabled={speechLoadingId === 'sams-ai-voice-test' || isTestingVoice}
+                    style={{
+                      background: isTestingVoice ? 'rgba(168, 85, 247, 0.3)' : 'linear-gradient(135deg, #a855f7, #6366f1)',
+                      border: 'none',
+                      borderRadius: 6,
+                      padding: '4px 10px',
+                      color: '#fff',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      cursor: isTestingVoice ? 'default' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    {speechLoadingId === 'sams-ai-voice-test' || isTestingVoice ? (
+                      <>
+                        <LoaderCircle size={12} className="animate-spin" />
+                        <span>Generating Audio...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play size={12} />
+                        <span>Test Voice Audio</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Provider Setup & Key Pool Status Badge */}
+              {(() => {
+                const currentProv = voiceConfigData?.providers?.find((p: any) => p.id === selectedVoiceProvider);
+                const isConfigured = currentProv?.isConfigured;
+                return (
+                  <div
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      background: isConfigured ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                      border: '1px solid ' + (isConfigured ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'),
+                      fontSize: 11,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 3,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <strong style={{ color: isConfigured ? '#34d399' : '#fbbf24' }}>
+                        {isConfigured ? `✓ ${currentProv?.name || 'Provider'} Active` : `⚠️ ${currentProv?.name || 'Provider'} Not Configured`}
+                      </strong>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                        Server-Side Credential
+                      </span>
+                    </div>
+                    <span style={{ color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                      {currentProv?.freeTierNote}
+                    </span>
+                    {currentProv?.setupDocs && !isConfigured && (
+                      <span style={{ color: '#fbbf24', fontSize: 10.5, marginTop: 2 }}>
+                        {currentProv.setupDocs}
+                      </span>
+                    )}
+
+                    {/* ElevenLabs Key Rotation Pool Telemetry */}
+                    {currentProv?.id === 'elevenlabs' && currentProv?.keyPool && (
+                      <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 10.5 }}>
+                            Key Rotation Pool ({currentProv.keyPool.activeKeys}/{currentProv.keyPool.totalKeys} Active)
+                          </span>
+                          <span style={{ fontSize: 10, color: currentProv.keyPool.exhaustedKeys > 0 ? '#f87171' : '#34d399' }}>
+                            {currentProv.keyPool.exhaustedKeys > 0
+                              ? `${currentProv.keyPool.exhaustedKeys} in cooldown`
+                              : 'All keys available'}
+                          </span>
+                        </div>
+                        {Array.isArray(currentProv.keyPool.keys) && currentProv.keyPool.keys.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {currentProv.keyPool.keys.map((k: any) => {
+                              const isKeyActive = k.status === 'active';
+                              const statusColor = isKeyActive
+                                ? '#34d399'
+                                : k.status === 'rate_limited'
+                                ? '#fbbf24'
+                                : '#f87171';
+                              return (
+                                <div
+                                  key={k.index}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    background: 'rgba(0, 0, 0, 0.15)',
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    fontSize: 10,
+                                  }}
+                                >
+                                  <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>
+                                    Key #{k.index} ({k.maskedKey})
+                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {k.characterCount > 0 && (
+                                      <span style={{ color: 'var(--text-muted)' }}>
+                                        {k.characterCount.toLocaleString()} chars
+                                      </span>
+                                    )}
+                                    <span style={{ color: statusColor, fontWeight: 500 }}>
+                                      {isKeyActive
+                                        ? 'Active'
+                                        : k.status === 'quota_exceeded'
+                                        ? `Quota Exhausted${k.cooldownRemainingSeconds ? ` (${k.cooldownRemainingSeconds}s)` : ''}`
+                                        : k.status === 'rate_limited'
+                                        ? `Rate Limited${k.cooldownRemainingSeconds ? ` (${k.cooldownRemainingSeconds}s)` : ''}`
+                                        : k.status === 'invalid'
+                                        ? (k.lastError ? `⚠️ ${k.lastError}` : 'Invalid (401)')
+                                        : 'Failed'}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* ── Live Hands-Free Duplex Voice Call Overlay ── */}
+          {isLiveCallActive && (
+            <div
+              style={{
+                padding: '16px 20px',
+                background: isDark
+                  ? 'linear-gradient(180deg, rgba(20, 15, 38, 0.96), rgba(12, 10, 25, 0.98))'
+                  : 'linear-gradient(180deg, rgba(240, 245, 255, 0.96), rgba(230, 238, 252, 0.98))',
+                borderBottom: '1px solid ' + (isDark ? 'rgba(56, 189, 248, 0.3)' : 'rgba(56, 189, 248, 0.4)'),
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+                position: 'relative',
+              }}
+            >
+              {/* Animated Cosmic Voice Orb */}
+              <div
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: '50%',
+                  background:
+                    callStatus === 'speaking'
+                      ? 'radial-gradient(circle, #38bdf8 0%, #6366f1 70%, #a855f7 100%)'
+                      : isCallMuted
+                      ? 'radial-gradient(circle, #64748b 0%, #334155 100%)'
+                      : callStatus === 'thinking'
+                      ? 'radial-gradient(circle, #f59e0b 0%, #a855f7 70%, #6366f1 100%)'
+                      : 'radial-gradient(circle, #38bdf8 0%, #a855f7 60%, #4f46e5 100%)',
+                  boxShadow: isCallMuted
+                    ? '0 0 10px rgba(100, 116, 139, 0.3)'
+                    : callStatus === 'speaking'
+                    ? '0 0 35px rgba(56, 189, 248, 0.8), 0 0 50px rgba(168, 85, 247, 0.5)'
+                    : '0 0 30px rgba(168, 85, 247, 0.8), 0 0 45px rgba(56, 189, 248, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  animation: isCallMuted ? 'none' : 'pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                  transition: 'all 0.3s ease',
+                }}
+              >
+                <Radio style={{ width: 28, height: 28, color: '#ffffff' }} />
+              </div>
+
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: isDark ? '#f1f5f9' : '#0f172a' }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: isCallMuted ? '#64748b' : '#22c55e', display: 'inline-block' }} />
+                  <span>
+                    {isCallMuted
+                      ? 'Microphone Muted'
+                      : callStatus === 'speaking'
+                      ? 'Sam’s AI is speaking...'
+                      : callStatus === 'thinking'
+                      ? 'Thinking...'
+                      : 'Listening... (Speak naturally, silence auto-submits)'}
+                  </span>
+                </div>
+                <div style={{ fontSize: 11.5, color: isDark ? '#cbd5e1' : '#475569', marginTop: 4, maxWidth: 420, fontStyle: 'italic', wordBreak: 'break-word' }}>
+                  {callSubtitle || 'Listening...'}
+                </div>
+              </div>
+
+              {/* Voice Mode Action Controls */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextMuted = !isCallMuted;
+                    setIsCallMuted(nextMuted);
+                    isCallMutedRef.current = nextMuted;
+                    if (nextMuted) {
+                      try { callRecognitionRef.current?.stop(); } catch {}
+                      setCallSubtitle('Microphone muted. Tap Unmute to resume.');
+                    } else {
+                      setCallSubtitle('Listening... Speak naturally.');
+                      startCallRecognition();
+                    }
+                  }}
+                  className="v-pill-btn"
+                  style={{
+                    background: isCallMuted ? 'rgba(239, 68, 68, 0.25)' : 'var(--v-glass-bg-subtle)',
+                    borderColor: isCallMuted ? '#ef4444' : 'var(--v-glass-border-subtle)',
+                    color: isCallMuted ? '#f87171' : 'var(--text-primary)',
+                    fontSize: 11.5,
+                    padding: '5px 12px',
+                    gap: 5,
+                  }}
+                >
+                  {isCallMuted ? <MicOff size={13} /> : <Mic size={13} />}
+                  <span>{isCallMuted ? 'Unmute' : 'Mute'}</span>
+                </button>
+
+                {/* Interrupt Button */}
+                <button
+                  type="button"
+                  onClick={interruptCall}
+                  className="v-pill-btn"
+                  style={{
+                    background: 'var(--v-glass-bg-subtle)',
+                    borderColor: 'var(--v-glass-border-subtle)',
+                    color: 'var(--text-primary)',
+                    fontSize: 11.5,
+                    padding: '5px 12px',
+                    gap: 5,
+                  }}
+                  title="Interrupt current speech playback and listen immediately"
+                >
+                  <Square size={12} />
+                  <span>Interrupt</span>
+                </button>
+
+                {/* End Call Button */}
+                <button
+                  type="button"
+                  onClick={stopLiveVoiceCall}
+                  className="v-pill-btn"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.2)',
+                    borderColor: 'rgba(239, 68, 68, 0.5)',
+                    color: '#f87171',
+                    fontSize: 11.5,
+                    padding: '5px 12px',
+                    gap: 5,
+                  }}
+                  title="Exit hands-free live call"
+                >
+                  <X size={13} />
+                  <span>End Call</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ── 2. Quick Action Chips ── */}
           <div
@@ -1831,110 +2991,333 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
 
                 {/* Assistant Message Actions Toolbar */}
                 {msg.role === 'assistant' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 4 }}>
-                    <button
-                      type="button"
-                      onClick={() => handleSpeakMessage(msg)}
-                      title={isSpeakingMessageId === msg.id ? "Stop voice reading" : "Read aloud with voice"}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: isSpeakingMessageId === msg.id ? '#c084fc' : '#94a3b8',
-                        fontSize: 11,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        padding: '2px 4px',
-                      }}
-                    >
-                      {isSpeakingMessageId === msg.id ? (
-                        <>
-                          <VolumeX size={12} />
-                          <span>Stop</span>
-                        </>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      {/* Speech / Audio Controls */}
+                      {speechLoadingId === msg.id ? (
+                        <span
+                          style={{
+                            color: '#a855f7',
+                            fontSize: 11,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '2px 4px',
+                          }}
+                        >
+                          <LoaderCircle size={12} className="animate-spin" />
+                          <span>Synthesizing audio...</span>
+                        </span>
+                      ) : isSpeakingMessageId === msg.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSpeakMessage(msg)}
+                            title="Stop voice playback"
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.15)',
+                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              borderRadius: 4,
+                              color: '#f87171',
+                              fontSize: 11,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '2px 6px',
+                            }}
+                          >
+                            <VolumeX size={12} />
+                            <span>Stop</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (chatAudioRef.current) {
+                                chatAudioRef.current.pause();
+                                setIsPausedMessageId(msg.id);
+                              }
+                            }}
+                            title="Pause voice playback"
+                            style={{
+                              background: 'rgba(168, 85, 247, 0.15)',
+                              border: '1px solid rgba(168, 85, 247, 0.3)',
+                              borderRadius: 4,
+                              color: '#c084fc',
+                              fontSize: 11,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '2px 6px',
+                            }}
+                          >
+                            <Pause size={12} />
+                            <span>Pause</span>
+                          </button>
+                        </div>
+                      ) : isPausedMessageId === msg.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (chatAudioRef.current) {
+                                void chatAudioRef.current.play();
+                                setIsPausedMessageId(null);
+                              }
+                            }}
+                            title="Resume voice playback"
+                            style={{
+                              background: 'rgba(168, 85, 247, 0.15)',
+                              border: '1px solid rgba(168, 85, 247, 0.3)',
+                              borderRadius: 4,
+                              color: '#c084fc',
+                              fontSize: 11,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '2px 6px',
+                            }}
+                          >
+                            <Play size={12} />
+                            <span>Resume</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSpeakMessage(msg)}
+                            title="Stop voice playback"
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.15)',
+                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              borderRadius: 4,
+                              color: '#f87171',
+                              fontSize: 11,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '2px 6px',
+                            }}
+                          >
+                            <VolumeX size={12} />
+                            <span>Stop</span>
+                          </button>
+                        </div>
                       ) : (
-                        <>
+                        <button
+                          type="button"
+                          onClick={() => handleSpeakMessage(msg)}
+                          title="Read aloud with neural voice"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#94a3b8',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '2px 4px',
+                          }}
+                        >
                           <Volume2 size={12} />
                           <span>Listen</span>
+                        </button>
+                      )}
+
+                      {/* Copy Message Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                            navigator.clipboard.writeText(msg.content);
+                          }
+                        }}
+                        title="Copy message text"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#94a3b8',
+                          fontSize: 11,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '2px 4px',
+                        }}
+                      >
+                        <span>Copy</span>
+                      </button>
+
+                      {msg.content.startsWith('⚠️') && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const lastUser = [...messages].reverse().find(m => m.role === 'user');
+                              if (lastUser) {
+                                setMessages(prev => prev.filter(m => m.id !== msg.id && m.id !== lastUser.id));
+                                void handleSendMessage(lastUser.content);
+                              }
+                            }}
+                            title="Retry this request"
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.15)',
+                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                              color: '#fca5a5',
+                              fontSize: 11,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                            }}
+                          >
+                            <RefreshCw size={11} />
+                            <span>Retry</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const lastUser = [...messages].reverse().find(m => m.role === 'user');
+                              if (lastUser) {
+                                setInput(lastUser.content);
+                                setMessages(prev => prev.filter(m => m.id !== msg.id && m.id !== lastUser.id));
+                              }
+                            }}
+                            title="Edit original prompt"
+                            style={{
+                              background: 'var(--v-glass-bg-subtle)',
+                              border: '1px solid var(--v-glass-border-subtle)',
+                              color: 'var(--text-secondary)',
+                              fontSize: 11,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                            }}
+                          >
+                            <Edit2 size={11} />
+                            <span>Edit prompt</span>
+                          </button>
                         </>
                       )}
-                    </button>
+                    </div>
 
-                    {msg.content.startsWith('⚠️') && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const lastUser = [...messages].reverse().find(m => m.role === 'user');
-                            if (lastUser) {
-                              setMessages(prev => prev.filter(m => m.id !== msg.id && m.id !== lastUser.id));
-                              void handleSendMessage(lastUser.content);
-                            }
-                          }}
-                          title="Retry this request"
-                          style={{
-                            background: 'rgba(239, 68, 68, 0.15)',
-                            border: '1px solid rgba(239, 68, 68, 0.4)',
-                            color: '#fca5a5',
-                            fontSize: 11,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            padding: '2px 8px',
-                            borderRadius: 6,
-                          }}
-                        >
-                          <RefreshCw size={11} />
-                          <span>Retry</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const lastUser = [...messages].reverse().find(m => m.role === 'user');
-                            if (lastUser) {
-                              setInput(lastUser.content);
-                              setMessages(prev => prev.filter(m => m.id !== msg.id && m.id !== lastUser.id));
-                            }
-                          }}
-                          title="Edit original prompt"
-                          style={{
-                            background: 'var(--v-glass-bg-subtle)',
-                            border: '1px solid var(--v-glass-border-subtle)',
-                            color: 'var(--text-secondary)',
-                            fontSize: 11,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            padding: '2px 8px',
-                            borderRadius: 6,
-                          }}
-                        >
-                          <Edit2 size={11} />
-                          <span>Edit prompt</span>
-                        </button>
-                      </>
+                    {/* Speech Fallback Notice */}
+                    {speechFallbackNotice?.messageId === msg.id && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: '#eab308',
+                          background: 'rgba(234, 179, 8, 0.1)',
+                          border: '1px solid rgba(234, 179, 8, 0.3)',
+                          borderRadius: 6,
+                          padding: '4px 8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <AlertTriangle size={12} />
+                        <span>Primary provider unavailable; synthesized using failover {speechFallbackNotice.providerName}.</span>
+                      </div>
+                    )}
+
+                    {/* Speech Error Banner with Retry & Browser Fallback */}
+                    {speechError?.messageId === msg.id && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: '#f87171',
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          borderRadius: 6,
+                          padding: '6px 8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 4,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <AlertTriangle size={12} />
+                          <span>{speechError.error}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSpeakMessage(msg)}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.2)',
+                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                              borderRadius: 4,
+                              color: '#fca5a5',
+                              padding: '2px 6px',
+                              fontSize: 10.5,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Retry Neural Voice
+                          </button>
+                          {speechError.canFallbackToBrowser && (
+                            <button
+                              type="button"
+                              onClick={() => handleSpeakMessage(msg, true)}
+                              style={{
+                                background: 'rgba(255, 255, 255, 0.1)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                borderRadius: 4,
+                                color: 'var(--text-secondary)',
+                                padding: '2px 6px',
+                                fontSize: 10.5,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Use Browser Voice
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}
               </div>
             ))}
 
-            {loading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', color: 'var(--text-muted)', fontSize: 12 }}>
-                <div
-                  style={{
-                    width: 14,
-                    height: 14,
-                    borderRadius: '50%',
-                    border: '2px solid var(--accent-color)',
-                    borderTopColor: 'transparent',
-                    animation: 'spin 0.8s linear infinite',
-                  }}
-                />
-                <span className="font-system">Sam’s AI is analyzing your workspace data…</span>
+            {loading && lifecycleState !== 'streaming' && (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '8px 14px',
+                  borderRadius: 16,
+                  background: 'var(--v-glass-bg-subtle)',
+                  border: '1.5px solid var(--v-glass-border)',
+                  backdropFilter: 'blur(16px)',
+                  WebkitBackdropFilter: 'blur(16px)',
+                  alignSelf: 'flex-start',
+                  color: 'var(--text-primary)',
+                  fontSize: 12,
+                  marginTop: 4,
+                  marginBottom: 4,
+                  boxShadow: 'var(--v-shadow-glass)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-color, #a855f7)' }} />
+                  <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#818cf8', animationDelay: '0.2s' }} />
+                  <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8', animationDelay: '0.4s' }} />
+                </div>
+                <span style={{ fontStyle: 'normal', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                  {activityLabel || 'Thinking...'}
+                </span>
               </div>
             )}
 

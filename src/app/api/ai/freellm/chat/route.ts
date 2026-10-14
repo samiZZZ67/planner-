@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendChatCompletionWithFallback, ChatMessage } from '@/lib/server/freellm/gateway';
+import {
+  sendChatCompletionWithFallback,
+  streamChatCompletionWithFallback,
+  ChatMessage,
+} from '@/lib/server/freellm/gateway';
 import {
   isImageGenerationRequest,
   isVideoGenerationRequest,
@@ -41,7 +45,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { messages, model, temperature, mode } = body;
+    const { messages, model, temperature, mode, stream } = body;
+    const isStreamRequested = stream === true || req.headers.get('accept')?.includes('text/event-stream');
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -287,6 +292,28 @@ export async function POST(req: NextRequest) {
       };
       }),
     ];
+
+    if (isStreamRequested) {
+      const streamResult = await streamChatCompletionWithFallback(
+        {
+          messages: formattedMessages,
+          model: selectedModel,
+          temperature: typeof temperature === 'number' ? temperature : 0.7,
+        },
+        req.signal
+      );
+
+      return new Response(streamResult.stream, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+          ...corsHeaders(),
+        },
+      });
+    }
 
     const result = await sendChatCompletionWithFallback({
       messages: formattedMessages,

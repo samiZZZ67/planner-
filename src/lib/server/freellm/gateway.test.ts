@@ -7,6 +7,7 @@ import {
   sendChatCompletion,
   sendChatCompletionWithFallback,
   openChatCompletionStream,
+  streamChatCompletionWithFallback,
   POPULAR_FREE_MODELS,
 } from './gateway';
 
@@ -236,5 +237,122 @@ describe('FreeLLMAPI Gateway Client Suite', () => {
       expect(status.models).toContain('gemini-2.5-flash');
     });
   });
+
+  describe('6. Resilient Streaming & SSE Transport', () => {
+    it('should stream live chunks from FreeLLM gateway when online', async () => {
+      const priorUrl = process.env.FREE_LLM_API_URL;
+      const priorKey = process.env.FREE_LLM_API_KEY;
+      process.env.FREE_LLM_API_URL = 'https://gateway.example/v1';
+      process.env.FREE_LLM_API_KEY = 'test-stream-key';
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(
+          'data: {"choices":[{"delta":{"content":"Live stream token"转}}]}\n\ndata: [DONE]\n\n',
+          { headers: { 'content-type': 'text/event-stream' } }
+        )
+      );
+
+      try {
+        const result = await streamChatCompletionWithFallback({
+          model: 'auto',
+          messages: [{ role: 'user', content: 'Ping stream' }],
+        });
+
+        expect(result.providerUsed).toBe('FreeLLMAPI Gateway');
+        expect(result.stream).toBeDefined();
+
+        const text = await new Response(result.stream).text();
+        expect(text).toContain('Live stream token');
+      } finally {
+        if (priorUrl === undefined) delete process.env.FREE_LLM_API_URL;
+        else process.env.FREE_LLM_API_URL = priorUrl;
+        if (priorKey === undefined) delete process.env.FREE_LLM_API_KEY;
+        else process.env.FREE_LLM_API_KEY = priorKey;
+      }
+    });
+
+    it('should fall back to Groq stream when gateway is unavailable', async () => {
+      const priorUrl = process.env.FREE_LLM_API_URL;
+      const priorGroqKey = process.env.GROQ_API_KEY;
+      process.env.FREE_LLM_API_URL = 'http://127.0.0.1:59999';
+      process.env.GROQ_API_KEY = 'gsk_test_mock_groq_key_123';
+
+      // 1. Gateway attempt fails (network error)
+      // 2. Groq stream succeeds
+      const ssePayload = 'data: {"choices":[{"delta":{"content":"Groq stream fallback token"}}]}\n\ndata: [DONE]\n\n';
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(ssePayload));
+          controller.close();
+        },
+      });
+
+      vi.spyOn(globalThis, 'fetch')
+        .mockRejectedValueOnce(new Error('Gateway connection refused'))
+        .mockResolvedValueOnce(
+          new Response(stream, {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          })
+        );
+
+      try {
+        const result = await streamChatCompletionWithFallback({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: 'Ping Groq fallback' }],
+        });
+
+        expect(result.providerUsed).toBe('Groq Cloud (Direct Stream)');
+        const text = await new Response(result.stream).text();
+        expect(text).toContain('Groq stream fallback token');
+      } finally {
+        if (priorUrl === undefined) delete process.env.FREE_LLM_API_URL;
+        else process.env.FREE_LLM_API_URL = priorUrl;
+        if (priorGroqKey === undefined) delete process.env.GROQ_API_KEY;
+        else process.env.GROQ_API_KEY = priorGroqKey;
+      }
+    });
+
+    it('should support client cancellation via AbortSignal', async () => {
+      const priorUrl = process.env.FREE_LLM_API_URL;
+      const priorKey = process.env.FREE_LLM_API_KEY;
+      process.env.FREE_LLM_API_URL = 'https://gateway.example/v1';
+      process.env.FREE_LLM_API_KEY = 'unit-test-key';
+
+      const abortController = new AbortController();
+
+      vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async (_url, init: any) => {
+        expect(init?.signal).toBeDefined();
+        // Return an infinite stream that honors the signal
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"first chunk"}}]}\n\n'));
+          },
+        });
+        return new Response(stream, { headers: { 'content-type': 'text/event-stream' } });
+      });
+
+      try {
+        const result = await streamChatCompletionWithFallback(
+          { model: 'auto', messages: [{ role: 'user', content: 'Hello' }] },
+          abortController.signal
+        );
+
+        const reader = result.stream.getReader();
+        const first = await reader.read();
+        expect(new TextDecoder().decode(first.value)).toContain('first chunk');
+
+        // Cancel signal
+        abortController.abort();
+        await reader.cancel('User clicked Stop');
+      } finally {
+        if (priorUrl === undefined) delete process.env.FREE_LLM_API_URL;
+        else process.env.FREE_LLM_API_URL = priorUrl;
+        if (priorKey === undefined) delete process.env.FREE_LLM_API_KEY;
+        else process.env.FREE_LLM_API_KEY = priorKey;
+      }
+    });
+  });
 });
+
 

@@ -21,6 +21,10 @@ import {
   Image as ImageIcon,
   Video as VideoIcon,
   Play,
+  Pause,
+  LoaderCircle,
+  AlertTriangle,
+  Sliders,
   Square,
   Download,
   Eye,
@@ -49,6 +53,10 @@ import {
   VERIFIED_FREE_MODELS,
   mergeDiscoveredModels,
   ModelCapability,
+  isImageGenModel,
+  isVideoGenModel,
+  isImageGenerationRequest,
+  isVideoGenerationRequest,
 } from '@/lib/freellm/catalog';
 
 export interface AttachmentItem {
@@ -230,6 +238,10 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   const [messages, setMessages] = useState<FreeLLMMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [lifecycleState, setLifecycleState] = useState<
+    'idle' | 'submitting' | 'connecting' | 'thinking' | 'using_tool' | 'streaming' | 'completed' | 'failed' | 'cancelled'
+  >('idle');
+  const [activityLabel, setActivityLabel] = useState<string>('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const activeRequestRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -244,6 +256,34 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   const [isDictating, setIsDictating] = useState(false);
   const [dictationInterim, setDictationInterim] = useState('');
   const [isSpeakingMessageId, setIsSpeakingMessageId] = useState<string | null>(null);
+  const [speechState, setSpeechState] = useState<{
+    status: 'idle' | 'loading' | 'playing' | 'paused' | 'error';
+    messageId: string | null;
+    providerName?: string;
+    voiceName?: string;
+    errorMessage?: string;
+    canFallbackToBrowser?: boolean;
+    fallbackTriggered?: boolean;
+    fallbackReason?: string;
+    keyUsedMasked?: string;
+  }>({ status: 'idle', messageId: null });
+  const [selectedVoiceProvider, setSelectedVoiceProvider] = useState<string>('elevenlabs');
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>('21m00Tcm4TlvDq8ikWAM');
+  const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
+  const [voiceConfigData, setVoiceConfigData] = useState<any>(null);
+  const [isTestingVoice, setIsTestingVoice] = useState(false);
+  const [settingsActiveTab, setSettingsActiveTab] = useState<'gateway' | 'voice'>('gateway');
+
+  const saveVoiceSettings = useCallback((provider: string, voiceId: string, speed: number) => {
+    setSelectedVoiceProvider(provider);
+    setSelectedVoiceId(voiceId);
+    setVoiceSpeed(speed);
+    try {
+      localStorage.setItem('np_voice_provider', provider);
+      localStorage.setItem('np_voice_id', voiceId);
+      localStorage.setItem('np_voice_speed', String(speed));
+    } catch {}
+  }, []);
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -437,6 +477,37 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [clampPosition]);
+
+  // ── Load saved voice configuration on mount ──
+  useEffect(() => {
+    try {
+      const savedProvider = localStorage.getItem('np_voice_provider');
+      if (savedProvider) setSelectedVoiceProvider(savedProvider);
+      const savedVoice = localStorage.getItem('np_voice_id');
+      if (savedVoice) setSelectedVoiceId(savedVoice);
+      const savedSpeed = localStorage.getItem('np_voice_speed');
+      if (savedSpeed) setVoiceSpeed(Number(savedSpeed) || 1.0);
+    } catch {}
+
+    apiFetch('/api/voice/config')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.ok) {
+          setVoiceConfigData(data);
+          try {
+            const savedProv = localStorage.getItem('np_voice_provider');
+            if (!savedProv && data.activeProvider) {
+              setSelectedVoiceProvider(data.activeProvider);
+            }
+            const savedV = localStorage.getItem('np_voice_id');
+            if (!savedV && data.activeVoiceId) {
+              setSelectedVoiceId(data.activeVoiceId);
+            }
+          } catch {}
+        }
+      })
+      .catch(() => null);
+  }, []);
 
   // ── Check Gateway Status (Render Backend) ──
   const applyStatusPayload = useCallback((data: any) => {
@@ -903,7 +974,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                 setVoiceModeStatus('thinking');
                 setVoiceSubtitle('Thinking about what you said...');
                 voiceSubmitRef.current(spokenPrompt);
-              }, 900);
+              }, 1500);
             } else {
               setInput(prev => (prev ? `${prev} ${final}` : final).trim());
             }
@@ -973,11 +1044,53 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         }
       };
 
+      // Hands-free VAD silence detection on audio stream
+      if (voiceModeActiveRef.current && (typeof AudioContext !== 'undefined' || typeof (window as any).webkitAudioContext !== 'undefined')) {
+        try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          const audioCtx = new AudioContextClass();
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 512;
+          source.connect(analyser);
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          let silenceStartTime: number | null = null;
+          let speechDetected = false;
+          const vadInterval = setInterval(() => {
+            if (recorder.state !== 'recording') {
+              clearInterval(vadInterval);
+              try { audioCtx.close(); } catch {}
+              return;
+            }
+            analyser.getByteFrequencyData(dataArray);
+            const sum = dataArray.reduce((acc, val) => acc + val, 0);
+            const avg = sum / dataArray.length;
+
+            if (avg > 15) {
+              speechDetected = true;
+              silenceStartTime = null;
+            } else if (speechDetected) {
+              if (!silenceStartTime) silenceStartTime = Date.now();
+              else if (Date.now() - silenceStartTime > 1600) {
+                clearInterval(vadInterval);
+                try { audioCtx.close(); } catch {}
+                if (recorder.state === 'recording') {
+                  recorder.stop();
+                }
+              }
+            }
+          }, 150);
+        } catch (e) {
+          console.warn('[VAD] AudioContext error, falling back to manual recording:', e);
+        }
+      }
+
       mediaRecorderRef.current = recorder;
       recorder.start();
       setIsDictating(true);
       if (voiceModeActiveRef.current) {
-        setVoiceSubtitle('Speak, then tap Mute to transcribe and send your turn.');
+        setVoiceSubtitle('Listening... Speak naturally, silence auto-submits.');
       }
     } catch (err) {
       alert('Microphone permission was denied or is unavailable.');
@@ -1012,20 +1125,22 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     if ((!isVoiceModeActive || isMicMuted) && isDictating) stopDictation();
   }, [isVoiceModeActive, isMicMuted, voiceModeStatus, isDictating]);
 
-  // ── Text-to-Speech Response Playback ──
+  // ── Text-to-Speech Response Playback (Neural TTS) ──
   const cleanMarkdownForSpeech = (text: string): string => {
     return text
-      .replace(/```[\s\S]*?```/g, ' [Code snippet skipped] ')
+      .replace(/```[\s\S]*?```/g, ' [Code snippet omitted] ')
       .replace(/`([^`]+)`/g, '$1')
       .replace(/\*\*([^*]+)\*\*/g, '$1')
       .replace(/\*([^*]+)\*/g, '$1')
-      .replace(/#+\s*/g, '')
+      .replace(/^#{1,6}\s+/gm, '')
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
       .replace(/https?:\/\/\S+/g, '')
+      .replace(/^\s*[-*+]\s+/gm, '')
+      .replace(/^\s*\d+\.\s+/gm, '')
       .trim();
   };
 
-  const stopSpeechPlayback = () => {
+  const stopSpeechPlayback = useCallback(() => {
     speechGenerationRef.current += 1;
     speechQueueRef.current = [];
     speechAbortRef.current?.abort();
@@ -1040,116 +1155,214 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     speechObjectUrlRef.current = null;
     if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
     setIsSpeakingMessageId(null);
-  };
+    setSpeechState({ status: 'idle', messageId: null });
+  }, []);
 
-  const playSpeechChunk = async (text: string, messageId: string | null, generation: number) => {
-    if (typeof window === 'undefined' || generation !== speechGenerationRef.current) return;
-    const controller = new AbortController();
-    speechAbortRef.current = controller;
-    let neuralAudio: Blob | null = null;
-    try {
-      const response = await fetch('/api/ai/freellm/speech', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        signal: controller.signal,
-        body: JSON.stringify({ text }),
-      });
-      if (!response.ok) throw new Error(`Neural speech returned ${response.status}`);
-      neuralAudio = await response.blob();
-    } catch (error) {
-      if (controller.signal.aborted || generation !== speechGenerationRef.current) return;
-      console.info('[Voice] Neural speech unavailable; using the browser voice fallback.', error);
+  const pauseSpeechPlayback = useCallback(() => {
+    if (speechAudioRef.current && !speechAudioRef.current.paused) {
+      speechAudioRef.current.pause();
+      setSpeechState(prev => ({ ...prev, status: 'paused' }));
     }
-    if (generation !== speechGenerationRef.current) return;
-    speechAbortRef.current = null;
+  }, []);
 
-    if (neuralAudio?.size) {
-      const url = URL.createObjectURL(neuralAudio);
-      speechObjectUrlRef.current = url;
-      const audio = new Audio(url);
-      speechAudioRef.current = audio;
+  const resumeSpeechPlayback = useCallback(() => {
+    if (speechAudioRef.current && speechAudioRef.current.paused) {
+      speechAudioRef.current.play().then(() => {
+        setSpeechState(prev => ({ ...prev, status: 'playing' }));
+      }).catch(err => {
+        console.warn('[Voice] Audio resume failed:', err);
+      });
+    }
+  }, []);
+
+  const playSpeech = useCallback(
+    async (text: string, messageId: string | null = null, forceBrowser = false) => {
+      // Toggle pause/resume if clicking the same currently active message
+      if (speechState.messageId === messageId && speechState.status !== 'idle' && speechState.status !== 'error') {
+        if (speechState.status === 'playing') {
+          pauseSpeechPlayback();
+          return;
+        } else if (speechState.status === 'paused') {
+          resumeSpeechPlayback();
+          return;
+        }
+      }
+
+      stopSpeechPlayback();
+
+      const cleanText = cleanMarkdownForSpeech(text);
+      if (!cleanText) return;
+
+      const generation = speechGenerationRef.current;
+
+      // ── Explicit Browser Voice Fallback (Only if explicitly clicked by user) ──
+      if (forceBrowser) {
+        if (typeof window === 'undefined' || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') {
+          setSpeechState({
+            status: 'error',
+            messageId,
+            errorMessage: 'Browser system speech synthesis is not supported in this browser.',
+          });
+          return;
+        }
+
+        setSpeechState({
+          status: 'playing',
+          messageId,
+          providerName: 'Browser System Voice (Explicit Fallback)',
+          voiceName: 'System Voice',
+        });
+        setIsSpeakingMessageId(messageId);
+
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.rate = voiceSpeed;
+        utterance.onend = () => {
+          if (generation !== speechGenerationRef.current) return;
+          stopSpeechPlayback();
+        };
+        utterance.onerror = () => {
+          if (generation !== speechGenerationRef.current) return;
+          stopSpeechPlayback();
+        };
+        window.speechSynthesis.speak(utterance);
+        return;
+      }
+
+      // ── Neural Voice Synthesis ──
+      setSpeechState({
+        status: 'loading',
+        messageId,
+      });
       setIsSpeakingMessageId(messageId);
+
       if (isVoiceModeActive) {
         setVoiceModeStatus('speaking');
-        setVoiceSubtitle('Speaking with an AI generated voice...');
+        setVoiceSubtitle('Synthesizing neural voice...');
       }
-      let playbackStarted = false;
-      await new Promise<void>(resolve => {
-        let settled = false;
-        const finish = () => {
-          if (settled) return;
-          settled = true;
-          audio.onended = null;
-          audio.onerror = null;
-          if (speechAudioRef.current === audio) speechAudioRef.current = null;
-          if (speechObjectUrlRef.current === url) {
-            URL.revokeObjectURL(url);
-            speechObjectUrlRef.current = null;
+
+      const controller = new AbortController();
+      speechAbortRef.current = controller;
+
+      try {
+        const response = await apiFetch('/api/voice/synthesize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            text: cleanText,
+            voiceId: selectedVoiceId,
+            provider: selectedVoiceProvider,
+            speed: voiceSpeed,
+          }),
+        });
+
+        if (!response.ok) {
+          let errorMsg = 'Neural voice synthesis failed.';
+          try {
+            const errJson = await response.json();
+            errorMsg = errJson.error || errorMsg;
+          } catch {
+            errorMsg = `Server error ${response.status}: ${response.statusText}`;
           }
-          if (speechPlaybackStopRef.current === finish) speechPlaybackStopRef.current = null;
-          resolve();
-        };
-        speechPlaybackStopRef.current = finish;
-        audio.onended = finish;
-        audio.onerror = finish;
-        audio.play().then(() => { playbackStarted = true; }).catch(finish);
-      });
-      if (generation !== speechGenerationRef.current) return;
-      if (playbackStarted) return;
-    }
-
-    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return;
-    await new Promise<void>(resolve => {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1;
-      utterance.pitch = 1;
-      utterance.onstart = () => {
-        if (generation !== speechGenerationRef.current) return;
-        setIsSpeakingMessageId(messageId);
-        if (isVoiceModeActive) {
-          setVoiceModeStatus('speaking');
-          setVoiceSubtitle('Speaking with a synthetic browser voice...');
+          throw new Error(errorMsg);
         }
-      };
-      utterance.onend = () => resolve();
-      utterance.onerror = () => resolve();
-      window.speechSynthesis.speak(utterance);
-    });
-  };
 
-  const drainSpeechQueue = async () => {
-    if (speechQueueRunningRef.current) return;
-    speechQueueRunningRef.current = true;
-    try {
-      while (speechQueueRef.current.length) {
-        const item = speechQueueRef.current.shift()!;
-        if (item.generation !== speechGenerationRef.current) continue;
-        await playSpeechChunk(item.text, item.messageId, item.generation);
-      }
-    } finally {
-      speechQueueRunningRef.current = false;
-      if (!speechQueueRef.current.length) {
+        const audioBlob = await response.blob();
+        if (controller.signal.aborted || generation !== speechGenerationRef.current) return;
+
+        const providerName = response.headers.get('X-Voice-Provider') || 'Neural Voice';
+        const voiceName = decodeURIComponent(response.headers.get('X-Voice-Name') || '');
+        const fallbackTriggered = response.headers.get('X-Voice-Fallback') === 'true';
+        const fallbackReason = decodeURIComponent(response.headers.get('X-Voice-Fallback-Reason') || '');
+        const keyUsedMasked = response.headers.get('X-Voice-Key-Used') || undefined;
+
+        const url = URL.createObjectURL(audioBlob);
+        speechObjectUrlRef.current = url;
+        const audio = new Audio(url);
+        speechAudioRef.current = audio;
+        audio.playbackRate = voiceSpeed;
+
+        audio.onplay = () => {
+          if (generation !== speechGenerationRef.current) return;
+          setSpeechState({
+            status: 'playing',
+            messageId,
+            providerName,
+            voiceName,
+            fallbackTriggered,
+            fallbackReason,
+            keyUsedMasked,
+          });
+          setIsSpeakingMessageId(messageId);
+          if (isVoiceModeActive) {
+            setVoiceModeStatus('speaking');
+            setVoiceSubtitle(
+              fallbackTriggered
+                ? `Speaking (${providerName} fallback: ElevenLabs quota reached)...`
+                : `Speaking with ${voiceName || providerName}...`
+            );
+          }
+        };
+
+        audio.onpause = () => {
+          if (generation !== speechGenerationRef.current) return;
+          setSpeechState(prev => (prev.messageId === messageId && prev.status === 'playing' ? { ...prev, status: 'paused' } : prev));
+        };
+
+        audio.onended = () => {
+          if (generation !== speechGenerationRef.current) return;
+          stopSpeechPlayback();
+          if (isVoiceModeActive) {
+            setVoiceModeStatus(isMicMuted ? 'idle' : 'listening');
+            setVoiceSubtitle('Listening for your next phrase...');
+          }
+        };
+
+        audio.onerror = () => {
+          if (generation !== speechGenerationRef.current) return;
+          setSpeechState({
+            status: 'error',
+            messageId,
+            errorMessage: 'Audio element failed to decode or play the voice stream.',
+            canFallbackToBrowser: typeof window !== 'undefined' && 'speechSynthesis' in window,
+          });
+          setIsSpeakingMessageId(null);
+          if (isVoiceModeActive) {
+            setVoiceModeStatus('idle');
+            setVoiceSubtitle('⚠️ Audio playback failed.');
+          }
+        };
+
+        await audio.play();
+      } catch (err: any) {
+        if (controller.signal.aborted || generation !== speechGenerationRef.current) return;
+        console.warn('[Voice] Neural voice synthesis error:', err);
+        setSpeechState({
+          status: 'error',
+          messageId,
+          errorMessage: err?.message || 'Neural voice unavailable.',
+          canFallbackToBrowser: typeof window !== 'undefined' && 'speechSynthesis' in window,
+        });
         setIsSpeakingMessageId(null);
-        if (isVoiceModeActive) setVoiceModeStatus(isMicMuted ? 'idle' : 'listening');
+        if (isVoiceModeActive) {
+          setVoiceModeStatus('idle');
+          setVoiceSubtitle(`⚠️ Voice error: ${err?.message || 'Synthesis failed.'}`);
+        }
+      } finally {
+        if (speechAbortRef.current === controller) {
+          speechAbortRef.current = null;
+        }
       }
-    }
-  };
-
-  const queueSpeech = (text: string, messageId: string | null = null, generation = speechGenerationRef.current) => {
-    const cleanText = cleanMarkdownForSpeech(text);
-    if (!cleanText || generation !== speechGenerationRef.current) return;
-    speechQueueRef.current.push({ text: cleanText, messageId, generation });
-    void drainSpeechQueue();
-  };
+    },
+    [isMicMuted, isVoiceModeActive, pauseSpeechPlayback, resumeSpeechPlayback, selectedVoiceId, selectedVoiceProvider, speechState.messageId, speechState.status, stopSpeechPlayback, voiceSpeed]
+  );
 
   const handleSpeakMessage = (msg: FreeLLMMessage) => {
-    if (isSpeakingMessageId === msg.id) {
+    if (speechState.messageId === msg.id && (speechState.status === 'playing' || speechState.status === 'paused')) {
       stopSpeechPlayback();
       return;
     }
-    stopSpeechPlayback();
-    queueSpeech(msg.content, msg.id, speechGenerationRef.current);
+    void playSpeech(msg.content, msg.id);
   };
 
   // ── Send Message to FreeLLMAPI Gateway & Multimodal Router ──
@@ -1170,6 +1383,28 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     if (!customPrompt) setInput('');
     setAttachments([]);
     setIsLoading(true);
+
+    let initialLabel = 'Thinking...';
+    let initialLifecycle: 'submitting' | 'connecting' | 'thinking' | 'using_tool' = 'connecting';
+    if (mode === 'image_gen' || isImageGenModel(selectedModel) || isImageGenerationRequest(text)) {
+      initialLabel = 'Generating illustration (Flux)...';
+      initialLifecycle = 'using_tool';
+    } else if (mode === 'video_gen' || isVideoGenModel(selectedModel) || isVideoGenerationRequest(text)) {
+      initialLabel = 'Generating video stream...';
+      initialLifecycle = 'using_tool';
+    } else if (attachments.some(a => a.dataUrl && (a.type?.startsWith('image/') || a.type?.includes('pdf') || a.dataUrl?.startsWith('data:image/')))) {
+      initialLabel = 'Analyzing attachment with Gemini...';
+      initialLifecycle = 'using_tool';
+    } else if (/\b(?:telegram|post to telegram|send to telegram)\b/i.test(text)) {
+      initialLabel = 'Posting to Telegram...';
+      initialLifecycle = 'using_tool';
+    } else {
+      initialLabel = 'Connecting to FreeLLM...';
+      initialLifecycle = 'connecting';
+    }
+    setLifecycleState(initialLifecycle);
+    setActivityLabel(initialLabel);
+
     const speakThisResponse = isVoiceModeActive;
     if (speakThisResponse) {
       stopSpeechPlayback();
@@ -1188,6 +1423,8 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       } catch {
         // The same-origin session cookie remains available when browser storage is restricted.
       }
+      setLifecycleState('thinking');
+      setActivityLabel(initialLifecycle === 'using_tool' ? initialLabel : 'Thinking...');
       const response = await fetchWithTimeout(
         '/api/ai/freellm/chat',
         {
@@ -1238,23 +1475,8 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             if (typeof event.model === 'string') streamedModel = event.model;
             const delta = event.choices?.[0]?.delta?.content;
             if (typeof delta === 'string' && delta) {
+              setLifecycleState('streaming');
               streamedContent += delta;
-              if (speakThisResponse && voiceSpeechEnabledRef.current) {
-                pendingSpeechText += delta;
-                let sentenceMatch: RegExpMatchArray | null;
-                while ((sentenceMatch = pendingSpeechText.match(/^([\s\S]*?[.!?])(?:\s+|$)/))) {
-                  const sentence = sentenceMatch[1].trim();
-                  pendingSpeechText = pendingSpeechText.slice(sentenceMatch[0].length);
-                  if (sentence) queueSpeech(sentence, streamedMessageId, responseSpeechGeneration);
-                }
-                if (pendingSpeechText.length > 240) {
-                  const splitAt = pendingSpeechText.lastIndexOf(' ', 220);
-                  if (splitAt > 80) {
-                    queueSpeech(pendingSpeechText.slice(0, splitAt), streamedMessageId, responseSpeechGeneration);
-                    pendingSpeechText = pendingSpeechText.slice(splitAt + 1);
-                  }
-                }
-              }
               updateMessages(prev => prev.map(message => message.id === streamedMessageId
                 ? { ...message, content: streamedContent, model: streamedModel }
                 : message));
@@ -1276,9 +1498,8 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         buffer += decoder.decode();
         if (buffer.trim()) handleLine(buffer);
         if (requestController.signal.aborted) throw new DOMException('Request cancelled', 'AbortError');
-        if (!streamedContent) throw new Error('The gateway stream ended without assistant text.');
-        if (pendingSpeechText.trim() && speakThisResponse && voiceSpeechEnabledRef.current) {
-          queueSpeech(pendingSpeechText, streamedMessageId, responseSpeechGeneration);
+        if (speakThisResponse && voiceSpeechEnabledRef.current && streamedContent.trim()) {
+          void playSpeech(streamedContent, streamedMessageId);
         }
         data = { ok: true, message: { content: streamedContent }, model: streamedModel, provider: 'FreeLLMAPI Gateway' };
       } else {
@@ -1309,14 +1530,19 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
         : [...prev, assistantMsg]);
       setGatewayOnline(true);
       if (data.latencyMs) setGatewayLatency(data.latencyMs);
+      setLifecycleState('completed');
 
       // If in Voice Mode, automatically speak out the response
-      if (speakThisResponse && !streamedMessageId) {
+      if (speakThisResponse && !streamedMessageId && assistantMsg.content) {
         setVoiceSubtitle(assistantMsg.content.slice(0, 120));
-        queueSpeech(assistantMsg.content, assistantMsg.id);
+        void playSpeech(assistantMsg.content, assistantMsg.id);
       }
     } catch (err: any) {
-      if (requestController.signal.aborted) return;
+      if (requestController.signal.aborted) {
+        setLifecycleState('cancelled');
+        return;
+      }
+      setLifecycleState('failed');
       const friendlyError = formatFetchError(err);
       const errorMsg: FreeLLMMessage = {
         id: `err-${Date.now()}`,
@@ -1331,6 +1557,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     } finally {
       activeRequestRef.current = null;
       setIsLoading(false);
+      setActivityLabel('');
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   };
@@ -1694,6 +1921,47 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
           >
             <Headphones style={{ width: 14, height: 14 }} />
             {!isPhone && <span>Voice</span>}
+          </button>
+
+          {/* Dedicated Neural Voice Model Selector Button */}
+          <button
+            onClick={() => {
+              setSettingsActiveTab('voice');
+              setShowSettingsModal(prev => (showSettingsModal && settingsActiveTab === 'voice' ? false : true));
+            }}
+            aria-label="Change Neural Voice Model"
+            title="Change AI Voice Model & Persona (ElevenLabs 20+ Voices)"
+            style={{
+              background: showSettingsModal && settingsActiveTab === 'voice'
+                ? 'var(--accent-glow)'
+                : 'var(--v-glass-bg-subtle)',
+              border: showSettingsModal && settingsActiveTab === 'voice'
+                ? '1px solid var(--accent-color)'
+                : '1px solid var(--v-glass-border-subtle)',
+              borderRadius: 8,
+              padding: '5px 8px',
+              color: showSettingsModal && settingsActiveTab === 'voice' ? 'var(--accent-color)' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 11,
+              fontWeight: 600,
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Volume2 style={{ width: 14, height: 14, color: '#c084fc' }} />
+            {!isPhone && (
+              <span style={{ maxWidth: 85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {(() => {
+                  const currentProv = voiceConfigData?.providers?.find((p: any) => p.id === selectedVoiceProvider);
+                  const matched = currentProv?.voices?.find((v: any) => v.id === selectedVoiceId);
+                  if (matched) return matched.name.split(' ')[0];
+                  if (selectedVoiceId) return selectedVoiceId.slice(0, 6);
+                  return 'Voice';
+                })()}
+              </span>
+            )}
           </button>
 
           {/* Settings Button */}
@@ -2092,10 +2360,48 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Settings style={{ width: 14, height: 14, color: '#c084fc' }} />
-                  FreeLLM Gateway Connection Settings
-                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsActiveTab('gateway')}
+                    style={{
+                      background: settingsActiveTab === 'gateway' ? (isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(168, 85, 247, 0.15)') : 'transparent',
+                      border: '1px solid ' + (settingsActiveTab === 'gateway' ? 'rgba(168, 85, 247, 0.4)' : 'transparent'),
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      color: settingsActiveTab === 'gateway' ? '#c084fc' : 'var(--text-muted)',
+                      fontWeight: settingsActiveTab === 'gateway' ? 600 : 400,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      fontSize: 11.5,
+                    }}
+                  >
+                    <Settings style={{ width: 13, height: 13 }} />
+                    LLM Gateway
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsActiveTab('voice')}
+                    style={{
+                      background: settingsActiveTab === 'voice' ? (isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(168, 85, 247, 0.15)') : 'transparent',
+                      border: '1px solid ' + (settingsActiveTab === 'voice' ? 'rgba(168, 85, 247, 0.4)' : 'transparent'),
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      color: settingsActiveTab === 'voice' ? '#c084fc' : 'var(--text-muted)',
+                      fontWeight: settingsActiveTab === 'voice' ? 600 : 400,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      fontSize: 11.5,
+                    }}
+                  >
+                    <Volume2 style={{ width: 13, height: 13 }} />
+                    Neural Voice (TTS)
+                  </button>
+                </div>
                 <button
                   onClick={() => setShowSettingsModal(false)}
                   style={{
@@ -2110,113 +2416,450 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
-                    FreeLLM API Base URL (`/v1`):
-                  </label>
-                  <input
-                    type="text"
-                    value={configUrl}
-                    onChange={e => setConfigUrl(e.target.value)}
-                    placeholder="https://free-llm-api-7fue.onrender.com/v1"
-                    style={{
-                      width: '100%',
-                      background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
-                      border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
-                      color: 'var(--text-primary)',
-                      borderRadius: 6,
-                      padding: '6px 8px',
-                      fontSize: 11.5,
-                      outline: 'none',
-                    }}
-                  />
-                </div>
+              {settingsActiveTab === 'gateway' ? (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                        FreeLLM API Base URL (`/v1`):
+                      </label>
+                      <input
+                        type="text"
+                        value={configUrl}
+                        onChange={e => setConfigUrl(e.target.value)}
+                        placeholder="https://free-llm-api-7fue.onrender.com/v1"
+                        style={{
+                          width: '100%',
+                          background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          color: 'var(--text-primary)',
+                          borderRadius: 6,
+                          padding: '6px 8px',
+                          fontSize: 11.5,
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
-                      Unified API Key (`FREELLM_API_KEY` / `UNIFIED_API_KEY`):
-                    </label>
-                    <span
-                      style={{
-                        fontSize: 10.5,
-                        color: keyConfigured ? '#10b981' : '#f59e0b',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {keyConfigured ? `✓ Server Key Active (${maskedKey || '••••'})` : '⚠️ Key Not Set'}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                          Unified API Key (`FREELLM_API_KEY` / `UNIFIED_API_KEY`):
+                        </label>
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            color: keyConfigured ? '#10b981' : '#f59e0b',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {keyConfigured ? `✓ Server Key Active (${maskedKey || '••••'})` : '⚠️ Key Not Set'}
+                        </span>
+                      </div>
+                      <input
+                        type="password"
+                        value={configKeyInput}
+                        onChange={e => setConfigKeyInput(e.target.value)}
+                        placeholder={
+                          keyConfigured
+                            ? 'Paste a new Unified API Key to replace current key...'
+                            : 'Paste your FreeLLMAPI Unified API Key here...'
+                        }
+                        style={{
+                          width: '100%',
+                          background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          color: 'var(--text-primary)',
+                          borderRadius: 6,
+                          padding: '6px 8px',
+                          fontSize: 11.5,
+                          outline: 'none',
+                        }}
+                      />
+                    </div>
                   </div>
-                  <input
-                    type="password"
-                    value={configKeyInput}
-                    onChange={e => setConfigKeyInput(e.target.value)}
-                    placeholder={
-                      keyConfigured
-                        ? 'Paste a new Unified API Key to replace current key...'
-                        : 'Paste your FreeLLMAPI Unified API Key here...'
-                    }
-                    style={{
-                      width: '100%',
-                      background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
-                      border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
-                      color: 'var(--text-primary)',
-                      borderRadius: 6,
-                      padding: '6px 8px',
-                      fontSize: 11.5,
-                      outline: 'none',
-                    }}
-                  />
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, color: gatewayOnline ? '#10b981' : gatewayError ? '#ef4444' : '#94a3b8', flex: 1, minWidth: 160 }}>
+                      {isTestingGateway
+                        ? 'Testing connection...'
+                        : gatewayOnline
+                        ? `● Online (${gatewayLatency ?? 0}ms · ${catalogModels.length} ready models)`
+                        : gatewayError
+                        ? `⚠️ ${gatewayError.slice(0, 85)}${gatewayError.length > 85 ? '...' : ''}`
+                        : '● Ready'}
+                    </span>
+
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        onClick={() => saveGatewaySettings(true)}
+                        disabled={isTestingGateway}
+                        style={{
+                          background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)',
+                          border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.15)'),
+                          borderRadius: 6,
+                          padding: '4px 10px',
+                          color: 'var(--text-secondary)',
+                          fontSize: 11,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Reset
+                      </button>
+
+                      <button
+                        onClick={() => saveGatewaySettings(false)}
+                        disabled={isTestingGateway}
+                        style={{
+                          background: 'linear-gradient(135deg, #a855f7, #6366f1)',
+                          border: 'none',
+                          borderRadius: 6,
+                          padding: '4px 12px',
+                          color: '#fff',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: isTestingGateway ? 'default' : 'pointer',
+                        }}
+                      >
+                        {isTestingGateway ? 'Connecting...' : 'Save & Connect'}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* ── Neural Voice (TTS) Settings Tab ── */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                        TTS Provider:
+                      </label>
+                      <select
+                        value={selectedVoiceProvider}
+                        onChange={e => {
+                          const newProv = e.target.value;
+                          const defaultVoice =
+                            newProv === 'elevenlabs'
+                              ? '21m00Tcm4TlvDq8ikWAM'
+                              : newProv === 'piper'
+                              ? 'en_US-lessac-medium'
+                              : newProv === 'openai'
+                              ? 'coral'
+                              : 'en-US';
+                          saveVoiceSettings(newProv, defaultVoice, voiceSpeed);
+                        }}
+                        style={{
+                          width: '100%',
+                          background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          color: 'var(--text-primary)',
+                          borderRadius: 6,
+                          padding: '6px 8px',
+                          fontSize: 11.5,
+                          outline: 'none',
+                        }}
+                      >
+                        <option value="elevenlabs">ElevenLabs Neural (Free Tier: 10k chars/mo)</option>
+                        <option value="piper">Piper Self-Hosted (Offline, Zero Quota)</option>
+                        <option value="free_tts">Free Neural Audio (Zero Setup Required)</option>
+                        <option value="openai">OpenAI Audio Speech (TTS-1)</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                        Voice Persona:
+                      </label>
+                      <select
+                        value={selectedVoiceId}
+                        onChange={e => saveVoiceSettings(selectedVoiceProvider, e.target.value, voiceSpeed)}
+                        style={{
+                          width: '100%',
+                          background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          color: 'var(--text-primary)',
+                          borderRadius: 6,
+                          padding: '6px 8px',
+                          fontSize: 11.5,
+                          outline: 'none',
+                        }}
+                      >
+                        {(() => {
+                          const currentProviderInfo = voiceConfigData?.providers?.find(
+                            (p: any) => p.id === selectedVoiceProvider
+                          );
+                          const voices = currentProviderInfo?.voices || [];
+                          const hasSelectedInList = voices.some((v: any) => v.id === selectedVoiceId);
+                          return (
+                            <>
+                              {!hasSelectedInList && selectedVoiceId && (
+                                <option value={selectedVoiceId}>
+                                  Custom Voice ({selectedVoiceId.slice(0, 8)}...)
+                                </option>
+                              )}
+                              {voices.map((v: any) => (
+                                <option key={v.id} value={v.id}>
+                                  {v.name}
+                                </option>
+                              ))}
+                            </>
+                          );
+                        })()}
+                      </select>
+
+                      {/* Direct Custom Voice ID Input */}
+                      {selectedVoiceProvider === 'elevenlabs' && (
+                        <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
+                          <input
+                            type="text"
+                            placeholder="Or enter custom Voice ID (e.g. C1npRmjB19a6yNkEucvx)"
+                            id="np-custom-voice-id-input"
+                            style={{
+                              flex: 1,
+                              background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                              border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(15, 23, 42, 0.15)'),
+                              color: 'var(--text-primary)',
+                              borderRadius: 6,
+                              padding: '4px 8px',
+                              fontSize: 10.5,
+                              outline: 'none',
+                              fontFamily: 'monospace',
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const inputEl = document.getElementById('np-custom-voice-id-input') as HTMLInputElement;
+                              const val = inputEl?.value?.trim();
+                              if (val && val.length > 5) {
+                                saveVoiceSettings(selectedVoiceProvider, val, voiceSpeed);
+                                inputEl.value = '';
+                              }
+                            }}
+                            style={{
+                              background: 'rgba(168, 85, 247, 0.2)',
+                              border: '1px solid rgba(168, 85, 247, 0.4)',
+                              borderRadius: 6,
+                              padding: '3px 8px',
+                              color: '#c084fc',
+                              fontSize: 10.5,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            Set Voice ID
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                        Speaking Speed:
+                      </label>
+                      <select
+                        value={voiceSpeed}
+                        onChange={e => saveVoiceSettings(selectedVoiceProvider, selectedVoiceId, Number(e.target.value) || 1.0)}
+                        style={{
+                          background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
+                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          color: 'var(--text-primary)',
+                          borderRadius: 6,
+                          padding: '4px 6px',
+                          fontSize: 11,
+                          outline: 'none',
+                        }}
+                      >
+                        <option value={0.8}>0.8x (Slower)</option>
+                        <option value={1.0}>1.0x (Normal)</option>
+                        <option value={1.2}>1.2x (Faster)</option>
+                        <option value={1.5}>1.5x (Fast)</option>
+                      </select>
+                    </div>
+
+                    {/* Preview Test Voice Button */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {speechState.messageId === 'voice-settings-test' && (speechState.status === 'playing' || speechState.status === 'paused') ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={speechState.status === 'playing' ? pauseSpeechPlayback : resumeSpeechPlayback}
+                            style={{
+                              background: 'rgba(168, 85, 247, 0.2)',
+                              border: '1px solid rgba(168, 85, 247, 0.4)',
+                              borderRadius: 6,
+                              padding: '4px 8px',
+                              color: '#c084fc',
+                              fontSize: 11,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            {speechState.status === 'playing' ? <Pause size={12} /> : <Play size={12} />}
+                            {speechState.status === 'playing' ? 'Pause' : 'Resume'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={stopSpeechPlayback}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: 'var(--text-muted)',
+                              fontSize: 11,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 3,
+                            }}
+                          >
+                            <VolumeX size={12} /> Stop
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void playSpeech('Hello! This is a preview of your NightPlanner neural voice assistant.', 'voice-settings-test')}
+                          disabled={speechState.status === 'loading'}
+                          style={{
+                            background: 'rgba(168, 85, 247, 0.15)',
+                            border: '1px solid rgba(168, 85, 247, 0.35)',
+                            borderRadius: 6,
+                            padding: '4px 10px',
+                            color: '#c084fc',
+                            fontSize: 11,
+                            fontWeight: 500,
+                            cursor: speechState.status === 'loading' ? 'wait' : 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 5,
+                          }}
+                        >
+                          {speechState.status === 'loading' && speechState.messageId === 'voice-settings-test' ? (
+                            <>
+                              <LoaderCircle size={12} style={{ animation: 'sams-action-spin .8s linear infinite' }} />
+                              <span>Synthesizing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Volume2 size={12} />
+                              <span>Test Voice Audio</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Provider Setup & Status Badge */}
+                  {(() => {
+                    const currentProv = voiceConfigData?.providers?.find((p: any) => p.id === selectedVoiceProvider);
+                    const isConfigured = currentProv?.isConfigured;
+                    return (
+                      <div
+                        style={{
+                          padding: '8px 10px',
+                          borderRadius: 8,
+                          background: isConfigured ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                          border: '1px solid ' + (isConfigured ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'),
+                          fontSize: 11,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 3,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <strong style={{ color: isConfigured ? '#34d399' : '#fbbf24' }}>
+                            {isConfigured ? `✓ ${currentProv?.name || 'Provider'} Active` : `⚠️ ${currentProv?.name || 'Provider'} Not Configured`}
+                          </strong>
+                          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                            Server-Side Credential
+                          </span>
+                        </div>
+                        <span style={{ color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                          {currentProv?.freeTierNote}
+                        </span>
+                        {currentProv?.setupDocs && !isConfigured && (
+                          <span style={{ color: '#fbbf24', fontSize: 10.5, marginTop: 2 }}>
+                            {currentProv.setupDocs}
+                          </span>
+                        )}
+
+                        {/* ElevenLabs Key Rotation Pool Telemetry */}
+                        {currentProv?.id === 'elevenlabs' && currentProv?.keyPool && (
+                          <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 10.5 }}>
+                                Key Rotation Pool ({currentProv.keyPool.activeKeys}/{currentProv.keyPool.totalKeys} Active)
+                              </span>
+                              <span style={{ fontSize: 10, color: currentProv.keyPool.exhaustedKeys > 0 ? '#f87171' : '#34d399' }}>
+                                {currentProv.keyPool.exhaustedKeys > 0
+                                  ? `${currentProv.keyPool.exhaustedKeys} in cooldown`
+                                  : 'All keys available'}
+                              </span>
+                            </div>
+                            {Array.isArray(currentProv.keyPool.keys) && currentProv.keyPool.keys.length > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                {currentProv.keyPool.keys.map((k: any) => {
+                                  const isKeyActive = k.status === 'active';
+                                  const statusColor = isKeyActive
+                                    ? '#34d399'
+                                    : k.status === 'rate_limited'
+                                    ? '#fbbf24'
+                                    : '#f87171';
+                                  return (
+                                    <div
+                                      key={k.index}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        background: 'rgba(0, 0, 0, 0.15)',
+                                        padding: '2px 6px',
+                                        borderRadius: 4,
+                                        fontSize: 10,
+                                      }}
+                                    >
+                                      <span style={{ fontFamily: 'monospace', color: 'var(--text-primary)' }}>
+                                        Key #{k.index} ({k.maskedKey})
+                                      </span>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {k.characterCount > 0 && (
+                                          <span style={{ color: 'var(--text-muted)' }}>
+                                            {k.characterCount.toLocaleString()} chars
+                                          </span>
+                                        )}
+                                        <span style={{ color: statusColor, fontWeight: 500 }}>
+                                          {isKeyActive
+                                            ? 'Active'
+                                            : k.status === 'quota_exceeded'
+                                            ? `Quota Exhausted${k.cooldownRemainingSeconds ? ` (${k.cooldownRemainingSeconds}s)` : ''}`
+                                            : k.status === 'rate_limited'
+                                            ? `Rate Limited${k.cooldownRemainingSeconds ? ` (${k.cooldownRemainingSeconds}s)` : ''}`
+                                            : k.status === 'invalid'
+                                            ? (k.lastError ? `⚠️ ${k.lastError}` : 'Invalid (401)')
+                                            : 'Failed'}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <span style={{ display: 'block', fontSize: 9.5, color: 'var(--text-muted)', marginTop: 4 }}>
+                              Configure 5+ keys in Render as ELEVENLABS_API_KEY_1..5. Keys automatically rotate on 429 quota exhaustion.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, color: gatewayOnline ? '#10b981' : gatewayError ? '#ef4444' : '#94a3b8', flex: 1, minWidth: 160 }}>
-                  {isTestingGateway
-                    ? 'Testing connection...'
-                    : gatewayOnline
-                    ? `● Online (${gatewayLatency ?? 0}ms · ${catalogModels.length} ready models)`
-                    : gatewayError
-                    ? `⚠️ ${gatewayError.slice(0, 85)}${gatewayError.length > 85 ? '...' : ''}`
-                    : '● Ready'}
-                </span>
-
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    onClick={() => saveGatewaySettings(true)}
-                    disabled={isTestingGateway}
-                    style={{
-                      background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)',
-                      border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.15)'),
-                      borderRadius: 6,
-                      padding: '4px 10px',
-                      color: 'var(--text-secondary)',
-                      fontSize: 11,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Reset
-                  </button>
-
-                  <button
-                    onClick={() => saveGatewaySettings(false)}
-                    disabled={isTestingGateway}
-                    style={{
-                      background: 'linear-gradient(135deg, #a855f7, #6366f1)',
-                      border: 'none',
-                      borderRadius: 6,
-                      padding: '4px 12px',
-                      color: '#fff',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      cursor: isTestingGateway ? 'default' : 'pointer',
-                    }}
-                  >
-                    {isTestingGateway ? 'Connecting...' : 'Save & Connect'}
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -2900,32 +3543,206 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                     )}
                   </button>
 
-                  {/* Text-To-Speech Listen Button */}
-                  <button
-                    onClick={() => handleSpeakMessage(msg)}
-                    title={isSpeakingMessageId === msg.id ? 'Stop Speaking' : 'Read aloud with voice'}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: isSpeakingMessageId === msg.id ? '#a855f7' : 'var(--text-muted)',
-                      fontSize: 11,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      padding: 2,
-                    }}
-                  >
-                    {isSpeakingMessageId === msg.id ? (
-                      <>
+                  {/* Upgraded Neural Voice Playback Controls & Status */}
+                  {speechState.messageId === msg.id && speechState.status === 'loading' ? (
+                    <span
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 11,
+                        color: '#c084fc',
+                        padding: '2px 4px',
+                      }}
+                    >
+                      <LoaderCircle style={{ width: 12, height: 12, animation: 'sams-action-spin .8s linear infinite' }} />
+                      <span>Synthesizing voice...</span>
+                    </span>
+                  ) : speechState.messageId === msg.id && (speechState.status === 'playing' || speechState.status === 'paused') ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {speechState.status === 'playing' ? (
+                        <button
+                          type="button"
+                          onClick={pauseSpeechPlayback}
+                          title="Pause voice reading"
+                          style={{
+                            background: 'rgba(168, 85, 247, 0.15)',
+                            border: '1px solid rgba(168, 85, 247, 0.3)',
+                            borderRadius: 6,
+                            color: '#c084fc',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '2px 6px',
+                          }}
+                        >
+                          <Pause style={{ width: 12, height: 12 }} /> Pause
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={resumeSpeechPlayback}
+                          title="Resume voice reading"
+                          style={{
+                            background: 'rgba(168, 85, 247, 0.15)',
+                            border: '1px solid rgba(168, 85, 247, 0.3)',
+                            borderRadius: 6,
+                            color: '#c084fc',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '2px 6px',
+                          }}
+                        >
+                          <Play style={{ width: 12, height: 12 }} /> Resume
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={stopSpeechPlayback}
+                        title="Stop speech"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          fontSize: 11,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 3,
+                          padding: 2,
+                        }}
+                      >
                         <VolumeX style={{ width: 12, height: 12 }} /> Stop
-                      </>
-                    ) : (
-                      <>
-                        <Volume2 style={{ width: 12, height: 12 }} /> Listen
-                      </>
-                    )}
-                  </button>
+                      </button>
+                      {speechState.voiceName && (
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', opacity: 0.8 }}>
+                          ({speechState.voiceName})
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleSpeakMessage(msg)}
+                      title="Read aloud with neural voice"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: 2,
+                      }}
+                    >
+                      <Volume2 style={{ width: 12, height: 12 }} /> Listen
+                    </button>
+                  )}
+
+                  {/* Neural Speech Fallback Notice Banner with Browser Voice Option */}
+                  {speechState.messageId === msg.id && speechState.fallbackTriggered && (speechState.status === 'playing' || speechState.status === 'paused') && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 6,
+                        flexWrap: 'wrap',
+                        fontSize: 10.5,
+                        color: '#fbbf24',
+                        background: 'rgba(245, 158, 11, 0.1)',
+                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        borderRadius: 6,
+                        padding: '3px 8px',
+                        width: '100%',
+                        marginTop: 4,
+                      }}
+                    >
+                      <span style={{ flex: 1, minWidth: 140 }}>
+                        ⚠️ ElevenLabs quota reached on all keys. Playing via {speechState.providerName} fallback.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void playSpeech(msg.content, msg.id, true)}
+                        title="Switch to system browser voice"
+                        style={{
+                          background: 'rgba(245, 158, 11, 0.2)',
+                          border: 'none',
+                          borderRadius: 4,
+                          padding: '1px 6px',
+                          color: '#fef3c7',
+                          fontSize: 10,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Use browser voice
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Explicit Neural Speech Error Banner with Retry & Browser Fallback */}
+                  {speechState.messageId === msg.id && speechState.status === 'error' && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        flexWrap: 'wrap',
+                        fontSize: 11,
+                        color: '#f87171',
+                        background: 'rgba(239, 68, 68, 0.12)',
+                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        width: '100%',
+                        marginTop: 4,
+                      }}
+                    >
+                      <AlertTriangle style={{ width: 12, height: 12, flexShrink: 0 }} />
+                      <span style={{ flex: 1, minWidth: 140 }}>{speechState.errorMessage || 'Voice synthesis failed.'}</span>
+                      <button
+                        type="button"
+                        onClick={() => void playSpeech(msg.content, msg.id)}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.2)',
+                          border: 'none',
+                          borderRadius: 4,
+                          padding: '2px 6px',
+                          color: '#fca5a5',
+                          fontSize: 10.5,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Retry
+                      </button>
+                      {speechState.canFallbackToBrowser && (
+                        <button
+                          type="button"
+                          onClick={() => void playSpeech(msg.content, msg.id, true)}
+                          title="Speak using system browser voice"
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                            borderRadius: 4,
+                            padding: '2px 6px',
+                            color: 'var(--text-secondary)',
+                            fontSize: 10.5,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Use browser voice
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* Retry Button on Error */}
                   {msg.id.startsWith('err-') && (
@@ -3036,12 +3853,36 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
           </div>
         )}
 
-        {/* Loading Indicator */}
-        {isLoading && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', color: 'var(--text-secondary)' }}>
-            <Moon style={{ width: 14, height: 14, color: '#a855f7', animation: 'spin 3s linear infinite' }} />
-            <span style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--text-secondary)' }}>
-              Moon Assistant is processing multimodal pipeline...
+        {/* Polished Activity / Typing Indicator */}
+        {isLoading && lifecycleState !== 'streaming' && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '8px 14px',
+              borderRadius: 16,
+              background: 'var(--v-glass-bg-subtle)',
+              border: '1px solid var(--v-glass-border)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              alignSelf: 'flex-start',
+              color: 'var(--text-primary)',
+              fontSize: 12,
+              marginTop: 4,
+              marginBottom: 4,
+              boxShadow: 'var(--v-shadow-glass)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#a855f7' }} />
+              <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#818cf8', animationDelay: '0.2s' }} />
+              <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8', animationDelay: '0.4s' }} />
+            </div>
+            <span style={{ fontStyle: 'normal', color: 'var(--text-secondary)', fontWeight: 500 }}>
+              {activityLabel || 'Thinking...'}
             </span>
           </div>
         )}
