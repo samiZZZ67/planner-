@@ -3,6 +3,9 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './neon';
 import type { BookAssignmentRecord, BookRecord, BookPageRecord } from '../books/types';
+import { formatTelegramMessage, splitTelegramHtml, stripHtml } from './telegramFormatter';
+
+export { formatTelegramMessage, splitTelegramHtml, stripHtml } from './telegramFormatter';
 
 export type TelegramDeliveryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'uncertain';
 export interface TelegramDeliveryRecord {
@@ -298,21 +301,73 @@ export async function checkTelegramChannel() {
   };
 }
 
-export async function sendTelegramTextToChannel(text: string, userId = 'owner') {
+export async function sendTelegramMessageWithFallback(
+  chatId: string,
+  formattedText: string,
+  disableWebPagePreview = true
+): Promise<{ message_id: number }> {
+  try {
+    return await telegramCall<{ message_id: number }>('sendMessage', {
+      chat_id: chatId,
+      text: formattedText,
+      parse_mode: 'HTML',
+      disable_web_page_preview: disableWebPagePreview,
+    });
+  } catch (error: any) {
+    const errMsg = String(error?.message || error);
+    // If Telegram rejects due to entity parsing or bad HTML formatting, retry safely with plain text
+    if (/can't parse entities|entity|tag|parse|html|bad request/i.test(errMsg)) {
+      console.warn('[Telegram] HTML formatting rejected by Telegram API; falling back to plain text:', errMsg);
+      return await telegramCall<{ message_id: number }>('sendMessage', {
+        chat_id: chatId,
+        text: stripHtml(formattedText),
+        disable_web_page_preview: disableWebPagePreview,
+      });
+    }
+    throw error;
+  }
+}
+
+export interface TelegramSendTextResult {
+  channel: string;
+  messageId: number;
+  receiptId: string;
+  messageIds?: number[];
+}
+
+export async function sendTelegramTextToChannel(
+  text: string,
+  userId = 'owner'
+): Promise<TelegramSendTextResult> {
   if (!text.trim()) throw new Error('Type a message before sending it.');
-  if (Array.from(text).length > 3500) throw new Error('Keep the message under 3,500 characters so it fits in one Telegram post.');
   const connection = await checkTelegramChannel();
   if (!connection.canPost) throw new Error(connection.message);
   const { chatId } = envConfig();
+
+  // Apply intelligent Telegram HTML formatting
+  const formatted = formatTelegramMessage(text);
+  const parts = splitTelegramHtml(formatted, 3500);
+
   const receiptBase = { id: randomUUID(), userId, channel: connection.channel.title, chatId, createdAt: Date.now() };
   try {
-    const sent = await telegramCall<{ message_id: number }>('sendMessage', {
-      chat_id: chatId,
-      text,
-      disable_web_page_preview: true,
+    const sentIds: number[] = [];
+    for (const part of parts) {
+      const sent = await sendTelegramMessageWithFallback(chatId, part, true);
+      sentIds.push(sent.message_id);
+    }
+    const primaryMessageId = sentIds[0] ?? 0;
+    await saveSendReceipt({
+      ...receiptBase,
+      status: 'sent',
+      messageId: primaryMessageId,
+      detail: `Telegram API accepted ${sentIds.length} message part(s). Message ID(s): ${sentIds.join(', ')}`,
     });
-    await saveSendReceipt({ ...receiptBase, status: 'sent', messageId: sent.message_id, detail: 'Telegram API accepted the message.' });
-    return { channel: connection.channel.title, messageId: sent.message_id, receiptId: receiptBase.id };
+    return {
+      channel: connection.channel.title,
+      messageId: primaryMessageId,
+      receiptId: receiptBase.id,
+      messageIds: sentIds,
+    };
   } catch (error) {
     const err = error as Error & { uncertain?: boolean };
     await saveSendReceipt({ ...receiptBase, status: err.uncertain ? 'uncertain' : 'failed', messageId: null, detail: err.message });
@@ -373,6 +428,9 @@ export async function sendTelegramMediaToChannel(text: string, media: File) {
 }
 
 export function splitTelegramText(text: string, max = 3500): string[] {
+  if (/<[a-z/][\s\S]*>/i.test(text) && max >= 100) {
+    return splitTelegramHtml(text, max);
+  }
   const chars = Array.from(text);
   const parts: string[] = [];
   let start = 0;
@@ -602,9 +660,12 @@ export async function publishApprovedAssignment(userId: string, book: BookRecord
   try {
     const connection = await checkTelegramChannel();
     if (!connection.canPost) throw new Error(connection.message);
+    const { chatId } = envConfig();
     while (delivery.nextPart < delivery.messageParts.length) {
       sendingStarted = true;
-      const message = await telegramCall<{ message_id: number }>('sendMessage', { chat_id: envConfig().chatId, text: delivery.messageParts[delivery.nextPart], disable_web_page_preview: true });
+      const part = delivery.messageParts[delivery.nextPart];
+      const formattedPart = formatTelegramMessage(part);
+      const message = await sendTelegramMessageWithFallback(chatId, formattedPart, true);
       delivery = await saveDelivery({ ...delivery, nextPart: delivery.nextPart + 1, telegramMessageIds: [...delivery.telegramMessageIds, message.message_id], updatedAt: Date.now() });
       sendingStarted = false;
     }
@@ -670,11 +731,9 @@ export async function publishLoadPlanPagesToTelegram(
     const { chatId } = envConfig();
     while (delivery.nextPart < delivery.messageParts.length) {
       sendingStarted = true;
-      const message = await telegramCall<{ message_id: number }>('sendMessage', {
-        chat_id: chatId,
-        text: delivery.messageParts[delivery.nextPart],
-        disable_web_page_preview: true,
-      });
+      const part = delivery.messageParts[delivery.nextPart];
+      const formattedPart = formatTelegramMessage(part);
+      const message = await sendTelegramMessageWithFallback(chatId, formattedPart, true);
       delivery = await saveDelivery({
         ...delivery,
         nextPart: delivery.nextPart + 1,
