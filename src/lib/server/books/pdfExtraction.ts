@@ -7,6 +7,9 @@ export interface PdfExtractionOptions {
   filePath: string;
   startPage: number;
   endPage: number;
+  pageNumbers?: number[];
+  skipPages?: Set<number> | number[];
+  maxPages?: number;
   onProgress?: (page: BookPageRecord, completedPages: number, totalPages: number) => Promise<void>;
 }
 
@@ -49,15 +52,24 @@ async function recognizePage(page: any, canvasModule: any, worker: any) {
 }
 
 async function renderPagePreview(page: any, canvasModule: any, filePath: string, bookId: string, pdfPage: number) {
+  const filename = `page-${pdfPage}.jpg`;
+  const previewDir = path.join(path.dirname(filePath), bookId, 'page-previews');
+  const previewPath = path.join(previewDir, filename);
+
+  try {
+    const stat = await fs.stat(previewPath);
+    if (stat.size > 0) {
+      return { filename, mimeType: 'image/jpeg' as const, width: 800, height: 1100 };
+    }
+  } catch {}
+
   const baseViewport = page.getViewport({ scale: 1 });
-  const scale = Math.min(1.5, 1600 / Math.max(baseViewport.width, baseViewport.height));
+  const scale = Math.min(1.5, 1400 / Math.max(baseViewport.width, baseViewport.height));
   const viewport = page.getViewport({ scale });
   const canvas = canvasModule.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
   await page.render({ canvas, viewport, background: '#ffffff' }).promise;
-  const filename = `page-${pdfPage}.jpg`;
-  const previewDir = path.join(path.dirname(filePath), bookId, 'page-previews');
   await fs.mkdir(previewDir, { recursive: true });
-  await fs.writeFile(path.join(previewDir, filename), canvas.toBuffer('image/jpeg', 82));
+  await fs.writeFile(previewPath, canvas.toBuffer('image/jpeg', 80));
   return { filename, mimeType: 'image/jpeg' as const, width: canvas.width, height: canvas.height };
 }
 
@@ -77,7 +89,29 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
     throw new Error(`Selected range exceeds the PDF's ${totalPdfPages} pages.`);
   }
 
-  const totalPages = options.endPage - options.startPage + 1;
+  const skipSet = options.skipPages
+    ? (options.skipPages instanceof Set ? options.skipPages : new Set(options.skipPages))
+    : null;
+
+  let targetPages: number[];
+  if (options.pageNumbers && options.pageNumbers.length > 0) {
+    targetPages = options.pageNumbers.filter(
+      p => p >= options.startPage && p <= options.endPage && (!skipSet || !skipSet.has(p))
+    );
+  } else {
+    targetPages = [];
+    for (let p = options.startPage; p <= options.endPage; p++) {
+      if (!skipSet || !skipSet.has(p)) {
+        targetPages.push(p);
+      }
+    }
+  }
+
+  if (options.maxPages && options.maxPages > 0) {
+    targetPages = targetPages.slice(0, options.maxPages);
+  }
+
+  const totalPages = targetPages.length;
   const scannedPages: number[] = [];
   let worker: any = null;
   const canvasModule: any = await import('@napi-rs/canvas');
@@ -86,7 +120,7 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
   const tessLanguages = (process.env.PDF_OCR_LANGS || 'eng').trim();
 
   try {
-    for (let pdfPage = options.startPage; pdfPage <= options.endPage; pdfPage += 1) {
+    for (const pdfPage of targetPages) {
       const page = await document.getPage(pdfPage);
       const visualPreview = await renderPagePreview(page, canvasModule, options.filePath, options.bookId, pdfPage);
       const textContent = await page.getTextContent({ includeMarkedContent: false });

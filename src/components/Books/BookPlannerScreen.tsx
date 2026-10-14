@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, BookOpen, CheckCircle2, ChevronDown, ChevronUp, Clock3, Eye, FileUp, LoaderCircle, LockKeyhole, Pencil, Save, Send, Trash2, TriangleAlert, X } from 'lucide-react';
+import { BarChart3, BookOpen, CheckCircle2, ChevronDown, ChevronUp, Clock3, Eye, FileText, FileUp, LoaderCircle, LockKeyhole, Pencil, Save, Send, Trash2, TriangleAlert, X } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
 import { notifyFeedback } from '@/lib/utils/actionFeedback';
 import { BookAnalyticsModal } from './BookAnalyticsModal';
+import { BookReviewModal } from './BookReviewModal';
 import type { BookAssignmentRecord, BookPageRecord, BookRecord, BookStudyNotes } from '@/lib/books/types';
 
 const fieldStyle: React.CSSProperties = { display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 };
@@ -95,6 +96,7 @@ export function BookPlannerScreen() {
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const previewUrlsRef = useRef<Record<string, string>>({});
   const [baModalBook, setBaModalBook] = useState<BookRecord | null>(null);
+  const [reviewModalBook, setReviewModalBook] = useState<BookRecord | null>(null);
 
   const openBookAnalytics = useCallback(async (book: BookRecord) => {
     setBaModalBook(book);
@@ -171,13 +173,33 @@ export function BookPlannerScreen() {
     setError('');
     setNotice('');
     setProcessingId(book.id);
-    setBooks(current => current.map(item => item.id === book.id ? { ...item, status: 'processing', extractionStatus: 'processing', extractionProgress: { completedPages: 0, totalPages: book.endPage - book.startPage + 1 } } : item));
     try {
-      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/extract`, { method: 'POST' });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'PDF extraction failed.');
-      setBooks(current => current.map(item => item.id === book.id ? data.book : item));
-      showNotice(data.book.extractionMessage || 'PDF extraction complete.');
+      let currentBook = book;
+      let isComplete = false;
+      let batchNum = 1;
+      while (!isComplete) {
+        setBooks(current => current.map(item => item.id === book.id ? {
+          ...item,
+          status: 'processing',
+          extractionStatus: 'processing',
+          extractionMessage: `Extracting batch ${batchNum}...`,
+        } : item));
+
+        const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/extract`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batchSize: 25, force: batchNum > 1 }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'PDF extraction failed.');
+        currentBook = data.book;
+        setBooks(current => current.map(item => item.id === book.id ? currentBook : item));
+        setBaModalBook(current => current && current.id === book.id ? currentBook : current);
+        setReviewModalBook(current => current && current.id === book.id ? currentBook : current);
+        isComplete = Boolean(data.isComplete);
+        batchNum++;
+      }
+      showNotice(currentBook.extractionMessage || 'PDF extraction complete.');
     } catch (err) {
       showError(err instanceof Error ? err.message : 'PDF extraction failed.');
       await refresh();
@@ -189,10 +211,8 @@ export function BookPlannerScreen() {
   async function previewPages(book: BookRecord) {
     setError('');
     setLoadingPreviewsBookId(book.id);
-    const from = book.startPage;
-    const to = Math.min(book.endPage, from + 99);
     try {
-      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/pages?from=${from}&to=${to}`);
+      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/pages?all=true&from=${book.startPage}&to=${book.endPage}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not retrieve extracted pages.');
       setPagesByBook(current => ({ ...current, [book.id]: data.pages || [] }));
@@ -622,6 +642,16 @@ export function BookPlannerScreen() {
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5 }}>{book.extractionMessage}</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className="v-pill-btn" disabled={processingId !== null} onClick={() => void extractBook(book)} style={{ padding: '8px 12px', cursor: processingId !== null ? 'wait' : 'pointer' }}>{processingId === book.id ? 'Extracting…' : book.extractionStatus === 'pending' ? 'Extract PDF text / OCR' : book.extractionStatus === 'processing' ? 'Resume / retry extraction' : 'Re-extract PDF pages'}</button>
+              {book.extractionStatus !== 'pending' && (
+                <button
+                  type="button"
+                  className="v-pill-btn v-pill-btn-accent"
+                  onClick={() => setReviewModalBook(book)}
+                  style={{ padding: '8px 14px', display: 'inline-flex', gap: 6, alignItems: 'center', fontWeight: 600 }}
+                >
+                  <FileText size={14} /> Review Extracted Text
+                </button>
+              )}
               <button type="button" className="v-pill-btn" onClick={() => void openBookAnalytics(book)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                 <Eye size={14} /> Inspect Extracted Pages in BA
               </button>
@@ -724,6 +754,19 @@ export function BookPlannerScreen() {
           }}
           onSendNow={async (assignment) => {
             await sendAssignmentNow(baModalBook, assignment);
+          }}
+        />
+      )}
+
+      {/* Dedicated Book Review Modal */}
+      {reviewModalBook && (
+        <BookReviewModal
+          isOpen={Boolean(reviewModalBook)}
+          book={reviewModalBook}
+          onClose={() => setReviewModalBook(null)}
+          onBookUpdated={(updated) => {
+            setBooks(current => current.map(b => b.id === updated.id ? updated : b));
+            setReviewModalBook(updated);
           }}
         />
       )}

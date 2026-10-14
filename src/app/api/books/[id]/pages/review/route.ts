@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/server/auth';
-import { getBook, listBookPages, markBookPageReviewed, updateBook } from '@/lib/server/books';
+import { getBook, getBookPagesStats, markBookPageReviewed, updateBook } from '@/lib/server/books';
 
 export async function POST(request: Request, context: RouteContext<'/api/books/[id]/pages/review'>) {
   const session = await getSessionUser(request);
@@ -15,8 +15,8 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
   }
   try {
     const page = await markBookPageReviewed(session.userId, id, pdfPage);
-    const pages = await listBookPages(session.userId, id, book.startPage, book.endPage);
-    const pendingReview = pages.filter(item => item.requiresReview && !item.reviewedByUser).length;
+    const stats = await getBookPagesStats(session.userId, id, book.startPage, book.endPage);
+    const pendingReview = stats.unreviewedCount;
     const updated = await updateBook({
       ...book,
       extractionStatus: pendingReview === 0 ? 'completed' : 'needs_review',
@@ -24,7 +24,7 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
         ? 'All selected pages with OCR or extraction warnings have been visually checked against the PDF.'
         : `${pendingReview} selected page(s) still need visual review against the PDF.`,
     });
-    return NextResponse.json({ page, book: updated });
+    return NextResponse.json({ page, book: updated, pendingReviewCount: pendingReview, stats });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Page review failed.' }, { status: 400 });
   }

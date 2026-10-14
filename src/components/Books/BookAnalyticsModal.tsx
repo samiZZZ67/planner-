@@ -96,7 +96,7 @@ export function BookAnalyticsModal({
     setLoadingPages(true);
     try {
       const response = await apiFetch(
-        `/api/books/${encodeURIComponent(book.id)}/pages?from=${book.startPage}&to=${book.endPage}`
+        `/api/books/${encodeURIComponent(book.id)}/pages?all=true&from=${book.startPage}&to=${book.endPage}`
       );
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to load pages.');

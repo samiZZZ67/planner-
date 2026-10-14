@@ -105,25 +105,49 @@ async function ensureBookSchema(sql: NonNullable<ReturnType<typeof getDb>>) {
   await schemaReady;
 }
 
+function getBookPagesPath(bookId: string): string {
+  return path.join(DATA_DIR, bookId, 'pages.json');
+}
+
+function readDiskBookPages(bookId: string): BookPageRecord[] {
+  try {
+    const p = getBookPagesPath(bookId);
+    if (fs.existsSync(p)) {
+      const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (Array.isArray(data)) return data;
+    }
+  } catch {}
+  // Backwards compatibility for legacy records with inline extractedPages
+  const record = readRecords().find(b => b.id === bookId) as any;
+  if (record?.extractedPages && Array.isArray(record.extractedPages)) {
+    return record.extractedPages;
+  }
+  return [];
+}
+
+function writeDiskBookPages(bookId: string, pages: BookPageRecord[]) {
+  const p = getBookPagesPath(bookId);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  const temporaryPath = `${p}.tmp`;
+  fs.writeFileSync(temporaryPath, JSON.stringify(pages, null, 2), 'utf8');
+  fs.renameSync(temporaryPath, p);
+}
+
 async function persistRecord(record: BookRecord) {
+  // Strip extractedPages from the metadata record so books.json and books table don't get bloated
+  const { extractedPages, ...cleanRecord } = record as any;
   const sql = getDb();
   if (sql) {
     await ensureBookSchema(sql);
     await sql`INSERT INTO books (id, user_id, data, created_at, updated_at)
-      VALUES (${record.id}, ${record.userId}, ${JSON.stringify(record)}::jsonb, ${record.createdAt}, ${record.updatedAt})
+      VALUES (${cleanRecord.id}, ${cleanRecord.userId}, ${JSON.stringify(cleanRecord)}::jsonb, ${cleanRecord.createdAt}, ${cleanRecord.updatedAt})
       ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id, data = EXCLUDED.data, updated_at = EXCLUDED.updated_at`;
   }
   const records = readRecords();
-  const index = records.findIndex(item => item.id === record.id && item.userId === record.userId);
-  if (index < 0) records.push(record);
+  const index = records.findIndex(item => item.id === cleanRecord.id && item.userId === cleanRecord.userId);
+  if (index < 0) records.push(cleanRecord);
   else {
-    const prior = records[index] as BookRecord & { extractedPages?: BookPageRecord[] };
-    records[index] = {
-      ...record,
-      ...((record as BookRecord & { extractedPages?: BookPageRecord[] }).extractedPages || prior.extractedPages
-        ? { extractedPages: (record as BookRecord & { extractedPages?: BookPageRecord[] }).extractedPages || prior.extractedPages }
-        : {}),
-    };
+    records[index] = cleanRecord;
   }
   writeRecords(records);
 }
@@ -231,31 +255,123 @@ export async function saveBookPages(book: BookRecord, pages: BookPageRecord[]) {
       }
     }
   }
-  const records = readRecords();
-  const index = records.findIndex(item => item.id === book.id && item.userId === book.userId);
-  if (index < 0) throw new Error('Book record disappeared while saving extracted pages.');
-  const prior = (records[index] as BookRecord & { extractedPages?: BookPageRecord[] }).extractedPages || [];
+
+  // Disk persistence: store page records in dedicated pages.json
+  const prior = readDiskBookPages(book.id);
   const pageMap = new Map(prior.map(page => [page.pdfPage, page]));
   for (const page of pages) pageMap.set(page.pdfPage, page);
-  (records[index] as BookRecord & { extractedPages?: BookPageRecord[] }).extractedPages = [...pageMap.values()].sort((a, b) => a.pdfPage - b.pdfPage);
-  writeRecords(records);
+  const merged = [...pageMap.values()].sort((a, b) => a.pdfPage - b.pdfPage);
+  writeDiskBookPages(book.id, merged);
 }
 
-export async function listBookPages(userId: string, bookId: string, fromPage?: number, toPage?: number): Promise<BookPageRecord[]> {
+export interface BookPagesStats {
+  totalExpected: number;
+  totalExtracted: number;
+  extractedPageNumbers: number[];
+  missingPageNumbers: number[];
+  needsReviewCount: number;
+  unreviewedCount: number;
+  ocrCount: number;
+  emptyCount: number;
+  isComplete: boolean;
+}
+
+export async function getBookPagesStats(
+  userId: string,
+  bookId: string,
+  startPage: number,
+  endPage: number
+): Promise<BookPagesStats> {
+  const sql = getDb();
+  let pages: Array<{ pdfPage: number; method: string; requiresReview: boolean; reviewedByUser: boolean }>;
+  if (sql) {
+    await ensureBookSchema(sql);
+    const rows = await sql`
+      SELECT pdf_page, method, requires_review, reviewed_by_user
+      FROM book_pages
+      WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page BETWEEN ${startPage} AND ${endPage}
+      ORDER BY pdf_page
+    `;
+    pages = rows.map((r: any) => ({
+      pdfPage: Number(r.pdf_page),
+      method: String(r.method),
+      requiresReview: Boolean(r.requires_review),
+      reviewedByUser: Boolean(r.reviewed_by_user),
+    }));
+  } else {
+    const book = readRecords().find(b => b.id === bookId && b.userId === userId);
+    if (!book) {
+      pages = [];
+    } else {
+      const diskPages = readDiskBookPages(bookId);
+      pages = diskPages
+        .filter(p => p.pdfPage >= startPage && p.pdfPage <= endPage)
+        .map(p => ({
+          pdfPage: p.pdfPage,
+          method: p.method,
+          requiresReview: Boolean(p.requiresReview),
+          reviewedByUser: Boolean(p.reviewedByUser),
+        }));
+    }
+  }
+
+  const extractedSet = new Set(pages.map(p => p.pdfPage));
+  const missingPageNumbers: number[] = [];
+  for (let p = startPage; p <= endPage; p++) {
+    if (!extractedSet.has(p)) missingPageNumbers.push(p);
+  }
+
+  const extractedPageNumbers = pages.map(p => p.pdfPage).sort((a, b) => a - b);
+  const totalExpected = endPage - startPage + 1;
+  const needsReviewCount = pages.filter(p => p.requiresReview).length;
+  const unreviewedCount = pages.filter(p => p.requiresReview && !p.reviewedByUser).length;
+  const ocrCount = pages.filter(p => p.method === 'ocr').length;
+  const emptyCount = pages.filter(p => p.method === 'empty').length;
+
+  return {
+    totalExpected,
+    totalExtracted: pages.length,
+    extractedPageNumbers,
+    missingPageNumbers,
+    needsReviewCount,
+    unreviewedCount,
+    ocrCount,
+    emptyCount,
+    isComplete: missingPageNumbers.length === 0,
+  };
+}
+
+export async function listBookPages(
+  userId: string,
+  bookId: string,
+  fromPage?: number,
+  toPage?: number,
+  options?: { summaryOnly?: boolean }
+): Promise<BookPageRecord[]> {
   const sql = getDb();
   if (sql) {
     await ensureBookSchema(sql);
     const rows = fromPage !== undefined && toPage !== undefined
-      ? await sql`SELECT book_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, visual_preview, updated_at FROM book_pages WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page BETWEEN ${fromPage} AND ${toPage} ORDER BY pdf_page`
-      : await sql`SELECT book_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, visual_preview, updated_at FROM book_pages WHERE book_id = ${bookId} AND user_id = ${userId} ORDER BY pdf_page`;
+      ? (options?.summaryOnly
+          ? await sql`SELECT book_id, pdf_page, '' AS text, method, confidence, warnings, requires_review, reviewed_by_user, visual_preview, updated_at FROM book_pages WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page BETWEEN ${fromPage} AND ${toPage} ORDER BY pdf_page`
+          : await sql`SELECT book_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, visual_preview, updated_at FROM book_pages WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page BETWEEN ${fromPage} AND ${toPage} ORDER BY pdf_page`)
+      : (options?.summaryOnly
+          ? await sql`SELECT book_id, pdf_page, '' AS text, method, confidence, warnings, requires_review, reviewed_by_user, visual_preview, updated_at FROM book_pages WHERE book_id = ${bookId} AND user_id = ${userId} ORDER BY pdf_page`
+          : await sql`SELECT book_id, pdf_page, text, method, confidence, warnings, requires_review, reviewed_by_user, visual_preview, updated_at FROM book_pages WHERE book_id = ${bookId} AND user_id = ${userId} ORDER BY pdf_page`);
     return rows.map((row: any) => ({
       bookId: row.book_id, pdfPage: Number(row.pdf_page), text: row.text, method: row.method,
       confidence: row.confidence === null ? null : Number(row.confidence),
       warnings: Array.isArray(row.warnings) ? row.warnings : [], requiresReview: Boolean(row.requires_review), reviewedByUser: Boolean(row.reviewed_by_user), visualPreview: row.visual_preview || undefined, updatedAt: Number(row.updated_at),
     }));
   }
-  const record = readRecords().find(book => book.id === bookId && book.userId === userId) as (BookRecord & { extractedPages?: BookPageRecord[] }) | undefined;
-  return (record?.extractedPages || []).filter(page => fromPage === undefined || toPage === undefined || (page.pdfPage >= fromPage && page.pdfPage <= toPage));
+  const record = readRecords().find(book => book.id === bookId && book.userId === userId);
+  if (!record) return [];
+  const diskPages = readDiskBookPages(bookId);
+  const filtered = diskPages.filter(page => fromPage === undefined || toPage === undefined || (page.pdfPage >= fromPage && page.pdfPage <= toPage));
+  if (options?.summaryOnly) {
+    return filtered.map(p => ({ ...p, text: '' }));
+  }
+  return filtered;
 }
 
 export async function markBookPageReviewed(userId: string, bookId: string, pdfPage: number) {
@@ -269,16 +385,9 @@ export async function markBookPageReviewed(userId: string, bookId: string, pdfPa
     await ensureBookSchema(sql);
     await sql`UPDATE book_pages SET reviewed_by_user = TRUE, updated_at = ${reviewed.updatedAt} WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page = ${pdfPage}`;
   }
-  const records = readRecords();
-  const index = records.findIndex(book => book.id === bookId && book.userId === userId);
-  if (index >= 0) {
-    const record = records[index] as BookRecord & { extractedPages?: BookPageRecord[] };
-    if (record.extractedPages) {
-      record.extractedPages = record.extractedPages.map(item => item.pdfPage === pdfPage ? reviewed : item);
-      records[index] = record;
-      writeRecords(records);
-    }
-  }
+  const diskPages = readDiskBookPages(bookId);
+  const updatedDiskPages = diskPages.map(item => item.pdfPage === pdfPage ? reviewed : item);
+  writeDiskBookPages(bookId, updatedDiskPages);
   return reviewed;
 }
 
@@ -311,16 +420,9 @@ export async function updateBookPageText(userId: string, bookId: string, pdfPage
       WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page = ${pdfPage}`;
   }
 
-  const records = readRecords();
-  const index = records.findIndex(book => book.id === bookId && book.userId === userId);
-  if (index >= 0) {
-    const record = records[index] as BookRecord & { extractedPages?: BookPageRecord[] };
-    if (record.extractedPages) {
-      record.extractedPages = record.extractedPages.map(item => item.pdfPage === pdfPage ? updatedPage : item);
-      records[index] = record;
-      writeRecords(records);
-    }
-  }
+  const diskPages = readDiskBookPages(bookId);
+  const updatedDiskPages = diskPages.map(item => item.pdfPage === pdfPage ? updatedPage : item);
+  writeDiskBookPages(bookId, updatedDiskPages);
   return updatedPage;
 }
 
