@@ -282,6 +282,48 @@ export async function markBookPageReviewed(userId: string, bookId: string, pdfPa
   return reviewed;
 }
 
+export async function updateBookPageText(userId: string, bookId: string, pdfPage: number, text: string): Promise<BookPageRecord> {
+  const pages = await listBookPages(userId, bookId, pdfPage, pdfPage);
+  const page = pages[0];
+  if (!page) throw new Error(`Extracted page ${pdfPage} not found.`);
+  const cleanText = typeof text === 'string' ? text : '';
+  const isNowNotEmpty = cleanText.trim().length > 0;
+  const updatedPage: BookPageRecord = {
+    ...page,
+    text: cleanText,
+    method: isNowNotEmpty && page.method === 'empty' ? 'ocr' : page.method,
+    requiresReview: false,
+    reviewedByUser: true,
+    warnings: isNowNotEmpty ? page.warnings.filter(w => !/empty|unreadable/i.test(w)) : page.warnings,
+    updatedAt: Date.now(),
+  };
+
+  const sql = getDb();
+  if (sql) {
+    await ensureBookSchema(sql);
+    await sql`UPDATE book_pages SET
+      text = ${updatedPage.text},
+      method = ${updatedPage.method},
+      requires_review = FALSE,
+      reviewed_by_user = TRUE,
+      warnings = ${JSON.stringify(updatedPage.warnings)}::jsonb,
+      updated_at = ${updatedPage.updatedAt}
+      WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page = ${pdfPage}`;
+  }
+
+  const records = readRecords();
+  const index = records.findIndex(book => book.id === bookId && book.userId === userId);
+  if (index >= 0) {
+    const record = records[index] as BookRecord & { extractedPages?: BookPageRecord[] };
+    if (record.extractedPages) {
+      record.extractedPages = record.extractedPages.map(item => item.pdfPage === pdfPage ? updatedPage : item);
+      records[index] = record;
+      writeRecords(records);
+    }
+  }
+  return updatedPage;
+}
+
 export async function getBookPdfPath(userId: string, id: string): Promise<string | null> {
   const record = await getBook(userId, id);
   if (!record) return null;

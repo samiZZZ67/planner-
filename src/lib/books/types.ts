@@ -20,6 +20,8 @@ export interface BookRecord {
   extractionMessage: string;
   extractionProgress?: { completedPages: number; totalPages: number };
   totalPdfPages?: number;
+  sectionsPerDay?: number;
+  postingTimes?: string[];
   autoPublish?: boolean;
   automationStatus?: 'queued' | 'processing' | 'ready' | 'needs_review' | 'failed';
   automationAttempts?: number;
@@ -39,6 +41,8 @@ export interface BookAssignmentRecord {
   userId: string;
   bookId: string;
   dayNumber: number;
+  sectionNumber?: number;
+  postingTime?: string;
   scheduledDate: string;
   startPdfPage: number;
   endPdfPage: number;
@@ -46,6 +50,9 @@ export interface BookAssignmentRecord {
   estimatedMinutes: number;
   rationale: string;
   status: 'draft' | 'approved' | 'completed' | 'superseded';
+  deliveryStatus?: 'pending' | 'scheduled' | 'sending' | 'sent' | 'failed';
+  lastDeliveryError?: string;
+  deliveredAt?: number;
   studyNotes?: BookStudyNotes;
   updatedAt: number;
 }
@@ -72,4 +79,20 @@ export interface BookPageRecord {
   reviewedByUser?: boolean;
   visualPreview?: { filename: string; mimeType: 'image/jpeg'; width: number; height: number };
   updatedAt: number;
+}
+
+export function defaultPostingTimes(sectionsPerDay: number, fallbackTime = '08:00'): string[] {
+  if (sectionsPerDay <= 1) return [fallbackTime || '08:00'];
+  if (sectionsPerDay === 2) return ['09:00', '18:00'];
+  if (sectionsPerDay === 3) return ['08:00', '13:00', '19:00'];
+  if (sectionsPerDay === 4) return ['08:00', '12:00', '16:00', '20:00'];
+  const times: string[] = [];
+  const startHour = 8;
+  const endHour = 20;
+  const step = (endHour - startHour) / (sectionsPerDay - 1);
+  for (let i = 0; i < sectionsPerDay; i++) {
+    const h = Math.round(startHour + i * step);
+    times.push(`${String(h).padStart(2, '0')}:00`);
+  }
+  return times;
 }

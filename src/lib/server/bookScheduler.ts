@@ -28,9 +28,14 @@ function readJson<T>(file: string, empty: T): T {
 }
 function writeJson<T>(file: string, data: T) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const temp = `${file}.tmp`;
+  const temp = `${file}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   fs.writeFileSync(temp, JSON.stringify(data, null, 2), 'utf8');
-  fs.renameSync(temp, file);
+  try {
+    fs.renameSync(temp, file);
+  } catch {
+    fs.copyFileSync(temp, file);
+    try { fs.unlinkSync(temp); } catch {}
+  }
 }
 function readJobs() { return readJson<BookPublishJob[]>(JOBS_PATH, []); }
 function readSettings() { return readJson<AutomationSetting[]>(SETTINGS_PATH, []); }

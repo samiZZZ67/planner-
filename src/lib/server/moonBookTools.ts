@@ -406,7 +406,20 @@ export async function executeMoonBookIntent(
       deliveryResult = await publishLoadPlanPagesToTelegram(userId, book, assignment, pages, previous);
     }
 
-    await updateBookAssignment({ ...assignment, status: 'completed', updatedAt: Date.now() });
+    await updateBookAssignment({
+      ...assignment,
+      status: 'completed',
+      deliveryStatus: 'sent',
+      deliveredAt: Date.now(),
+      lastDeliveryError: undefined,
+      updatedAt: Date.now(),
+    });
+    const nextCurrentPage = Math.min(book.endPage + 1, Math.max(book.currentPage, assignment.endPdfPage + 1));
+    await updateBook({
+      ...book,
+      currentPage: nextCurrentPage,
+      status: nextCurrentPage > book.endPage ? 'ready' : book.status,
+    });
     const job = (await listBookPublishJobs(userId)).find(item => item.assignmentId === assignment!.id);
     if (job) await updateBookPublishJob({ ...job, status: 'completed', lastError: '' });
 

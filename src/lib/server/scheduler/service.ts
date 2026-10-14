@@ -1,10 +1,11 @@
 import { claimDueBookPublishJobs, updateBookPublishJob } from '../bookScheduler';
 import { listBookAssignments, updateBookAssignment } from '../bookAssignments';
-import { getBook, listBookPages } from '../books';
+import { getBook, listBookPages, updateBook } from '../books';
 import { publishApprovedAssignment, sendTelegramTextToChannel } from '../telegram';
 import { prepareAutomaticBookPublishing } from '../autoBookPublishing';
 import { claimDueScheduledMessages, updateScheduledMessage } from './scheduledMessages';
 import type { SchedulerExecutionResult } from './types';
+import type { BookAssignmentRecord } from '../../books/types';
 
 let isCycleRunning = false;
 
@@ -64,10 +65,12 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
     }
 
     for (const job of dueBookJobs) {
+      let currentAssignment: BookAssignmentRecord | undefined;
       try {
         const book = await getBook(job.userId, job.bookId);
         const assignments = book ? await listBookAssignments(job.userId, job.bookId) : [];
         const assignment = assignments.find(item => item.id === job.assignmentId);
+        currentAssignment = assignment;
 
         if (!book || !assignment) {
           throw new Error('Book or reading assignment record no longer exists.');
@@ -99,8 +102,24 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
         console.log(`[Scheduler] 🚀 Dispatching Day ${assignment.dayNumber} of "${book.title}" to Telegram...`);
         const delivery = await publishApprovedAssignment(job.userId, book, assignment, pages, previous);
 
-        // Mark assignment completed and update job record
-        await updateBookAssignment({ ...assignment, status: 'completed', updatedAt: Date.now() });
+        // Mark assignment completed and update deliveryStatus
+        await updateBookAssignment({
+          ...assignment,
+          status: 'completed',
+          deliveryStatus: 'sent',
+          deliveredAt: Date.now(),
+          lastDeliveryError: undefined,
+          updatedAt: Date.now(),
+        });
+
+        // Automatically advance book.currentPage
+        const nextCurrentPage = Math.min(book.endPage + 1, Math.max(book.currentPage, assignment.endPdfPage + 1));
+        await updateBook({
+          ...book,
+          currentPage: nextCurrentPage,
+          status: nextCurrentPage > book.endPage ? 'ready' : book.status,
+        });
+
         await updateBookPublishJob({
           ...job,
           status: 'completed',
@@ -112,6 +131,15 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
       } catch (jobErr: any) {
         const errMsg = jobErr instanceof Error ? jobErr.message : 'Publishing failed';
         console.error(`[Scheduler] ❌ Failed publishing assignment ${job.assignmentId}:`, errMsg);
+
+        if (currentAssignment) {
+          await updateBookAssignment({
+            ...currentAssignment,
+            deliveryStatus: 'failed',
+            lastDeliveryError: errMsg,
+            updatedAt: Date.now(),
+          }).catch(() => undefined);
+        }
 
         const deliveryMeta = (jobErr as any)?.delivery as { safeToRetry?: boolean; retryAfterAt?: number | null } | undefined;
         if (deliveryMeta?.safeToRetry && deliveryMeta.retryAfterAt && job.attemptCount < 5) {

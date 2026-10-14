@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { BookOpen, CheckCircle2, ChevronDown, ChevronUp, Clock3, FileUp, LoaderCircle, LockKeyhole, Pencil, Save, Send, Trash2, TriangleAlert, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BarChart3, BookOpen, CheckCircle2, ChevronDown, ChevronUp, Clock3, Eye, FileUp, LoaderCircle, LockKeyhole, Pencil, Save, Send, Trash2, TriangleAlert, X } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
 import { notifyFeedback } from '@/lib/utils/actionFeedback';
+import { BookAnalyticsModal } from './BookAnalyticsModal';
 import type { BookAssignmentRecord, BookPageRecord, BookRecord, BookStudyNotes } from '@/lib/books/types';
 
 const fieldStyle: React.CSSProperties = { display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 };
@@ -94,6 +95,20 @@ export function BookPlannerScreen() {
   const [bookDraft, setBookDraft] = useState<Partial<BookRecord>>({});
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const previewUrlsRef = useRef<Record<string, string>>({});
+  const [baModalBook, setBaModalBook] = useState<BookRecord | null>(null);
+
+  const openBookAnalytics = useCallback(async (book: BookRecord) => {
+    setBaModalBook(book);
+    if (!assignmentsByBook[book.id]) {
+      try {
+        const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments`);
+        const data = await response.json();
+        if (response.ok && data.assignments) {
+          setAssignmentsByBook(current => ({ ...current, [book.id]: data.assignments }));
+        }
+      } catch {}
+    }
+  }, [assignmentsByBook]);
 
   const showNotice = useCallback((msg: string) => {
     setNotice(msg);
@@ -279,7 +294,11 @@ export function BookPlannerScreen() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not send this section to Telegram.');
 
-      updateAssignmentState(book.id, { ...assignment, status: 'completed' });
+      updateAssignmentState(book.id, { ...assignment, status: 'completed', deliveryStatus: 'sent', deliveredAt: Date.now() });
+      if (data.book) {
+        setBooks(current => current.map(item => item.id === book.id ? data.book : item));
+        setBaModalBook(current => current && current.id === book.id ? data.book : current);
+      }
       const channel = data.channel || data.delivery?.channel || 'Telegram channel';
       const msgIds = data.delivery?.telegramMessageIds?.length
         ? ` (Telegram message ID: ${data.delivery.telegramMessageIds.join(', ')})`
@@ -462,13 +481,121 @@ export function BookPlannerScreen() {
               <div><strong>{book.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{book.author}</div></div>
               <span style={{ fontSize: 12, color: book.automationStatus === 'failed' || book.extractionStatus === 'failed' ? '#fca5a5' : book.automationStatus === 'ready' ? '#86efac' : '#fbbf24' }}>{book.automationStatus === 'processing' ? 'Preparing daily posts…' : book.automationStatus === 'needs_review' ? 'Waiting for page review' : book.automationStatus === 'failed' ? 'Automation needs attention' : book.automationStatus === 'ready' ? 'Daily Telegram posts active' : 'Daily Telegram posts queued'}</span>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="v-pill-btn"
+                onClick={() => void openBookAnalytics(book)}
+                style={{
+                  padding: '7px 12px',
+                  display: 'inline-flex',
+                  gap: 6,
+                  alignItems: 'center',
+                  background: 'rgba(99, 102, 241, 0.2)',
+                  borderColor: 'rgba(99, 102, 241, 0.45)',
+                  color: '#a5b4fc',
+                  fontWeight: 600,
+                }}
+              >
+                <BarChart3 size={15} />
+                <span>BA (Book Analytics)</span>
+              </button>
               <button type="button" className="v-pill-btn" aria-expanded={!collapsedBooks.has(book.id)} onClick={() => setCollapsedBooks(current => { const next = new Set(current); if (next.has(book.id)) next.delete(book.id); else next.add(book.id); return next; })} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center' }}>{collapsedBooks.has(book.id) ? <><ChevronDown size={15} /> Expand</> : <><ChevronUp size={15} /> Collapse</>}</button>
               <button type="button" className="v-pill-btn" onClick={() => beginEdit(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center' }}><Pencil size={14} /> Edit</button>
               <button type="button" className="v-pill-btn" disabled={deletingBookId === book.id} onClick={() => void removeBook(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center', color: '#fca5a5', cursor: deletingBookId === book.id ? 'wait' : 'pointer' }}>
                 <Trash2 size={14} /> {deletingBookId === book.id ? 'Deleting…' : 'Delete'}
               </button>
             </div>
+
+            {/* Current Reading Status Card */}
+            {(() => {
+              const bookAssignments = assignmentsByBook[book.id] || [];
+              const totalSelected = Math.max(1, book.endPage - book.startPage + 1);
+              const pagesRead = Math.max(0, Math.min(totalSelected, (book.currentPage || book.startPage) - book.startPage));
+              const progressPct = Math.min(100, Math.round((pagesRead / totalSelected) * 100));
+              const remainingPages = Math.max(0, book.endPage - (book.currentPage - 1));
+              const nextPending = bookAssignments
+                .filter(a => a.status !== 'completed' && a.status !== 'superseded')
+                .sort((a, b) => a.startPdfPage - b.startPdfPage)[0];
+
+              return (
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 12,
+                    background: 'var(--v-glass-bg-subtle)',
+                    border: '1px solid var(--v-glass-border)',
+                    display: 'grid',
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 12 }}>
+                    <div>
+                      <strong style={{ color: 'var(--text-primary)' }}>Reading Position: Page {book.currentPage}</strong>
+                      <span style={{ color: 'var(--text-muted)' }}> (pp. {book.startPage}–{book.endPage})</span>
+                    </div>
+                    <div style={{ color: 'var(--text-secondary)' }}>
+                      <span style={{ color: '#4ade80', fontWeight: 600 }}>{pagesRead} pages sent</span>
+                      {' · '}
+                      <span>{remainingPages} pages remaining</span>
+                      {' · '}
+                      <span style={{ color: '#60a5fa', fontWeight: 700 }}>{progressPct}%</span>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div style={{ width: '100%', height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${progressPct}%`,
+                        borderRadius: 999,
+                        background: 'linear-gradient(90deg, #3b82f6, #10b981)',
+                        transition: 'width 0.3s ease',
+                      }}
+                    />
+                  </div>
+
+                  {/* Next Pending Section Bar */}
+                  {nextPending ? (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 2 }}>
+                      <div style={{ fontSize: 12 }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Current Pending: </span>
+                        <strong style={{ color: 'var(--text-primary)' }}>
+                          Day {nextPending.dayNumber}{nextPending.sectionNumber ? ` · Part ${nextPending.sectionNumber}` : ''}
+                        </strong>
+                        <span style={{ color: 'var(--accent-color, #60a5fa)' }}> (pp. {nextPending.startPdfPage}–{nextPending.endPdfPage})</span>
+                        <span style={{ color: 'var(--text-muted)' }}> · Scheduled: {nextPending.scheduledDate} {nextPending.postingTime || book.postingTime}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            padding: '2px 7px',
+                            borderRadius: 6,
+                            fontWeight: 600,
+                            background: nextPending.deliveryStatus === 'failed' ? 'rgba(239, 68, 68, 0.2)' : nextPending.status === 'approved' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                            color: nextPending.deliveryStatus === 'failed' ? '#fca5a5' : nextPending.status === 'approved' ? '#93c5fd' : '#fcd34d',
+                          }}
+                        >
+                          {nextPending.deliveryStatus === 'failed' ? 'Failed' : nextPending.status === 'approved' ? 'Scheduled' : 'Draft'}
+                        </span>
+                        <SendNowButton
+                          assignment={nextPending}
+                          sending={sendingAssignmentId === nextPending.id}
+                          onSend={() => void sendAssignmentNow(book, nextPending)}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: '#4ade80', fontWeight: 600 }}>
+                      ✓ All scheduled sections for this book have been completed and delivered to Telegram.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {!collapsedBooks.has(book.id) && <>
             {editingBookId === book.id && <section style={{ display: 'grid', gap: 12, padding: 14, borderRadius: 12, background: 'var(--v-glass-bg-subtle)', border: '1px solid var(--v-glass-border)' }}>
               <strong>Edit this book</strong>
@@ -497,21 +624,10 @@ export function BookPlannerScreen() {
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5 }}>{book.extractionMessage}</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className="v-pill-btn" disabled={processingId !== null} onClick={() => void extractBook(book)} style={{ padding: '8px 12px', cursor: processingId !== null ? 'wait' : 'pointer' }}>{processingId === book.id ? 'Extracting…' : book.extractionStatus === 'pending' ? 'Extract PDF text / OCR' : book.extractionStatus === 'processing' ? 'Resume / retry extraction' : 'Re-extract PDF pages'}</button>
-              {(book.extractionStatus === 'completed' || book.extractionStatus === 'needs_review') && (
-                <button type="button" className="v-pill-btn" disabled={loadingPreviewsBookId === book.id} onClick={() => void previewPages(book)} style={{ padding: '8px 12px', cursor: loadingPreviewsBookId === book.id ? 'wait' : 'pointer' }}>
-                  {loadingPreviewsBookId === book.id ? 'Loading previews…' : 'Preview extracted pages'}
-                </button>
-              )}
+              <button type="button" className="v-pill-btn" onClick={() => void openBookAnalytics(book)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                <Eye size={14} /> Inspect Extracted Pages in BA
+              </button>
             </div>
-            {pagesByBook[book.id]?.map(page => (
-              <section key={page.pdfPage} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 12, padding: 12 }}>
-                <strong style={{ fontSize: 13 }}>Original PDF page {page.pdfPage} · {page.method === 'ocr' ? `OCR estimate (${page.confidence?.toFixed(1) ?? '—'}%)${page.reviewedByUser ? ' · visually checked' : ''}` : page.method === 'empty' ? 'Unreadable / no text' : 'Selectable PDF text'}</strong>
-                {previewUrls[`${book.id}:${page.pdfPage}`] && <figure style={{ margin: '10px 0', display: 'grid', gap: 5 }}><img src={previewUrls[`${book.id}:${page.pdfPage}`]} alt={`Visual preview of original PDF page ${page.pdfPage}, including its images and diagrams`} style={{ display: 'block', width: '100%', maxHeight: 720, objectFit: 'contain', borderRadius: 8, background: '#fff' }} /><figcaption style={{ color: 'var(--text-muted)', fontSize: 11 }}>Original page image · includes embedded pictures, diagrams, and layout</figcaption></figure>}
-                {page.warnings.map(warning => <p key={warning} style={{ margin: '6px 0', color: '#fbbf24', fontSize: 12 }}>{warning}</p>)}
-                <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 360, overflow: 'auto', margin: '10px 0 0', font: '13px/1.6 ui-monospace,Consolas,monospace', color: 'var(--text-primary)' }}>{page.text || '[No text extracted from this page]'}</pre>
-                {page.requiresReview && page.text && !page.reviewedByUser && <button type="button" className="v-pill-btn" onClick={() => void markPageReviewed(book, page.pdfPage)} style={{ marginTop: 10, padding: '8px 12px' }}>I checked this page against the PDF</button>}
-              </section>
-            ))}
             {book.extractionStatus === 'completed' && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button type="button" className="v-pill-btn" disabled={generatingPlanBookId === book.id} onClick={() => void generatePlan(book)} style={{ padding: '8px 12px', cursor: generatingPlanBookId === book.id ? 'wait' : 'pointer' }}>
                 {generatingPlanBookId === book.id ? 'Generating plan…' : 'Generate concept-based plan'}
@@ -522,7 +638,7 @@ export function BookPlannerScreen() {
             </div>}
             {assignmentsByBook[book.id]?.map(assignment => (
               <section key={assignment.id} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
-                <strong>Day {assignment.dayNumber} · {assignment.scheduledDate} · PDF pages {assignment.startPdfPage}–{assignment.endPdfPage}</strong>
+                <strong>Day {assignment.dayNumber}{assignment.sectionNumber ? ` · Part ${assignment.sectionNumber}` : ''} · {assignment.scheduledDate} · PDF pages {assignment.startPdfPage}–{assignment.endPdfPage}</strong>
                 <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{assignment.status} · estimated {assignment.estimatedMinutes} minutes · original text remains in extracted pages</span>
                 <div style={{ display: 'grid', gap: 5 }}>{assignment.concepts.map((concept, index) => <div key={`${assignment.id}-${index}`} style={{ fontSize: 13 }}><strong>{concept.title}</strong><div style={{ color: 'var(--text-secondary)' }}>{concept.concept}</div></div>)}</div>
                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>Why this section: {assignment.rationale}</p>
@@ -593,6 +709,26 @@ export function BookPlannerScreen() {
           </article>
         ))}
       </div>
+
+      {/* Book Analytics Modal */}
+      {baModalBook && (
+        <BookAnalyticsModal
+          isOpen={Boolean(baModalBook)}
+          onClose={() => setBaModalBook(null)}
+          book={baModalBook}
+          assignments={assignmentsByBook[baModalBook.id] || []}
+          onBookUpdated={(updated) => {
+            setBooks(current => current.map(b => b.id === updated.id ? updated : b));
+            setBaModalBook(updated);
+          }}
+          onAssignmentsUpdated={(updatedList) => {
+            setAssignmentsByBook(current => ({ ...current, [baModalBook.id]: updatedList }));
+          }}
+          onSendNow={async (assignment) => {
+            await sendAssignmentNow(baModalBook, assignment);
+          }}
+        />
+      )}
     </section>
   );
 }

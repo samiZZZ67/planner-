@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { sendChatCompletionWithFallback } from './freellm/gateway';
 import { getGatewayConfig } from './freellm/gateway';
-import type { BookAssignmentRecord, BookConcept, BookPageRecord, BookRecord } from '../books/types';
+import { defaultPostingTimes, type BookAssignmentRecord, type BookConcept, type BookPageRecord, type BookRecord } from '../books/types';
 
 export interface PlannedSection extends BookConcept {
   id: string;
@@ -158,4 +158,128 @@ export async function generateConceptReadingPlan(options: {
     };
   });
   return { assignments, issues: [...validatedPlan.issues, ...(scheduleIssue ? [scheduleIssue] : [])], model: planResult.model, provider: planResult.providerUsed };
+}
+
+export function validateAssignmentsContiguous(
+  assignments: Array<{ startPdfPage: number; endPdfPage: number; dayNumber: number; sectionNumber?: number }>,
+  expectedStart?: number,
+  expectedEnd?: number,
+) {
+  if (!assignments.length) throw new Error('No assignments provided.');
+  const sorted = [...assignments].sort((a, b) => a.startPdfPage - b.startPdfPage || a.endPdfPage - b.endPdfPage);
+  if (expectedStart !== undefined && sorted[0].startPdfPage !== expectedStart) {
+    throw new Error(`Plan must start at page ${expectedStart}, but starts at page ${sorted[0].startPdfPage}.`);
+  }
+  if (expectedEnd !== undefined && sorted[sorted.length - 1].endPdfPage !== expectedEnd) {
+    throw new Error(`Plan must end at page ${expectedEnd}, but ends at page ${sorted[sorted.length - 1].endPdfPage}.`);
+  }
+  for (let i = 0; i < sorted.length; i++) {
+    const curr = sorted[i];
+    if (curr.startPdfPage > curr.endPdfPage) {
+      throw new Error(`Section has invalid range: start page ${curr.startPdfPage} > end page ${curr.endPdfPage}.`);
+    }
+    if (i > 0) {
+      const prev = sorted[i - 1];
+      if (curr.startPdfPage <= prev.endPdfPage) {
+        throw new Error(`Overlapping page range detected: pages ${prev.startPdfPage}–${prev.endPdfPage} overlaps with pages ${curr.startPdfPage}–${curr.endPdfPage}.`);
+      }
+      if (curr.startPdfPage > prev.endPdfPage + 1) {
+        throw new Error(`Gap in reading pages detected between page ${prev.endPdfPage} and page ${curr.startPdfPage}.`);
+      }
+    }
+  }
+  return true;
+}
+
+export { defaultPostingTimes } from '../books/types';
+
+export async function generateFlexibleReadingPlan(options: {
+  book: BookRecord;
+  pages: BookPageRecord[];
+  sectionsPerDay?: number;
+  postingTimes?: string[];
+  model?: string;
+  startFromPage?: number;
+}) {
+  const { book, pages } = options;
+  const sectionsPerDay = Math.max(1, Math.min(10, Math.floor(options.sectionsPerDay || book.sectionsPerDay || 1)));
+  const times = (options.postingTimes && options.postingTimes.length >= sectionsPerDay)
+    ? options.postingTimes
+    : defaultPostingTimes(sectionsPerDay, book.postingTime);
+
+  const startPage = options.startFromPage !== undefined ? options.startFromPage : Math.max(book.startPage, book.currentPage || book.startPage);
+  const endPage = book.endPage;
+
+  if (startPage > endPage) {
+    throw new Error(`Current page (${startPage}) is already past the end page (${endPage}). No remaining pages to plan.`);
+  }
+
+  const relevantPages = pages.filter(p => p.pdfPage >= startPage && p.pdfPage <= endPage).sort((a, b) => a.pdfPage - b.pdfPage);
+  if (!relevantPages.length) {
+    throw new Error(`No extracted pages found in range ${startPage}–${endPage}. Extract the book pages first.`);
+  }
+
+  const unreadable = relevantPages.filter(p => p.method === 'empty' || !p.text.trim());
+  if (unreadable.length) {
+    throw new Error(`Pages ${unreadable.map(p => p.pdfPage).join(', ')} have no readable text. Edit or resolve them in Book Analytics before generating a plan.`);
+  }
+
+  const durationDays = Math.max(1, book.durationDays || 30);
+  const totalSections = Math.min(relevantPages.length, durationDays * sectionsPerDay);
+
+  const assignments: BookAssignmentRecord[] = [];
+  const now = Date.now();
+  let prevEnd = startPage - 1;
+
+  for (let i = 0; i < totalSections; i++) {
+    const chunkStartIdx = Math.floor(i * relevantPages.length / totalSections);
+    const chunkEndIdx = Math.floor((i + 1) * relevantPages.length / totalSections) - 1;
+    const chunk = relevantPages.slice(chunkStartIdx, chunkEndIdx + 1);
+    if (!chunk.length) continue;
+
+    const startPdfPage = prevEnd + 1;
+    const endPdfPage = i === totalSections - 1 ? endPage : chunk[chunk.length - 1].pdfPage;
+    prevEnd = endPdfPage;
+
+    const dayIndex = Math.floor(i / sectionsPerDay);
+    const dayNumber = dayIndex + 1;
+    const sectionNumber = (i % sectionsPerDay) + 1;
+    const scheduledDate = plusDays(book.startDate || new Date().toISOString().slice(0, 10), dayIndex);
+    const postingTime = times[sectionNumber - 1] || book.postingTime || '08:00';
+
+    const firstPageLines = chunk[0].text.split('\n').map(l => l.trim()).filter(l => l.length > 3 && !/^\d+$/.test(l));
+    const titleCandidate = firstPageLines[0]?.slice(0, 120) || `Section ${i + 1}`;
+    const conceptSummary = `Study and key concepts from pages ${startPdfPage}–${endPdfPage} of "${book.title}".`;
+
+    assignments.push({
+      id: randomUUID(),
+      userId: book.userId,
+      bookId: book.id,
+      dayNumber,
+      sectionNumber,
+      postingTime,
+      scheduledDate,
+      startPdfPage,
+      endPdfPage,
+      concepts: [{
+        title: titleCandidate,
+        concept: conceptSummary,
+        estimatedMinutes: Math.max(10, Math.ceil((endPdfPage - startPdfPage + 1) * 2)),
+      }],
+      estimatedMinutes: Math.max(10, Math.ceil((endPdfPage - startPdfPage + 1) * 2)),
+      rationale: `Day ${dayNumber} · Part ${sectionNumber}: Covers pages ${startPdfPage}–${endPdfPage}.`,
+      status: 'draft',
+      deliveryStatus: 'pending',
+      updatedAt: now,
+    });
+  }
+
+  validateAssignmentsContiguous(assignments, startPage, endPage);
+
+  return {
+    assignments,
+    issues: [],
+    model: options.model || 'flexible-rule-planner',
+    provider: 'NightPlanner Core',
+  };
 }

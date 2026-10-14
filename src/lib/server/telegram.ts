@@ -52,9 +52,14 @@ function readDeliveries(): TelegramDeliveryRecord[] {
 
 function writeDeliveries(records: TelegramDeliveryRecord[]) {
   fs.mkdirSync(path.dirname(DELIVERY_PATH), { recursive: true });
-  const temp = `${DELIVERY_PATH}.tmp`;
+  const temp = `${DELIVERY_PATH}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   fs.writeFileSync(temp, JSON.stringify(records, null, 2), 'utf8');
-  fs.renameSync(temp, DELIVERY_PATH);
+  try {
+    fs.renameSync(temp, DELIVERY_PATH);
+  } catch {
+    fs.copyFileSync(temp, DELIVERY_PATH);
+    try { fs.unlinkSync(temp); } catch {}
+  }
 }
 
 function readSendReceipts(): TelegramSendReceipt[] {
@@ -75,9 +80,14 @@ async function saveSendReceipt(receipt: TelegramSendReceipt) {
     const records = readSendReceipts();
     records.push(receipt);
     fs.mkdirSync(path.dirname(SEND_RECEIPTS_PATH), { recursive: true });
-    const temp = `${SEND_RECEIPTS_PATH}.tmp`;
+    const temp = `${SEND_RECEIPTS_PATH}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
     fs.writeFileSync(temp, JSON.stringify(records.slice(-500), null, 2), 'utf8');
-    fs.renameSync(temp, SEND_RECEIPTS_PATH);
+    try {
+      fs.renameSync(temp, SEND_RECEIPTS_PATH);
+    } catch {
+      fs.copyFileSync(temp, SEND_RECEIPTS_PATH);
+      try { fs.unlinkSync(temp); } catch {}
+    }
   } catch (error) {
     // A logging failure must not turn Telegram's confirmed response into a false send failure.
     console.error('[Telegram] Could not save the direct-send receipt:', error);

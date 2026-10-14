@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/server/auth';
-import { getBook, listBookPages } from '@/lib/server/books';
+import { getBook, listBookPages, updateBook } from '@/lib/server/books';
 import { listBookAssignments, updateBookAssignment } from '@/lib/server/bookAssignments';
 import { publishApprovedAssignment, publishLoadPlanPagesToTelegram } from '@/lib/server/telegram';
 import { listBookPublishJobs, updateBookPublishJob } from '@/lib/server/bookScheduler';
@@ -43,15 +43,38 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
       bot = result.bot;
     }
 
-    // Preserve the original schedule and all dates; mark status completed
-    await updateBookAssignment({ ...assignment, status: 'completed', updatedAt: Date.now() });
+    // Preserve the original schedule and all dates; mark status completed and deliveryStatus sent
+    await updateBookAssignment({
+      ...assignment,
+      status: 'completed',
+      deliveryStatus: 'sent',
+      deliveredAt: Date.now(),
+      lastDeliveryError: undefined,
+      updatedAt: Date.now(),
+    });
+
+    // Advance book.currentPage to assignment.endPdfPage + 1
+    const nextCurrentPage = Math.min(book.endPage + 1, Math.max(book.currentPage, assignment.endPdfPage + 1));
+    const updatedBook = await updateBook({
+      ...book,
+      currentPage: nextCurrentPage,
+      status: nextCurrentPage > book.endPage ? 'ready' : book.status,
+    });
 
     const job = (await listBookPublishJobs(session.userId)).find(item => item.assignmentId === assignmentId);
     if (job) await updateBookPublishJob({ ...job, status: 'completed', lastError: '' });
 
-    return NextResponse.json({ ok: true, delivery, channel, bot });
+    return NextResponse.json({ ok: true, delivery, channel, bot, book: updatedBook });
   } catch (error) {
     const failure = error as Error & { delivery?: unknown };
+    // Record failure status on assignment without premature page advancement
+    await updateBookAssignment({
+      ...assignment,
+      deliveryStatus: 'failed',
+      lastDeliveryError: failure.message,
+      updatedAt: Date.now(),
+    }).catch(() => undefined);
+
     const retry = failure.delivery as { safeToRetry?: boolean; retryAfterAt?: number | null } | undefined;
     const job = (await listBookPublishJobs(session.userId)).find(item => item.assignmentId === assignmentId);
     if (job && retry?.safeToRetry && retry.retryAfterAt) await updateBookPublishJob({ ...job, status: 'scheduled', scheduledAt: retry.retryAfterAt, lastError: failure.message });
