@@ -48,19 +48,24 @@ export async function POST(request: NextRequest) {
       signal: request.signal,
     });
 
+    const toSafeHeaderAscii = (val: string | number | boolean | null | undefined): string => {
+      if (val === null || val === undefined) return '';
+      return String(val).replace(/•/g, '*').replace(/[^\x20-\x7E]/g, '');
+    };
+
     const headers: Record<string, string> = {
-      'Content-Type': result.contentType,
+      'Content-Type': result.contentType || 'audio/mpeg',
       'Content-Length': String(result.audioBuffer.byteLength),
       'Cache-Control': 'no-store, no-cache, must-revalidate',
-      'X-Voice-Provider': result.provider,
-      'X-Voice-Provider-Id': result.providerId,
-      'X-Voice-Id': result.voiceId,
-      'X-Voice-Name': encodeURIComponent(result.voiceName),
-      'X-Voice-Characters': String(result.characterCount),
+      'X-Voice-Provider': toSafeHeaderAscii(result.provider),
+      'X-Voice-Provider-Id': toSafeHeaderAscii(result.providerId),
+      'X-Voice-Id': toSafeHeaderAscii(result.voiceId),
+      'X-Voice-Name': encodeURIComponent(result.voiceName || ''),
+      'X-Voice-Characters': String(result.characterCount || 0),
     };
 
     if (result.keyUsedMasked) {
-      headers['X-Voice-Key-Used'] = result.keyUsedMasked;
+      headers['X-Voice-Key-Used'] = toSafeHeaderAscii(result.keyUsedMasked);
     }
     if (typeof result.keysActive === 'number') {
       headers['X-Voice-Keys-Active'] = String(result.keysActive);
@@ -71,9 +76,9 @@ export async function POST(request: NextRequest) {
     if (result.fallbackTriggered) {
       headers['X-Voice-Fallback'] = 'true';
       if (result.originalProviderId) {
-        headers['X-Voice-Fallback-From'] = result.originalProviderId;
+        headers['X-Voice-Fallback-From'] = toSafeHeaderAscii(result.originalProviderId);
       }
-      headers['X-Voice-Fallback-To'] = result.providerId;
+      headers['X-Voice-Fallback-To'] = toSafeHeaderAscii(result.providerId);
       if (result.fallbackReason) {
         headers['X-Voice-Fallback-Reason'] = encodeURIComponent(result.fallbackReason);
       }

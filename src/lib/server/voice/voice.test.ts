@@ -154,8 +154,8 @@ describe('Modular Neural Voice TTS System Suite', () => {
     });
 
     it('should safely mask API keys and never expose raw secrets in telemetry or status', () => {
-      expect(maskElevenLabsKey('eleven_secret_key_1234abcd')).toBe('••••abcd');
-      expect(maskElevenLabsKey('short')).toBe('••••••••');
+      expect(maskElevenLabsKey('eleven_secret_key_1234abcd')).toBe('****abcd');
+      expect(maskElevenLabsKey('short')).toBe('********');
 
       process.env.ELEVENLABS_API_KEY_1 = 'eleven_test_secret_1111';
       process.env.ELEVENLABS_API_KEY_2 = 'eleven_test_secret_2222';
@@ -169,8 +169,8 @@ describe('Modular Neural Voice TTS System Suite', () => {
       const jsonStr = JSON.stringify(pool);
       expect(jsonStr).not.toContain('eleven_test_secret_1111');
       expect(jsonStr).not.toContain('eleven_test_secret_2222');
-      expect(jsonStr).toContain('••••1111');
-      expect(jsonStr).toContain('••••2222');
+      expect(jsonStr).toContain('****1111');
+      expect(jsonStr).toContain('****2222');
     });
 
     it('should correctly format request to ElevenLabs API and handle 200 audio response', async () => {
@@ -199,7 +199,7 @@ describe('Modular Neural Voice TTS System Suite', () => {
       expect(result.contentType).toBe('audio/mpeg');
       expect(result.providerId).toBe('elevenlabs');
       expect(result.voiceName).toContain('Rachel');
-      expect(result.keyUsedMasked).toBe('••••2345');
+      expect(result.keyUsedMasked).toBe('****2345');
     });
 
     it('should automatically rotate to next key when key 1 encounters 429 quota exhaustion', async () => {
@@ -239,7 +239,7 @@ describe('Modular Neural Voice TTS System Suite', () => {
       const call2Headers = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>;
       expect(call2Headers['xi-api-key']).toBe('eleven_key_healthy_2222');
 
-      expect(result.keyUsedMasked).toBe('••••2222');
+      expect(result.keyUsedMasked).toBe('****2222');
 
       // Check pool telemetry: Key 1 in quota_exceeded cooldown, Key 2 active
       const pool = getElevenLabsKeyPoolStatus();
@@ -247,11 +247,11 @@ describe('Modular Neural Voice TTS System Suite', () => {
       expect(pool.activeKeys).toBe(1);
       expect(pool.exhaustedKeys).toBe(1);
 
-      const k1 = pool.keys.find(k => k.maskedKey === '••••1111');
+      const k1 = pool.keys.find(k => k.maskedKey === '****1111');
       expect(k1?.status).toBe('quota_exceeded');
       expect(k1?.cooldownRemainingSeconds).toBeGreaterThan(0);
 
-      const k2 = pool.keys.find(k => k.maskedKey === '••••2222');
+      const k2 = pool.keys.find(k => k.maskedKey === '****2222');
       expect(k2?.status).toBe('active');
       expect(k2?.totalRequests).toBe(1);
     });
@@ -277,10 +277,10 @@ describe('Modular Neural Voice TTS System Suite', () => {
         );
 
       const result = await synthesizeElevenLabs({ text: 'Rate limit failover test.' });
-      expect(result.keyUsedMasked).toBe('••••2222');
+      expect(result.keyUsedMasked).toBe('****2222');
 
       const pool = getElevenLabsKeyPoolStatus();
-      const k1 = pool.keys.find(k => k.maskedKey === '••••1111');
+      const k1 = pool.keys.find(k => k.maskedKey === '****1111');
       expect(k1?.status).toBe('rate_limited');
       expect(k1?.cooldownRemainingSeconds).toBeGreaterThan(0);
     });
@@ -306,10 +306,10 @@ describe('Modular Neural Voice TTS System Suite', () => {
         );
 
       const result = await synthesizeElevenLabs({ text: 'Invalid key failover test.' });
-      expect(result.keyUsedMasked).toBe('••••2222');
+      expect(result.keyUsedMasked).toBe('****2222');
 
       const pool = getElevenLabsKeyPoolStatus();
-      const k1 = pool.keys.find(k => k.maskedKey === '••••1111');
+      const k1 = pool.keys.find(k => k.maskedKey === '****1111');
       expect(k1?.status).toBe('invalid');
     });
 

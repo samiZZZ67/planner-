@@ -1366,7 +1366,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   };
 
   // ── Send Message to FreeLLMAPI Gateway & Multimodal Router ──
-  const handleSendMessage = async (customPrompt?: string, mode?: 'chat' | 'image_gen' | 'video_gen') => {
+  const handleSendMessage = async (customPrompt?: string, mode?: 'chat' | 'image_gen' | 'video_gen', isFromVoice = false) => {
     const text = (customPrompt || input).trim();
     if ((!text && attachments.length === 0) || isLoading) return;
 
@@ -1405,7 +1405,9 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     setLifecycleState(initialLifecycle);
     setActivityLabel(initialLabel);
 
-    const speakThisResponse = isVoiceModeActive;
+    // Only speak out response if user specifically spoke via microphone voice input.
+    // Typed messages never auto-speak to protect ElevenLabs quota.
+    const speakThisResponse = Boolean(isFromVoice && isVoiceModeActive);
     if (speakThisResponse) {
       stopSpeechPlayback();
       voiceSpeechEnabledRef.current = true;
@@ -1605,7 +1607,9 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     setIsVoiceModeActive(true);
   };
 
-  voiceSubmitRef.current = handleSendMessage;
+  voiceSubmitRef.current = (prompt: string) => {
+    void handleSendMessage(prompt, 'chat', true);
+  };
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);

@@ -270,13 +270,13 @@ export const ELEVENLABS_VOICES: TTSVoiceInfo[] = new Proxy(ELEVENLABS_BUILTIN_VO
 
 /**
  * Mask an API key so raw secrets are never printed in logs, sent over the wire, or displayed in the UI.
- * Format: `••••` + last 4 characters (e.g. `••••1a2b`).
+ * Format: `****` + last 4 characters (e.g. `****1a2b`). Uses ASCII characters only so HTTP headers are safe.
  */
 export function maskElevenLabsKey(key: string): string {
-  if (!key || typeof key !== 'string') return '••••••••';
+  if (!key || typeof key !== 'string') return '********';
   const trimmed = key.trim();
-  if (trimmed.length <= 8) return '••••••••';
-  return `••••${trimmed.slice(-4)}`;
+  if (trimmed.length <= 8) return '********';
+  return `****${trimmed.slice(-4)}`;
 }
 
 interface KeyState {

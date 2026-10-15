@@ -239,8 +239,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
       if (savedVoice) setSelectedVoiceId(savedVoice);
       const savedSpeed = localStorage.getItem('np_voice_speed');
       if (savedSpeed) setVoiceSpeed(Number(savedSpeed) || 1.0);
-      const savedAuto = localStorage.getItem('np_voice_auto_speak');
-      if (savedAuto) setAutoSpeakResponses(savedAuto === 'true');
+      try { localStorage.removeItem('np_voice_auto_speak'); } catch {}
     } catch {}
 
     apiFetch('/api/voice/config')
@@ -975,7 +974,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
   };
 
   // ── Send Message with Stop Controller & Persistence ──
-  const handleSendMessage = async (textToSend?: string) => {
+  const handleSendMessage = async (textToSend?: string, isFromVoiceCall = false) => {
     const content = (textToSend || input).trim();
     if ((!content && attachedFiles.length === 0) || loading) return;
 
@@ -1190,7 +1189,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
           }),
         }).catch(() => null);
 
-        if ((autoSpeakResponsesRef.current || isLiveCallActiveRef.current) && assistantMsg.content.trim()) {
+        // Only auto-speak when explicitly requested through hands-free Live Voice Call.
+        // Standard typed chat responses never auto-speak to protect ElevenLabs quota.
+        if (isFromVoiceCall && isLiveCallActiveRef.current && assistantMsg.content.trim()) {
           void handleSpeakMessage(assistantMsg);
         }
       } else {
@@ -1256,7 +1257,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
           }),
         }).catch(() => null);
 
-        if ((autoSpeakResponsesRef.current || isLiveCallActiveRef.current) && assistantMsg.content.trim()) {
+        // Only auto-speak when explicitly requested through hands-free Live Voice Call.
+        // Standard typed chat responses never auto-speak to protect ElevenLabs quota.
+        if (isFromVoiceCall && isLiveCallActiveRef.current && assistantMsg.content.trim()) {
           void handleSpeakMessage(assistantMsg);
         }
       }
@@ -1463,7 +1466,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
               callStatusRef.current = 'thinking';
               setCallSubtitle('Thinking...');
               callTranscriptRef.current = '';
-              void handleSendMessage(phrase);
+              void handleSendMessage(phrase, true);
             }
           }, 1500);
         }
@@ -2401,20 +2404,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                     </select>
                   </div>
 
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, color: 'var(--text-secondary)' }}>
-                    <input
-                      type="checkbox"
-                      checked={autoSpeakResponses}
-                      onChange={e => {
-                        setAutoSpeakResponses(e.target.checked);
-                        try {
-                          localStorage.setItem('np_voice_auto_speak', String(e.target.checked));
-                        } catch {}
-                      }}
-                      style={{ accentColor: '#a855f7' }}
-                    />
-                    <span>Auto-speak responses</span>
-                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-secondary)' }} title="Typed chat never speaks automatically to conserve ElevenLabs quota. Use the Listen button or Live Voice Call to speak.">
+                    <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+                    <span>Typed chat: Silent (Quota protected)</span>
+                  </div>
                 </div>
 
                 {/* Test Audio Button */}
