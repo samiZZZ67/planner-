@@ -338,6 +338,196 @@ export async function sendTelegramMessageWithFallback(
   }
 }
 
+export interface InlineKeyboardButton {
+  text: string;
+  callback_data?: string;
+  url?: string;
+}
+
+export interface SendQuizPollParams {
+  chatId: string;
+  question: string;
+  options: string[];
+  correctOptionId: number;
+  explanation?: string;
+  isAnonymous?: boolean;
+  replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] };
+}
+
+export interface TelegramPollResult {
+  messageId: number;
+  pollId: string;
+  question: string;
+  correctOptionId: number;
+}
+
+export interface TelegramUpdate {
+  update_id: number;
+  message?: {
+    message_id: number;
+    chat: { id: number | string; title?: string; type?: string };
+    from?: { id: number; first_name?: string; username?: string };
+    text?: string;
+    date?: number;
+  };
+  callback_query?: {
+    id: string;
+    from: { id: number; first_name?: string; username?: string };
+    message?: { message_id: number; chat: { id: number | string } };
+    data?: string;
+  };
+  poll_answer?: {
+    poll_id: string;
+    voter_chat?: { id: number | string; title?: string };
+    user?: { id: number; first_name?: string; username?: string };
+    option_ids: number[];
+  };
+}
+
+export async function sendTelegramQuizPoll(params: SendQuizPollParams): Promise<TelegramPollResult> {
+  const question = params.question.trim().slice(0, 300);
+  const options = params.options.slice(0, 10).map(opt => opt.trim().slice(0, 100));
+  if (options.length < 2) {
+    throw new Error('A quiz poll requires at least 2 answer options.');
+  }
+  const correctOptionId = Math.max(0, Math.min(params.correctOptionId, options.length - 1));
+  const explanation = params.explanation?.trim() ? params.explanation.trim().slice(0, 200) : undefined;
+
+  const payload: any = {
+    chat_id: params.chatId,
+    question,
+    options,
+    type: 'quiz',
+    correct_option_id: correctOptionId,
+    is_anonymous: params.isAnonymous ?? false,
+  };
+  if (explanation) {
+    payload.explanation = explanation;
+  }
+  if (params.replyMarkup) {
+    payload.reply_markup = params.replyMarkup;
+  }
+
+  const res = await telegramCall<{ message_id: number; poll?: { id: string } }>('sendPoll', payload);
+  return {
+    messageId: res.message_id,
+    pollId: res.poll?.id || `poll_${Date.now()}_${res.message_id}`,
+    question,
+    correctOptionId,
+  };
+}
+
+export async function sendTelegramMessageWithKeyboard(
+  chatId: string,
+  formattedText: string,
+  keyboard: InlineKeyboardButton[][],
+  disableWebPagePreview = true
+): Promise<{ message_id: number }> {
+  try {
+    return await telegramCall<{ message_id: number }>('sendMessage', {
+      chat_id: chatId,
+      text: formattedText,
+      parse_mode: 'HTML',
+      disable_web_page_preview: disableWebPagePreview,
+      reply_markup: { inline_keyboard: keyboard },
+    });
+  } catch (error: any) {
+    const errMsg = String(error?.message || error);
+    if (/can't parse entities|entity|tag|parse|html|bad request/i.test(errMsg)) {
+      return await telegramCall<{ message_id: number }>('sendMessage', {
+        chat_id: chatId,
+        text: stripHtml(formattedText),
+        disable_web_page_preview: disableWebPagePreview,
+        reply_markup: { inline_keyboard: keyboard },
+      });
+    }
+    throw error;
+  }
+}
+
+export async function answerTelegramCallback(
+  callbackQueryId: string,
+  text?: string,
+  showAlert = false
+): Promise<boolean> {
+  try {
+    await telegramCall<boolean>('answerCallbackQuery', {
+      callback_query_id: callbackQueryId,
+      text: text ? text.slice(0, 200) : undefined,
+      show_alert: showAlert,
+    });
+    return true;
+  } catch (err) {
+    console.warn('[Telegram] Could not answer callback query:', err);
+    return false;
+  }
+}
+
+export async function editTelegramMessageText(
+  chatId: string | number,
+  messageId: number,
+  text: string,
+  replyMarkup?: { inline_keyboard: InlineKeyboardButton[][] }
+): Promise<boolean> {
+  try {
+    await telegramCall('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: 'HTML',
+      reply_markup: replyMarkup,
+    });
+    return true;
+  } catch (err) {
+    console.warn('[Telegram] Could not edit message text:', err);
+    return false;
+  }
+}
+
+export async function getTelegramUpdates(offset?: number, limit = 100): Promise<TelegramUpdate[]> {
+  try {
+    return await telegramCall<TelegramUpdate[]>('getUpdates', {
+      offset,
+      limit,
+      timeout: 0,
+      allowed_updates: ['callback_query', 'poll_answer', 'message'],
+    });
+  } catch (err) {
+    console.warn('[Telegram] getUpdates failed:', err);
+    return [];
+  }
+}
+
+export async function setTelegramWebhook(url: string, secretToken?: string): Promise<{ ok: boolean; description?: string }> {
+  try {
+    const res = await telegramCall<boolean>('setWebhook', {
+      url,
+      secret_token: secretToken,
+      allowed_updates: ['callback_query', 'poll_answer', 'message'],
+    });
+    return { ok: Boolean(res) };
+  } catch (err: any) {
+    return { ok: false, description: err?.message || 'Failed to set webhook' };
+  }
+}
+
+export async function getTelegramWebhookInfo(): Promise<any> {
+  try {
+    return await telegramCall<any>('getWebhookInfo');
+  } catch (err: any) {
+    return { url: '', has_custom_certificate: false, pending_update_count: 0, last_error_message: err?.message };
+  }
+}
+
+export async function deleteTelegramWebhook(): Promise<boolean> {
+  try {
+    return await telegramCall<boolean>('deleteWebhook');
+  } catch (err) {
+    console.warn('[Telegram] deleteWebhook failed:', err);
+    return false;
+  }
+}
+
 export interface TelegramSendTextResult {
   channel: string;
   messageId: number;

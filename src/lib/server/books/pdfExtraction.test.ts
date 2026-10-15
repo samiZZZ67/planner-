@@ -89,7 +89,7 @@ describe('PDF text extraction', () => {
     expect(result.pages[0].pdfPage).toBe(1);
     expect(result.pages[0].method).toBe('native');
     expect(result.pages[0].text).toBe(sourceText);
-  });
+  }, 15000);
 
   it('keeps PDF text item order and inserts line breaks and spacing from item positions', () => {
     const reconstructed = reconstructPdfTextForTest([

@@ -3,6 +3,7 @@ import { getSessionUser } from '@/lib/server/auth';
 import { getBook, listBookPages } from '@/lib/server/books';
 import { listBookAssignments, updateBookAssignment } from '@/lib/server/bookAssignments';
 import { rescheduleBookPublishJob, upsertBookPublishJob } from '@/lib/server/bookScheduler';
+import { normalizeTimeString } from '@/lib/date/ethiopianTime';
 
 export async function GET(request: Request, context: RouteContext<'/api/books/[id]/assignments/[assignmentId]'>) {
   const session = await getSessionUser(request);
@@ -32,8 +33,11 @@ export async function PATCH(request: Request, context: RouteContext<'/api/books/
   if (typeof body.scheduledDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.scheduledDate.trim())) {
     updated.scheduledDate = body.scheduledDate.trim();
   }
-  if (typeof body.postingTime === 'string' && /^\d{1,2}:\d{2}$/.test(body.postingTime.trim())) {
-    updated.postingTime = body.postingTime.trim();
+  if (typeof body.postingTime === 'string') {
+    const norm = normalizeTimeString(body.postingTime);
+    if (/^\d{2}:\d{2}$/.test(norm)) {
+      updated.postingTime = norm;
+    }
   }
   if (Number.isInteger(body.startPdfPage) && Number.isInteger(body.endPdfPage)) {
     const start = Number(body.startPdfPage);

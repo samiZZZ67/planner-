@@ -34,6 +34,7 @@ export async function POST(request: Request) {
     claimed: result.bookJobs.claimed + result.scheduledMessages.claimed,
     bookJobs: result.bookJobs,
     scheduledMessages: result.scheduledMessages,
+    briefs: result.briefs,
     durationMs: result.durationMs,
   });
 }

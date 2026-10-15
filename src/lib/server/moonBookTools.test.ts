@@ -37,6 +37,10 @@ describe('Moon book operation intent detection', () => {
     ["Publish today's approved reading assignment.", 'publish'],
     ['Pause automatic publishing.', 'pause'],
     ['Reschedule tomorrow’s post to 09:30.', 'reschedule'],
+    ['set a time for Day 1 to be sent on telegram at 14:00', 'reschedule'],
+    ['schedule Day 1 at 2:00 pm', 'reschedule'],
+    ['set posting time for day 1 to 08:30', 'reschedule'],
+    ['schedule extracted page to be sent at 10:00', 'reschedule'],
     ['Show me which Telegram posts failed.', 'failed_posts'],
     ['Extract this PDF book.', 'extract'],
     ['Generate a concept reading plan.', 'plan'],
@@ -107,6 +111,15 @@ describe('Moon book operation intent detection', () => {
 
       const regular = detectGenerateAndSendTelegramIntent('What is the weather today?');
       expect(regular.isGenerateAndSend).toBe(false);
+    });
+  });
+
+  describe('Quiz Intent Detection & Telegram Quiz Launch', () => {
+    it('detects quiz mode requests from natural language prompts', () => {
+      expect(detectMoonBookIntent('quiz me on today reading')).toBe('quiz');
+      expect(detectMoonBookIntent('start interactive quiz for day 1')).toBe('quiz');
+      expect(detectMoonBookIntent('test my recall on deep work')).toBe('quiz');
+      expect(detectMoonBookIntent('send comprehension questions to telegram')).toBe('quiz');
     });
   });
 });

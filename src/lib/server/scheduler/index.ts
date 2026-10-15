@@ -4,6 +4,7 @@ import type { SchedulerExecutionResult, SchedulerStatus } from './types';
 
 export * from './types';
 export * from './scheduledMessages';
+export * from './briefs';
 export * from './service';
 
 const GLOBAL_SCHEDULER_KEY = Symbol.for('__NIGHTPLANNER_CRON_SCHEDULER__');

@@ -198,4 +198,139 @@ describe('Background Scheduler & Automatic Telegram Delivery Suite', () => {
       expect(skipped).toBe(true);
     });
   });
+
+  describe('6. Individual Extracted Book Page Scheduling & Delivery', () => {
+    it('schedules an individual extracted page via AI, claims it at due time, and dispatches to Telegram', async () => {
+      process.env.TELEGRAM_BOT_TOKEN = 'test_bot_token_123';
+      process.env.TELEGRAM_CHAT_ID = '@SamSpac';
+
+      vi.spyOn(global, 'fetch').mockImplementation(async (url: any) => {
+        if (typeof url === 'string' && url.includes('api.telegram.org')) {
+          return new Response(JSON.stringify({
+            ok: true,
+            result: {
+              id: 123456,
+              message_id: 12345,
+              first_name: 'Moon Bot',
+              username: 'SamISpace_bot',
+              title: 'SamSpac Channel',
+              type: 'channel',
+              status: 'administrator',
+              can_post_messages: true,
+            },
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      });
+
+      const { saveBook, saveBookPages, getBook } = await import('./books');
+      const { replaceDraftAssignments, listBookAssignments } = await import('./bookAssignments');
+      const { listBookPublishJobs } = await import('./bookScheduler');
+      const { executeMoonBookIntent } = await import('./moonBookTools');
+
+      const testUser = `user_ai_sched_${Date.now()}`;
+      const testBookId = `book_ai_${Date.now()}`;
+
+      const bookRecord = {
+        id: testBookId,
+        userId: testUser,
+        title: 'Deep Work Ethiopia',
+        author: 'Cal Newport',
+        metadata: '',
+        originalFilename: 'deepwork.pdf',
+        storedFilename: `${testBookId}.pdf`,
+        fileSize: 100,
+        startPage: 1,
+        endPage: 2,
+        durationDays: 2,
+        startDate: '2026-10-15',
+        studyMinutes: 30,
+        postingTime: '08:00',
+        timezone: 'Africa/Addis_Ababa',
+        currentPage: 1,
+        status: 'ready' as const,
+        extractionStatus: 'completed' as const,
+        extractionMessage: 'Extracted successfully',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      await saveBook(bookRecord, new Uint8Array([1, 2, 3, 4]));
+      await saveBookPages(bookRecord, [
+        {
+          bookId: testBookId,
+          pdfPage: 1,
+          text: 'This is the extracted content for page 1 of Deep Work.',
+          method: 'native',
+          confidence: 1,
+          warnings: [],
+          requiresReview: false,
+          reviewedByUser: true,
+          updatedAt: Date.now(),
+        },
+        {
+          bookId: testBookId,
+          pdfPage: 2,
+          text: 'This is the extracted content for page 2 of Deep Work.',
+          method: 'native',
+          confidence: 1,
+          warnings: [],
+          requiresReview: false,
+          reviewedByUser: true,
+          updatedAt: Date.now(),
+        },
+      ]);
+
+      await replaceDraftAssignments(testUser, testBookId, [
+        {
+          id: `asg_${testBookId}_1`,
+          userId: testUser,
+          bookId: testBookId,
+          dayNumber: 1,
+          scheduledDate: '2026-10-15',
+          startPdfPage: 1,
+          endPdfPage: 2,
+          concepts: [{ title: 'Deep Work Rules', concept: 'Focus deeply', estimatedMinutes: 30 }],
+          estimatedMinutes: 30,
+          rationale: 'Core foundation',
+          status: 'draft',
+          postingTime: '08:00',
+          updatedAt: Date.now(),
+        },
+      ]);
+
+      // 1. AI command to schedule Day 1 at 14:00
+      const aiResult = await executeMoonBookIntent(
+        testUser,
+        'set a time for Day 1 to be sent on telegram at 14:00',
+        'openai/gpt-4o-mini'
+      );
+
+      expect(aiResult.handled).toBe(true);
+      expect(aiResult.content).toContain('Scheduled Reading Delivery');
+      expect(aiResult.content).toContain('14:00');
+      expect(aiResult.content).toContain('ከሰዓት');
+
+      // Verify the assignment and publishing job were created
+      const jobs = await listBookPublishJobs(testUser);
+      const targetJob = jobs.find(j => j.bookId === testBookId);
+      expect(targetJob).toBeDefined();
+      expect(targetJob?.status).toBe('scheduled');
+
+      // 2. Run delivery cycle at scheduled time (14:00 EAT = 11:00 UTC)
+      const deliveryResult = await runScheduledDeliveryCycle(targetJob!.scheduledAt);
+
+      expect(deliveryResult.bookJobs.completed).toBeGreaterThanOrEqual(1);
+
+      // Verify assignment marked completed and sent
+      const updatedAssignments = await listBookAssignments(testUser, testBookId);
+      const day1 = updatedAssignments.find(a => a.dayNumber === 1);
+      expect(day1?.status).toBe('completed');
+      expect(day1?.deliveryStatus).toBe('sent');
+
+      // Verify book current page was advanced
+      const updatedBook = await getBook(testUser, testBookId);
+      expect(updatedBook?.currentPage).toBeGreaterThanOrEqual(3);
+    });
+  });
 });

@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Image as ImageIcon, Mic, Send, X } from 'lucide-react';
+import { Image as ImageIcon, Mic, Send, X, Clock } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
+import { BriefSchedulingModal } from '../Telegram/BriefSchedulingModal';
 
 export function TelegramQuickSend({
   isPhone = false,
@@ -27,6 +28,7 @@ export function TelegramQuickSend({
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [isBriefModalOpen, setIsBriefModalOpen] = useState(false);
   const isDark = theme !== 'light';
   const viewportHeight = typeof window === 'undefined' ? 800 : window.innerHeight;
   const panelAboveAnchor = Boolean(anchor && anchor.y > viewportHeight * 0.55);
@@ -104,7 +106,27 @@ export function TelegramQuickSend({
           <button type="button" onClick={() => setOpen(false)} aria-label="Close Telegram message" className="v-circle-btn" style={{ width: 26, height: 26 }}><X size={14} /></button>
         </header>
 
-        {/* 1-Click Task Digest Quick Actions */}
+        {/* Auto Brief Scheduling Trigger & 1-Click Task Digest Quick Actions */}
+        <button
+          type="button"
+          onClick={() => setIsBriefModalOpen(true)}
+          className="v-pill-btn"
+          style={{
+            fontSize: 11,
+            padding: '6px 12px',
+            gap: 6,
+            width: '100%',
+            justifyContent: 'center',
+            background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.18), rgba(59, 130, 246, 0.18))',
+            borderColor: 'rgba(234, 179, 8, 0.45)',
+            color: 'var(--text-primary)',
+            fontWeight: 600,
+          }}
+        >
+          <Clock size={12} color="var(--accent-color)" />
+          <span>⏰ Auto Brief Schedule (08:00 & 20:00 EAT)</span>
+        </button>
+
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button
             type="button"
@@ -222,6 +244,12 @@ export function TelegramQuickSend({
           touchAction: 'none',
         }}
       >T</button>}
+
+      <BriefSchedulingModal
+        isOpen={isBriefModalOpen}
+        onClose={() => setIsBriefModalOpen(false)}
+        isPhone={isPhone}
+      />
     </>
   );
 }

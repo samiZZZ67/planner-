@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getDb } from './neon';
 import type { BookAssignmentRecord, BookRecord } from '../books/types';
+import { normalizeTimeString } from '../date/ethiopianTime';
 
 export type PublishJobStatus = 'scheduled' | 'processing' | 'completed' | 'failed' | 'paused';
 export interface BookPublishJob {
@@ -63,8 +64,9 @@ async function ensureSchema(sql: NonNullable<ReturnType<typeof getDb>>) {
 
 /** Convert a local wall-clock date/time to UTC using Intl, including DST validation. */
 export function zonedDateTimeToTimestamp(date: string, time: string, timezone: string): number {
+  const normTime = normalizeTimeString(time);
   const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  const timeMatch = /^(\d{2}):(\d{2})$/.exec(time);
+  const timeMatch = /^(\d{2}):(\d{2})$/.exec(normTime);
   if (!dateMatch || !timeMatch) throw new Error('Schedule needs a valid YYYY-MM-DD date and HH:mm time.');
   const [year, month, day] = dateMatch.slice(1).map(Number);
   const [hour, minute] = timeMatch.slice(1).map(Number);
@@ -73,7 +75,8 @@ export function zonedDateTimeToTimestamp(date: string, time: string, timezone: s
   const calendarCheck = new Date(targetAsUtc);
   if (calendarCheck.getUTCFullYear() !== year || calendarCheck.getUTCMonth() + 1 !== month || calendarCheck.getUTCDate() !== day) throw new Error('Schedule date is not a valid calendar date.');
   let candidate = targetAsUtc;
-  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const effectiveTz = timezone || 'Africa/Addis_Ababa';
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: effectiveTz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   for (let i = 0; i < 4; i++) {
     const values = Object.fromEntries(formatter.formatToParts(new Date(candidate)).map(part => [part.type, part.value]));
     const renderedAsUtc = Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), Number(values.hour), Number(values.minute));
@@ -81,17 +84,24 @@ export function zonedDateTimeToTimestamp(date: string, time: string, timezone: s
     if (delta === 0) return candidate;
     candidate += delta;
   }
-  throw new Error(`The requested local time does not exist in ${timezone} (daylight-saving transition).`);
+  throw new Error(`The requested local time does not exist in ${effectiveTz} (daylight-saving transition).`);
 }
 
-export function makeBookPublishJob(book: BookRecord, assignment: BookAssignmentRecord, scheduledDate = assignment.scheduledDate, postingTime = book.postingTime): BookPublishJob {
+export function makeBookPublishJob(
+  book: BookRecord,
+  assignment: BookAssignmentRecord,
+  scheduledDate = assignment.scheduledDate,
+  postingTime = assignment.postingTime || book.postingTime
+): BookPublishJob {
+  const effectiveTime = normalizeTimeString(postingTime || book.postingTime || '08:00');
+  const timezone = book.timezone || 'Africa/Addis_Ababa';
   return {
     id: assignment.id,
     userId: book.userId,
     bookId: book.id,
     assignmentId: assignment.id,
-    scheduledAt: zonedDateTimeToTimestamp(scheduledDate, postingTime, book.timezone || 'UTC'),
-    timezone: book.timezone || 'UTC',
+    scheduledAt: zonedDateTimeToTimestamp(scheduledDate, effectiveTime, timezone),
+    timezone,
     status: 'scheduled',
     attemptCount: 0,
     lastError: '',
@@ -101,7 +111,7 @@ export function makeBookPublishJob(book: BookRecord, assignment: BookAssignmentR
 
 export async function upsertBookPublishJob(book: BookRecord, assignment: BookAssignmentRecord) {
   if (assignment.status !== 'approved') throw new Error('Only approved assignments can be scheduled for publishing.');
-  const job = makeBookPublishJob(book, assignment);
+  const job = makeBookPublishJob(book, assignment, assignment.scheduledDate, assignment.postingTime || book.postingTime);
   const sql = getDb();
   if (sql) {
     await ensureSchema(sql);
@@ -121,19 +131,32 @@ export async function upsertBookPublishJob(book: BookRecord, assignment: BookAss
 }
 
 export async function rescheduleBookPublishJob(userId: string, book: BookRecord, assignment: BookAssignmentRecord, date: string, time: string) {
-  const job = makeBookPublishJob(book, assignment, date, time);
+  const normalizedTime = normalizeTimeString(time);
+  const job = makeBookPublishJob(book, assignment, date, normalizedTime);
   const sql = getDb();
   if (sql) {
     await ensureSchema(sql);
-    const rows = await sql`UPDATE book_publish_jobs SET scheduled_at = ${job.scheduledAt}, status = 'scheduled', data = ${JSON.stringify(job)}::jsonb, updated_at = ${job.updatedAt}
-      WHERE user_id = ${userId} AND assignment_id = ${assignment.id} AND status <> 'completed' RETURNING id`;
-    if (!rows.length) throw new Error('No reschedulable publishing job exists for this assignment.');
+    const rows = await sql`
+      INSERT INTO book_publish_jobs (id, user_id, book_id, assignment_id, scheduled_at, status, data, updated_at)
+      VALUES (${job.id}, ${job.userId}, ${job.bookId}, ${job.assignmentId}, ${job.scheduledAt}, 'scheduled', ${JSON.stringify(job)}::jsonb, ${job.updatedAt})
+      ON CONFLICT (user_id, assignment_id) DO UPDATE SET
+        scheduled_at = EXCLUDED.scheduled_at,
+        status = CASE WHEN book_publish_jobs.status = 'completed' THEN book_publish_jobs.status ELSE 'scheduled' END,
+        data = CASE WHEN book_publish_jobs.status = 'completed' THEN book_publish_jobs.data ELSE EXCLUDED.data END,
+        updated_at = EXCLUDED.updated_at
+      RETURNING id, status
+    `;
+    if (rows[0]?.status === 'completed') throw new Error('Completed Telegram publishing cannot be rescheduled.');
   }
   const all = readJobs();
   const index = all.findIndex(item => item.userId === userId && item.assignmentId === assignment.id);
-  if (index < 0) { if (!sql) throw new Error('No publishing job exists. Approve the assignment first.'); }
-  else if (all[index].status === 'completed') throw new Error('Completed Telegram publishing cannot be rescheduled.');
-  else all[index] = job;
+  if (index < 0) {
+    all.push(job);
+  } else if (all[index].status === 'completed') {
+    throw new Error('Completed Telegram publishing cannot be rescheduled.');
+  } else {
+    all[index] = job;
+  }
   writeJson(JOBS_PATH, all);
   return job;
 }

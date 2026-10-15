@@ -1,9 +1,11 @@
 import { claimDueBookPublishJobs, updateBookPublishJob } from '../bookScheduler';
 import { listBookAssignments, updateBookAssignment } from '../bookAssignments';
 import { getBook, listBookPages, updateBook } from '../books';
-import { publishApprovedAssignment, sendTelegramTextToChannel } from '../telegram';
+import { envConfig, publishApprovedAssignment, publishLoadPlanPagesToTelegram, sendTelegramTextToChannel } from '../telegram';
+import { getBookQuizSettings, startQuizSessionForAssignment, processTelegramUpdates } from '../books/bookQuiz';
 import { prepareAutomaticBookPublishing } from '../autoBookPublishing';
 import { claimDueScheduledMessages, updateScheduledMessage } from './scheduledMessages';
+import { processDueBriefs } from './briefs';
 import type { SchedulerExecutionResult } from './types';
 import type { BookAssignmentRecord } from '../../books/types';
 
@@ -88,10 +90,6 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
           continue;
         }
 
-        if (assignment.status !== 'approved') {
-          throw new Error(`Assignment status is '${assignment.status}', but must be 'approved' for delivery.`);
-        }
-
         const pages = await listBookPages(job.userId, job.bookId, assignment.startPdfPage, assignment.endPdfPage);
         if (!pages.length) {
           throw new Error(`No extracted PDF page text found for assignment pages ${assignment.startPdfPage}-${assignment.endPdfPage}.`);
@@ -100,7 +98,46 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
         const previous = assignments.find(item => item.dayNumber === assignment.dayNumber - 1);
 
         console.log(`[Scheduler] 🚀 Dispatching Day ${assignment.dayNumber} of "${book.title}" to Telegram...`);
-        const delivery = await publishApprovedAssignment(job.userId, book, assignment, pages, previous);
+        let telegramMessageIds: number[] = [];
+
+        if (assignment.status === 'approved' && assignment.studyNotes) {
+          try {
+            const delivery = await publishApprovedAssignment(job.userId, book, assignment, pages, previous);
+            telegramMessageIds = delivery.telegramMessageIds;
+          } catch (approveErr: any) {
+            console.warn(`[Scheduler] ⚠️ publishApprovedAssignment failed (${approveErr.message}); falling back to extracted load plan pages.`);
+            const fallback = await publishLoadPlanPagesToTelegram(job.userId, book, assignment, pages, previous);
+            telegramMessageIds = fallback.telegramMessageIds;
+          }
+        } else {
+          const loadPlanResult = await publishLoadPlanPagesToTelegram(job.userId, book, assignment, pages, previous);
+          telegramMessageIds = loadPlanResult.telegramMessageIds;
+        }
+
+        // Interactive Telegram Quiz Mode integration
+        try {
+          const quizSettings = await getBookQuizSettings(job.userId);
+          if (quizSettings.enabled) {
+            const targetChatId = envConfig().chatId;
+            const quizSession = await startQuizSessionForAssignment(
+              job.userId,
+              book,
+              assignment,
+              pages,
+              targetChatId,
+              { skipFirstExcerpt: true }
+            );
+            if (quizSession.lastPollMessageId) {
+              telegramMessageIds.push(quizSession.lastPollMessageId);
+            }
+            if (quizSession.lastControlMessageId) {
+              telegramMessageIds.push(quizSession.lastControlMessageId);
+            }
+            console.log(`[Scheduler] 🎯 Interactive Book Quiz session started for Day ${assignment.dayNumber} (${quizSession.totalQuestions} questions across ${quizSession.totalSections} section(s)).`);
+          }
+        } catch (quizErr: any) {
+          console.warn(`[Scheduler] ⚠️ Interactive Quiz launch warning:`, quizErr?.message || quizErr);
+        }
 
         // Mark assignment completed and update deliveryStatus
         await updateBookAssignment({
@@ -123,10 +160,10 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
         await updateBookPublishJob({
           ...job,
           status: 'completed',
-          lastError: `Telegram message IDs: ${delivery.telegramMessageIds.join(', ')}`,
+          lastError: `Telegram message IDs: ${telegramMessageIds.join(', ')}`,
         });
 
-        console.log(`[Scheduler] ✅ Successfully published Day ${assignment.dayNumber} of "${book.title}"! Telegram IDs: [${delivery.telegramMessageIds.join(', ')}]`);
+        console.log(`[Scheduler] ✅ Successfully published Day ${assignment.dayNumber} of "${book.title}"! Telegram IDs: [${telegramMessageIds.join(', ')}]`);
         result.bookJobs.completed++;
       } catch (jobErr: any) {
         const errMsg = jobErr instanceof Error ? jobErr.message : 'Publishing failed';
@@ -221,13 +258,34 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
         }
       }
     }
+
+    // ── 4. Process Morning & Evening Telegram Briefs ─────────────────
+    try {
+      result.briefs = await processDueBriefs(now);
+      if (result.briefs && (result.briefs.completed > 0 || result.briefs.failed > 0)) {
+        console.log(`[Scheduler] 🌅 Briefs processing result:`, result.briefs);
+      }
+    } catch (briefsErr: any) {
+      console.error('[Scheduler] ❌ Error processing due briefs:', briefsErr.message);
+    }
+
+    // ── 5. Process Background Telegram Updates (Polls & Callbacks) ────
+    try {
+      const updateResult = await processTelegramUpdates();
+      if (updateResult.processedCount > 0) {
+        console.log(`[Scheduler] 📬 Processed ${updateResult.processedCount} Telegram update(s) in background.`);
+      }
+    } catch {
+      // Non-fatal if offline or in test
+    }
   } finally {
     isCycleRunning = false;
     result.durationMs = Date.now() - startTime;
-    if (result.bookJobs.claimed > 0 || result.scheduledMessages.claimed > 0) {
+    if (result.bookJobs.claimed > 0 || result.scheduledMessages.claimed > 0 || (result.briefs && result.briefs.processed > 0)) {
       console.log(`[Scheduler] 🏁 Completed cycle in ${result.durationMs}ms:`, {
         bookJobs: result.bookJobs,
         scheduledMessages: result.scheduledMessages,
+        briefs: result.briefs,
       });
     }
   }

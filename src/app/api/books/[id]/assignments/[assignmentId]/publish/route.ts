@@ -43,6 +43,27 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
       bot = result.bot;
     }
 
+    // Launch interactive quiz session if enabled
+    let quizSession: any = null;
+    try {
+      const { getBookQuizSettings, startQuizSessionForAssignment } = await import('@/lib/server/books/bookQuiz');
+      const quizSettings = await getBookQuizSettings(session.userId);
+      if (quizSettings.enabled) {
+        const { envConfig } = await import('@/lib/server/telegram');
+        const targetChatId = envConfig().chatId;
+        quizSession = await startQuizSessionForAssignment(
+          session.userId,
+          book,
+          assignment,
+          pages,
+          targetChatId,
+          { skipFirstExcerpt: true }
+        );
+      }
+    } catch (quizErr: any) {
+      console.warn('[Publish] Interactive quiz launch warning:', quizErr?.message || quizErr);
+    }
+
     // Preserve the original schedule and all dates; mark status completed and deliveryStatus sent
     await updateBookAssignment({
       ...assignment,
@@ -64,7 +85,14 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
     const job = (await listBookPublishJobs(session.userId)).find(item => item.assignmentId === assignmentId);
     if (job) await updateBookPublishJob({ ...job, status: 'completed', lastError: '' });
 
-    return NextResponse.json({ ok: true, delivery, channel, bot, book: updatedBook });
+    return NextResponse.json({
+      ok: true,
+      delivery,
+      channel,
+      bot,
+      book: updatedBook,
+      quizSession: quizSession ? { id: quizSession.id, totalQuestions: quizSession.totalQuestions, totalSections: quizSession.totalSections } : null,
+    });
   } catch (error) {
     const failure = error as Error & { delivery?: unknown };
     // Record failure status on assignment without premature page advancement

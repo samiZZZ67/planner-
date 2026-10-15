@@ -4,10 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { exportAllDataToJson, importDataFromJson } from '@/lib/data/sampleData';
 import { syncEngine } from '@/lib/sync/syncEngine';
 import {
-  Sun, Moon, Download, Upload, Shield, LogOut, Sparkles, Check, Bell, BellOff, Volume2
+  Sun, Moon, Download, Upload, Shield, LogOut, Sparkles, Check, Bell, BellOff, Volume2, Clock, Send
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
 import { withActionFeedback } from '@/lib/utils/actionFeedback';
+import { BriefSchedulingModal } from '../Telegram/BriefSchedulingModal';
 import {
   getNotificationStatus,
   requestNotificationPermission,
@@ -33,6 +34,7 @@ export function SettingsScreen({
   const [message, setMessage] = useState('');
   const [importError, setImportError] = useState('');
   const [notifStatus, setNotifStatus] = useState<NotificationStatus>(getNotificationStatus());
+  const [isBriefModalOpen, setIsBriefModalOpen] = useState(false);
 
   const showMsg = (msg: string) => {
     setMessage(msg);
@@ -254,7 +256,44 @@ export function SettingsScreen({
       {/* ── 3. AI PROVIDERS & MODEL CONFIGURATION ── */}
       <AIProviderSettingsSection showMsg={showMsg} isPhone={isPhone} />
 
-      {/* ── 3. ACCOUNT & CLOUD DATABASE SYNC ── */}
+      {/* ── 4. TELEGRAM AUTOMATION & DAILY BRIEFS ── */}
+      <div
+        className="v-card"
+        style={{
+          padding: isPhone ? '18px 16px' : '22px 28px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
+            TELEGRAM AUTOMATION & DAILY BRIEFS
+          </div>
+          <span style={{ fontSize: 11, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+            Active (UTC+3 / EAT)
+          </span>
+        </div>
+
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          Automatically sends your morning daily focus plan (08:00 EAT / ጠዋት 2:00) and evening reflection review (20:00 EAT / ማታ 2:00) directly to your Telegram channel. Supports Ethiopian calendar & Habesha clock displays, manual overrides, content attachments, and schedule skips.
+        </p>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setIsBriefModalOpen(true)}
+            className="v-pill-btn v-pill-btn-primary"
+            style={{ padding: '8px 18px', fontSize: 13, gap: 6 }}
+          >
+            <Clock size={14} />
+            <span>Manage Daily Brief Schedules & Overrides</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── 5. ACCOUNT & CLOUD DATABASE SYNC ── */}
       <div
         className="v-card"
         style={{
@@ -344,6 +383,11 @@ export function SettingsScreen({
         )}
       </div>
 
+      <BriefSchedulingModal
+        isOpen={isBriefModalOpen}
+        onClose={() => setIsBriefModalOpen(false)}
+        isPhone={isPhone}
+      />
     </div>
   );
 }

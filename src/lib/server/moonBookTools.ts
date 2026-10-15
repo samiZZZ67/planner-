@@ -8,8 +8,9 @@ import { getModelById } from './freellm/catalog';
 import { checkTelegramChannel, listRecentTelegramSends, listTelegramDeliveries, publishApprovedAssignment, publishLoadPlanPagesToTelegram, sendTelegramTextToChannel, setTelegramRuntimeConfig } from './telegram';
 import { getPublishingPaused, listBookPublishJobs, makeBookPublishJob, rescheduleBookPublishJob, setPublishingPaused, updateBookPublishJob, upsertBookPublishJob } from './bookScheduler';
 import type { BookAssignmentRecord, BookRecord } from '../books/types';
+import { getEthiopianClock, normalizeTimeString } from '../date/ethiopianTime';
 
-type Intent = 'send_telegram' | 'configure_telegram' | 'delivery_status' | 'connect_telegram' | 'send_load_plan' | 'failed_posts' | 'pause' | 'resume' | 'today' | 'prepare' | 'extract' | 'plan' | 'notes' | 'approve' | 'publish' | 'reschedule' | 'books' | 'jobs' | 'schedule';
+type Intent = 'send_telegram' | 'configure_telegram' | 'delivery_status' | 'connect_telegram' | 'send_load_plan' | 'failed_posts' | 'pause' | 'resume' | 'today' | 'prepare' | 'extract' | 'plan' | 'notes' | 'approve' | 'publish' | 'reschedule' | 'books' | 'jobs' | 'schedule' | 'quiz';
 
 function isSendLoadPlanIntent(text: string): boolean {
   const hasAction = /\b(?:send|post|publish|share|deliver|dispatch)\b/i.test(text);
@@ -93,11 +94,27 @@ function telegramPostContent(text: string): string | null {
   return content || null;
 }
 
+function isScheduleTimeIntent(text: string): boolean {
+  if (/(?:show|view|list|check|display|what\s+is)\b/i.test(text)) return false;
+  const hasTime = /\b(?:\d{1,2}:\d{2}|\d{1,2}\s*(?:am|pm)|(?:at|around)\s+\d{1,2})\b/i.test(text);
+  const mentionsReschedule = /\b(?:reschedule|change\s+(?:the\s+)?time|move\s+(?:the\s+)?time)\b/i.test(text);
+  const mentionsSetTime = /\b(?:set\s+(?:a\s+)?(?:time|schedule|posting\s*time)|posting\s*time)\b/i.test(text);
+  const mentionsTarget = /\b(?:day\s*\d+|assignment|reading|section|extracted|page|book|post|individual)\b/i.test(text);
+
+  if (mentionsReschedule && mentionsTarget) return true;
+  if (mentionsSetTime && mentionsTarget) return true;
+  if (hasTime && (mentionsReschedule || mentionsSetTime || /\b(?:schedule|send|post|deliver)\b/i.test(text)) && mentionsTarget) return true;
+  if (/\b(?:reschedule|change the time|move).{0,50}(?:post|assignment|reading)|(?:post|assignment).{0,50}reschedule/i.test(text)) return true;
+  return false;
+}
+
 export function detectMoonBookIntent(text: string): Intent | null {
   const value = text.trim();
   if (!value) return null;
   if (/\b\d{8,12}:[A-Za-z0-9_-]{35}\b/.test(value) || /\b(?:configure|set|update|save)\s+(?:the\s+)?telegram\s+(?:bot\s+token|token|bot|credentials|chat\s*id)\b/i.test(value)) return 'configure_telegram';
+  if (isScheduleTimeIntent(value)) return 'reschedule';
   if (isSendLoadPlanIntent(value)) return 'send_load_plan';
+  if (/\b(?:quiz|test me|test my recall|quiz mode|comprehension questions?)\b/i.test(value)) return 'quiz';
   if (isReferentialTelegramSend(value)) return 'send_telegram';
   if (telegramPostContent(value)) return 'send_telegram';
   if (/(?:delivery\s+status|did(?:n't| not)\s+(?:get|receive|see)|not\s+(?:got|gotten|received|delivered)|never\s+(?:got|received)|where\s+is\s+(?:the\s+)?(?:message|post)|did\s+(?:you\s+)?(?:it\s+)?(?:send|post)|was\s+(?:it|that|the\s+message)\s+(?:sent|posted)|what\s+did\s+you\s+(?:send|post)|check\s+(?:if|whether|the|telegram).{0,30}(?:sent|delivered|delivery|message|post)|resend\b)/i.test(value)
@@ -341,7 +358,7 @@ export async function executeMoonBookIntent(
 
   const targetDate = intent === 'prepare' || (intent === 'reschedule' && /\btomorrow\b/i.test(text)) ? tomorrow : today;
   let assignment = selectedAssignment(assignments, targetDate, text);
-  if ((intent === 'prepare' || intent === 'send_load_plan' || intent === 'publish') && !assignment && book.extractionStatus === 'completed') {
+  if ((intent === 'prepare' || intent === 'send_load_plan' || intent === 'publish' || intent === 'quiz') && !assignment && book.extractionStatus === 'completed') {
     validateModel(model);
     const pages = await listBookPages(userId, book.id, book.startPage, book.endPage);
     const plan = await generateConceptReadingPlan({ book, pages, model });
@@ -430,14 +447,45 @@ export async function executeMoonBookIntent(
   }
 
   if (intent === 'reschedule') {
-    if (assignment.status !== 'approved') throw new Error('Approve the assignment before rescheduling its post.');
+    const ampmMatch = /\b(\d{1,2}(?::\d{2})?\s*(?:am|pm))\b/i.exec(text);
+    const h24Match = /\b([01]?\d|2[0-3]):([0-5]\d)\b/.exec(text);
+    const rawTime = ampmMatch?.[1] || h24Match?.[0] || assignment.postingTime || book.postingTime || '08:00';
+    const time = normalizeTimeString(rawTime);
+
     const dateMatch = /\b(20\d{2}-\d{2}-\d{2})\b/.exec(text);
-    const timeMatch = /\b([01]?\d|2[0-3]):[0-5]\d\b/.exec(text);
-    const date = dateMatch?.[1] || tomorrow;
-    const time = timeMatch?.[0] || book.postingTime;
-    const job = await rescheduleBookPublishJob(userId, book, assignment, date, time);
-    const saved = await updateBookAssignment({ ...assignment, scheduledDate: date, updatedAt: Date.now() });
-    return { handled: true, content: `Rescheduled ${book.title}'s reading post to ${saved.scheduledDate} at ${time} (${book.timezone}). Saved UTC due time: ${new Date(job.scheduledAt).toISOString()}.` };
+    const date = dateMatch?.[1] || (/\btomorrow\b/i.test(text) ? tomorrow : (assignment.scheduledDate || today));
+
+    const nextStatus = assignment.status === 'draft' ? 'approved' : assignment.status;
+    const saved = await updateBookAssignment({
+      ...assignment,
+      status: nextStatus,
+      scheduledDate: date,
+      postingTime: time,
+      updatedAt: Date.now(),
+    });
+
+    const job = await rescheduleBookPublishJob(userId, book, saved, date, time);
+    const clock = getEthiopianClock(time, book.timezone || 'Africa/Addis_Ababa', date);
+
+    return {
+      handled: true,
+      content: `📅 Scheduled Reading Delivery for "${book.title}" (Day ${saved.dayNumber})!\n\n• Target Date: ${saved.scheduledDate} (${clock.ethiopianDateStr})\n• International Time: ${clock.internationalTime} (${clock.internationalTime12h})\n• Traditional Habesha Clock: ${clock.ethiopianTimeStr}\n• Section: PDF pages ${saved.startPdfPage}–${saved.endPdfPage}\n• Timezone: ${job.timezone}\n• Telegram Post Status: Scheduled & Active (Job: ${job.id})\n\nThe scheduler will automatically deliver this extracted section to Telegram at the configured time.`
+    };
+  }
+
+  if (intent === 'quiz') {
+    const pages = await listBookPages(userId, book.id, assignment.startPdfPage, assignment.endPdfPage);
+    if (!pages.length) {
+      return { handled: true, content: `No extracted pages found for Day ${assignment.dayNumber} of ${book.title}. Extract book pages first.` };
+    }
+    const { startQuizSessionForAssignment } = await import('./books/bookQuiz');
+    const { envConfig } = await import('./telegram');
+    const targetChatId = envConfig().chatId;
+    const session = await startQuizSessionForAssignment(userId, book, assignment, pages, targetChatId);
+    return {
+      handled: true,
+      content: `🎯 Interactive Telegram Book Quiz Started for "${book.title}" (Day ${assignment.dayNumber})!\n\n• Sections: ${session.totalSections}\n• Questions: ${session.totalQuestions}\n• Target Channel: ${targetChatId}\n\nI have dispatched the native Telegram quiz poll along with interactive navigation controls ([Next Question ➡️], [💡 Repeat Explanation], [📖 Next Section ⏩], [🏁 Finish Session]) to Telegram.\n\nAnswer the questions directly on Telegram to receive real-time learning feedback and track your recall!`,
+    };
   }
 
   return { handled: false, content: '' };

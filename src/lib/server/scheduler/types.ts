@@ -37,6 +37,12 @@ export interface SchedulerExecutionResult {
     retried: number;
     failed: number;
   };
+  briefs?: {
+    processed: number;
+    completed: number;
+    skipped: number;
+    failed: number;
+  };
   durationMs: number;
 }
 
