@@ -22,16 +22,16 @@ function reconstructText(items: any[]) {
       if (previous.hasEOL) {
         if (output && !output.endsWith('\n')) output += '\n';
       } else {
-        const previousY = Number(previous.transform?.[5] || 0);
-        const itemY = Number(item.transform?.[5] || 0);
+        const previousY = Number(previous.transform?.[5] ?? previous.y ?? 0);
+        const itemY = Number(item.transform?.[5] ?? item.y ?? 0);
         const fontSize = Math.max(Number(item.height || 0), Number(previous.height || 0), 1);
         if (Math.abs(itemY - previousY) > fontSize * 0.55) {
           if (output && !output.endsWith('\n')) output += '\n';
         } else {
-          const previousEndX = Number(previous.transform?.[4] || 0) + Number(previous.width || 0);
-          const itemStartX = Number(item.transform?.[4] || 0);
+          const previousEndX = Number(previous.transform?.[4] ?? previous.x ?? 0) + Number(previous.width || 0);
+          const itemStartX = Number(item.transform?.[4] ?? item.x ?? 0);
           const gap = itemStartX - previousEndX;
-          if (gap > fontSize * 0.18 && output && !/[\s]$/.test(output)) output += ' ';
+          if (gap > fontSize * 0.18 && output && !/[\s]$/.test(output) && !/^[\s]/.test(item.str)) output += ' ';
         }
       }
     }
@@ -40,6 +40,34 @@ function reconstructText(items: any[]) {
     previous = item;
   }
   return output;
+}
+
+function reconstructLinesWithTables(lines: any[][]): string {
+  return lines
+    .map(line => {
+      let output = '';
+      let previous: any = null;
+      for (const item of line) {
+        if (typeof item?.str !== 'string' || item.str.length === 0) continue;
+        if (previous) {
+          const previousEndX = Number(previous.x ?? previous.transform?.[4] ?? 0) + Number(previous.width || 0);
+          const itemStartX = Number(item.x ?? item.transform?.[4] ?? 0);
+          const gap = itemStartX - previousEndX;
+          const fontSize = Math.max(Number(item.height || 0), Number(previous.height || 0), 1);
+          // Large horizontal gap between items on the same line indicates structured table columns:
+          if (gap > fontSize * 2.5) {
+            output += '\t';
+          } else if (gap > fontSize * 0.18 && !/[\s]$/.test(output) && !/^[\s]/.test(item.str)) {
+            output += ' ';
+          }
+        }
+        output += item.str;
+        previous = item;
+      }
+      return output.trimEnd();
+    })
+    .filter(line => line.length > 0)
+    .join('\n');
 }
 
 async function recognizePage(page: any, canvasModule: any, worker: any) {
@@ -75,19 +103,10 @@ async function renderPagePreview(page: any, canvasModule: any, filePath: string,
 
 export async function extractPdfRange(options: PdfExtractionOptions) {
   const bytes = await fs.readFile(options.filePath);
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const loadingTask = pdfjs.getDocument({
-    data: new Uint8Array(bytes),
-    useSystemFonts: true,
-    useWorkerFetch: false,
-  });
-  const document = await loadingTask.promise;
-  const totalPdfPages = document.numPages;
 
-  if (options.startPage > totalPdfPages || options.endPage > totalPdfPages) {
-    await loadingTask.destroy();
-    throw new Error(`Selected range exceeds the PDF's ${totalPdfPages} pages.`);
-  }
+  // New extractor: pdf.js-extract
+  const { PDFExtract } = await import('./pdf.js-extract/lib/index.mjs');
+  const pdfExtract = new PDFExtract();
 
   const skipSet = options.skipPages
     ? (options.skipPages instanceof Set ? options.skipPages : new Set(options.skipPages))
@@ -111,27 +130,101 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
     targetPages = targetPages.slice(0, options.maxPages);
   }
 
+  const firstPage = targetPages.length > 0 ? Math.min(...targetPages) : options.startPage;
+  const lastPage = targetPages.length > 0 ? Math.max(...targetPages) : options.endPage;
+
+  const extractResult = await pdfExtract.extractBuffer(bytes, {
+    firstPage,
+    lastPage,
+    includeImages: true,
+    includeAttachments: true,
+    normalizeWhitespace: false,
+    disableCombineTextItems: false,
+  });
+
+  if (!extractResult || !extractResult.pages || typeof extractResult.info?.numPages !== 'number') {
+    throw new Error('PDF extraction returned no page data.');
+  }
+
+  const totalPdfPages = extractResult.info.numPages;
+
+  if (options.startPage > totalPdfPages || options.endPage > totalPdfPages) {
+    throw new Error(`Selected range exceeds the PDF's ${totalPdfPages} pages.`);
+  }
+
   const totalPages = targetPages.length;
   const scannedPages: number[] = [];
   let worker: any = null;
-  const canvasModule: any = await import('@napi-rs/canvas');
+  let canvasModule: any = null;
+  let renderDocTask: any = null;
+  let renderDoc: any = null;
   let completedPages = 0;
   const results: BookPageRecord[] = [];
   const tessLanguages = (process.env.PDF_OCR_LANGS || 'eng').trim();
 
   try {
     for (const pdfPage of targetPages) {
-      const page = await document.getPage(pdfPage);
-      const visualPreview = await renderPagePreview(page, canvasModule, options.filePath, options.bookId, pdfPage);
-      const textContent = await page.getTextContent({ includeMarkedContent: false });
-      const items = textContent.items.filter((item: any) => typeof item.str === 'string');
-      const nativeText = reconstructText(items);
+      const pageData: any = extractResult.pages.find((p: any) => p?.info?.num === pdfPage);
+      const items: any[] = pageData?.content || [];
+
+      // Reconstruct text preserving structured lines & tables from pdf.js-extract
+      let nativeText = '';
+      if (pageData && PDFExtract.utils?.pageToLines) {
+        const lines = PDFExtract.utils.pageToLines(pageData, 4);
+        nativeText = reconstructLinesWithTables(lines);
+      }
+      if (!nativeText && items.length > 0) {
+        nativeText = reconstructText(items);
+      }
+
+      // Preserve extracted image data into book directory
+      if (pageData?.images && pageData.images.length > 0) {
+        const imagesDir = path.join(path.dirname(options.filePath), options.bookId, 'page-images');
+        await fs.mkdir(imagesDir, { recursive: true });
+        for (const img of pageData.images) {
+          if (img.base64data) {
+            const imgPath = path.join(imagesDir, `page-${pdfPage}-img-${img.index + 1}.png`);
+            await fs.writeFile(imgPath, Buffer.from(img.base64data, 'base64')).catch(() => null);
+          }
+        }
+      }
+
+      // Visual preview handling
+      let visualPreview: any = undefined;
+      const previewDir = path.join(path.dirname(options.filePath), options.bookId, 'page-previews');
+      const previewPath = path.join(previewDir, `page-${pdfPage}.jpg`);
+      let hasCachedPreview = false;
+      try {
+        const stat = await fs.stat(previewPath);
+        if (stat.size > 0) {
+          visualPreview = { filename: `page-${pdfPage}.jpg`, mimeType: 'image/jpeg' as const, width: 800, height: 1100 };
+          hasCachedPreview = true;
+        }
+      } catch {}
+
+      if (!hasCachedPreview) {
+        try {
+          if (!canvasModule) canvasModule = await import('@napi-rs/canvas');
+          if (!renderDoc) {
+            const { getDocument } = await import('./pdf.js-extract/lib/pdfjs/pdf.mjs');
+            renderDocTask = getDocument({ data: new Uint8Array(bytes), verbosity: -1 });
+            renderDoc = await renderDocTask.promise;
+          }
+          const pageProxy = await renderDoc.getPage(pdfPage);
+          visualPreview = await renderPagePreview(pageProxy, canvasModule, options.filePath, options.bookId, pdfPage);
+          pageProxy.cleanup?.();
+        } catch {
+          // Preview generation is best-effort and does not block text extraction
+        }
+      }
+
       const warnings: string[] = [];
       let text = nativeText;
       let method: BookPageRecord['method'] = 'native';
       let confidence: number | null = null;
       let requiresReview = false;
 
+      // Scanned document / OCR fallback
       if (nativeText.trim().length < 20) {
         scannedPages.push(pdfPage);
         if (!worker) {
@@ -147,7 +240,15 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
           await worker.setParameters({ preserve_interword_spaces: '1' });
         }
         try {
-          const recognized = await recognizePage(page, canvasModule, worker);
+          if (!canvasModule) canvasModule = await import('@napi-rs/canvas');
+          if (!renderDoc) {
+            const { getDocument } = await import('./pdf.js-extract/lib/pdfjs/pdf.mjs');
+            renderDocTask = getDocument({ data: new Uint8Array(bytes), verbosity: -1 });
+            renderDoc = await renderDocTask.promise;
+          }
+          const pageProxy = await renderDoc.getPage(pdfPage);
+          const recognized = await recognizePage(pageProxy, canvasModule, worker);
+          pageProxy.cleanup?.();
           text = recognized.text;
           confidence = recognized.confidence;
           method = text ? 'ocr' : 'empty';
@@ -171,6 +272,7 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
         requiresReview = true;
         if (warnings.length === 0) warnings.push('No selectable text or readable OCR text was found on this page.');
       }
+
       const record: BookPageRecord = {
         bookId: options.bookId,
         pdfPage,
@@ -182,14 +284,14 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
         visualPreview,
         updatedAt: Date.now(),
       };
+
       results.push(record);
       completedPages += 1;
       if (options.onProgress) await options.onProgress(record, completedPages, totalPages);
-      page.cleanup();
     }
   } finally {
-    if (worker) await worker.terminate();
-    await loadingTask.destroy();
+    if (worker) await worker.terminate().catch(() => null);
+    if (renderDocTask) await renderDocTask.destroy().catch(() => null);
   }
 
   return { pages: results, totalPdfPages, scannedPages, ocrLanguages: tessLanguages };
