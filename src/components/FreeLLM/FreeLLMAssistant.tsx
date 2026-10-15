@@ -49,6 +49,19 @@ import { FormattedMessage } from '@/components/Chat/FormattedMessage';
 import { TelegramQuickSend } from './TelegramQuickSend';
 import { apiFetch } from '@/lib/api/apiClient';
 import {
+  WakeWordManager,
+  type VoiceAssistantLifecycleState,
+} from '@/lib/voice/wakeWordManager';
+import {
+  DEFAULT_WAKE_WORDS,
+  STORAGE_KEY_WAKE_ENABLED,
+  STORAGE_KEY_WAKE_CHIME,
+  STORAGE_KEY_VOICE_REPLIES,
+  loadSavedWakeWords,
+  saveWakeWords,
+  getRandomGreeting,
+} from '@/lib/voice/wakeWordMatcher';
+import {
   CatalogModel,
   VERIFIED_FREE_MODELS,
   mergeDiscoveredModels,
@@ -181,7 +194,19 @@ function formatFetchError(err: any): string {
   return msg;
 }
 
-export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhone?: boolean; theme?: 'dark' | 'light' }) {
+export function FreeLLMAssistant({
+  isPhone = false,
+  theme: propTheme,
+  currentTab,
+  onNavigateTab,
+  currentDate,
+}: {
+  isPhone?: boolean;
+  theme?: 'dark' | 'light';
+  currentTab?: string;
+  onNavigateTab?: (tab: any) => void;
+  currentDate?: string;
+}) {
   // ── Theme State & Observer ──
   const [theme, setTheme] = useState<'dark' | 'light'>(propTheme || 'dark');
 
@@ -272,7 +297,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
   const [voiceConfigData, setVoiceConfigData] = useState<any>(null);
   const [isTestingVoice, setIsTestingVoice] = useState(false);
-  const [settingsActiveTab, setSettingsActiveTab] = useState<'gateway' | 'voice'>('gateway');
+  const [settingsActiveTab, setSettingsActiveTab] = useState<'gateway' | 'voice' | 'wake'>('gateway');
 
   const saveVoiceSettings = useCallback((provider: string, voiceId: string, speed: number) => {
     setSelectedVoiceProvider(provider);
@@ -305,6 +330,48 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
   const [voiceModeStatus, setVoiceModeStatus] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle');
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [voiceSubtitle, setVoiceSubtitle] = useState<string>('Listening to your voice...');
+
+  // ── Always-Available Wake-Word & Voice Assistant ──
+  const [wakeWordEnabled, setWakeWordEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem(STORAGE_KEY_WAKE_ENABLED) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [voiceRepliesEnabled, setVoiceRepliesEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      return localStorage.getItem(STORAGE_KEY_VOICE_REPLIES) !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [wakeChimeEnabled, setWakeChimeEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      return localStorage.getItem(STORAGE_KEY_WAKE_CHIME) !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [wakeWordsList, setWakeWordsList] = useState<string[]>(() => loadSavedWakeWords());
+  const [newWakeWordInput, setNewWakeWordInput] = useState('');
+  const [voiceLifecycleState, setVoiceLifecycleState] = useState<VoiceAssistantLifecycleState>('disabled');
+  const [voiceLifecycleDetail, setVoiceLifecycleDetail] = useState('');
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    action: string;
+    targetId?: string;
+    targetTitle?: string;
+    message: string;
+    confirmationPrompt?: string;
+  } | null>(null);
+
+  const wakeWordManagerRef = useRef<WakeWordManager | null>(null);
+  const lastReferencedTaskIdRef = useRef<string | null>(null);
+  const lastReferencedTaskTitleRef = useRef<string | null>(null);
 
   // ── 7. Image Lightbox / Zoom Modal ──
   const [zoomedImage, setZoomedImage] = useState<{ url: string; prompt: string } | null>(null);
@@ -1156,6 +1223,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
     setIsSpeakingMessageId(null);
     setSpeechState({ status: 'idle', messageId: null });
+    wakeWordManagerRef.current?.returnToWakeListening(300);
   }, []);
 
   const pauseSpeechPlayback = useCallback(() => {
@@ -1331,6 +1399,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             setVoiceModeStatus('idle');
             setVoiceSubtitle('⚠️ Audio playback failed.');
           }
+          wakeWordManagerRef.current?.returnToWakeListening(500);
         };
 
         await audio.play();
@@ -1348,6 +1417,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
           setVoiceModeStatus('idle');
           setVoiceSubtitle(`⚠️ Voice error: ${err?.message || 'Synthesis failed.'}`);
         }
+        wakeWordManagerRef.current?.returnToWakeListening(500);
       } finally {
         if (speechAbortRef.current === controller) {
           speechAbortRef.current = null;
@@ -1364,6 +1434,249 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
     }
     void playSpeech(msg.content, msg.id);
   };
+
+  // ── Always-Available Voice Command Assistant Execution ──
+  const executeVoiceAssistantCommand = useCallback(
+    async (commandText: string) => {
+      if (!commandText || !commandText.trim()) return;
+
+      const trimmedCommand = commandText.trim();
+      setLiveTranscript(trimmedCommand);
+      wakeWordManagerRef.current?.notifyExternalState('understanding');
+
+      // Expand window if collapsed so user sees the assistant acting
+      setWindowState(prev => (prev === 'collapsed' ? 'expanded' : prev));
+
+      try {
+        wakeWordManagerRef.current?.notifyExternalState('executing');
+
+        const res = await apiFetch('/api/ai/voice-assistant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            command: trimmedCommand,
+            context: {
+              currentTab,
+              currentDate,
+              lastReferencedTaskId: lastReferencedTaskIdRef.current || undefined,
+              lastReferencedTaskTitle: lastReferencedTaskTitleRef.current || undefined,
+              pendingConfirmation: pendingConfirmation
+                ? {
+                    intent: pendingConfirmation.action,
+                    targetId: pendingConfirmation.targetId,
+                    targetTitle: pendingConfirmation.targetTitle,
+                    expiresAt: Date.now() + 30000,
+                  }
+                : null,
+            },
+          }),
+        });
+
+        const data: any = await res.json();
+
+        if (data.targetTask) {
+          lastReferencedTaskIdRef.current = data.targetTask.id;
+          lastReferencedTaskTitleRef.current = data.targetTask.title;
+        }
+
+        if (data.needsConfirmation) {
+          setPendingConfirmation({
+            action: data.action,
+            targetId: data.targetTask?.id,
+            targetTitle: data.targetTask?.title,
+            message: data.message,
+            confirmationPrompt: data.confirmationPrompt || 'Are you sure you want to proceed?',
+          });
+          wakeWordManagerRef.current?.notifyExternalState('confirming_result');
+
+          const userMsg: FreeLLMMessage = {
+            id: `msg-${Date.now()}-user`,
+            role: 'user',
+            content: trimmedCommand,
+            timestamp: Date.now(),
+          };
+          const assistantMsg: FreeLLMMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            role: 'assistant',
+            content: `${data.message}\n\n⚠️ **${data.confirmationPrompt || 'Say "yes" to confirm or "cancel" to abort.'}**`,
+            timestamp: Date.now(),
+            model: 'Sami Voice Assistant',
+          };
+          updateMessages(prev => [...prev, userMsg, assistantMsg]);
+
+          if (voiceRepliesEnabled && data.spokenText) {
+            wakeWordManagerRef.current?.notifyExternalState('speaking_response');
+            await playSpeech(data.spokenText, assistantMsg.id);
+          }
+          return;
+        }
+
+        // Action completed or rejected
+        setPendingConfirmation(null);
+
+        if (data.navigationTab) {
+          onNavigateTab?.(data.navigationTab);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('np-navigate', {
+                detail: { tab: data.navigationTab, date: currentDate },
+              })
+            );
+          }
+        }
+
+        const userMsg: FreeLLMMessage = {
+          id: `msg-${Date.now()}-user`,
+          role: 'user',
+          content: trimmedCommand,
+          timestamp: Date.now(),
+        };
+        const assistantMsg: FreeLLMMessage = {
+          id: `msg-${Date.now()}-assistant`,
+          role: 'assistant',
+          content: data.message || 'Action executed.',
+          timestamp: Date.now(),
+          model: 'Sami Voice Assistant',
+        };
+        updateMessages(prev => [...prev, userMsg, assistantMsg]);
+
+        if (voiceRepliesEnabled && data.spokenText) {
+          wakeWordManagerRef.current?.notifyExternalState('speaking_response');
+          await playSpeech(data.spokenText, assistantMsg.id);
+        } else {
+          wakeWordManagerRef.current?.returnToWakeListening(500);
+        }
+      } catch (err: any) {
+        console.error('[VoiceAssistant] Command execution failed:', err);
+        const errMsg: FreeLLMMessage = {
+          id: `msg-${Date.now()}-err`,
+          role: 'assistant',
+          content: `⚠️ Failed to execute voice command: ${err?.message || 'Network error'}`,
+          timestamp: Date.now(),
+          model: 'Sami Voice Assistant',
+        };
+        updateMessages(prev => [...prev, errMsg]);
+        wakeWordManagerRef.current?.returnToWakeListening(800);
+      } finally {
+        setTimeout(() => setLiveTranscript(''), 4000);
+      }
+    },
+    [currentTab, currentDate, pendingConfirmation, voiceRepliesEnabled, onNavigateTab, playSpeech, updateMessages]
+  );
+
+  const handleConfirmAction = useCallback(
+    async (confirmed: boolean) => {
+      if (!pendingConfirmation) return;
+      const targetPending = pendingConfirmation;
+      setPendingConfirmation(null);
+
+      try {
+        wakeWordManagerRef.current?.notifyExternalState('executing');
+        const res = await apiFetch('/api/ai/voice-assistant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            confirmation: {
+              confirmed,
+              action: targetPending.action,
+              targetId: targetPending.targetId,
+              targetTitle: targetPending.targetTitle,
+            },
+            context: {
+              currentTab,
+              currentDate,
+            },
+          }),
+        });
+
+        const data: any = await res.json();
+        const assistantMsg: FreeLLMMessage = {
+          id: `msg-${Date.now()}-confirm`,
+          role: 'assistant',
+          content: data.message || (confirmed ? 'Action confirmed and executed.' : 'Action cancelled.'),
+          timestamp: Date.now(),
+          model: 'Sami Voice Assistant',
+        };
+        updateMessages(prev => [...prev, assistantMsg]);
+
+        if (voiceRepliesEnabled && data.spokenText) {
+          wakeWordManagerRef.current?.notifyExternalState('speaking_response');
+          await playSpeech(data.spokenText, assistantMsg.id);
+        } else {
+          wakeWordManagerRef.current?.returnToWakeListening(500);
+        }
+      } catch (err: any) {
+        console.error('[VoiceAssistant] Confirmation error:', err);
+        wakeWordManagerRef.current?.returnToWakeListening(800);
+      }
+    },
+    [pendingConfirmation, currentTab, currentDate, voiceRepliesEnabled, playSpeech, updateMessages]
+  );
+
+  // Keep ref to executeVoiceAssistantCommand to avoid stale closures in Web Speech callbacks
+  const executeVoiceCommandRef = useRef(executeVoiceAssistantCommand);
+  useEffect(() => {
+    executeVoiceCommandRef.current = executeVoiceAssistantCommand;
+  }, [executeVoiceAssistantCommand]);
+
+  // Initialize WakeWordManager on mount
+  useEffect(() => {
+    const manager = new WakeWordManager({
+      onStateChange: (state, detail) => {
+        setVoiceLifecycleState(state);
+        setVoiceLifecycleDetail(detail || '');
+      },
+      onWakeWordDetected: (wakeWord, immediateCommand) => {
+        if (wakeChimeEnabled) {
+          manager.playWakeChime();
+        }
+        if (immediateCommand && immediateCommand.trim()) {
+          executeVoiceCommandRef.current(immediateCommand.trim());
+        } else {
+          setWindowState(prev => (prev === 'collapsed' ? 'expanded' : prev));
+          const greeting = getRandomGreeting();
+          setLiveTranscript(greeting);
+        }
+      },
+      onCommandFinalized: (commandText) => {
+        executeVoiceCommandRef.current(commandText);
+      },
+      onInterimTranscript: (interim) => {
+        setLiveTranscript(interim);
+      },
+      onError: (errorMsg) => {
+        console.warn('[WakeWordManager]:', errorMsg);
+      },
+    });
+
+    wakeWordManagerRef.current = manager;
+
+    if (wakeWordEnabled && !isMicMuted) {
+      manager.enable();
+    }
+
+    return () => {
+      manager.disable();
+      wakeWordManagerRef.current = null;
+    };
+  }, []);
+
+  // Synchronize wakeWordEnabled & isMicMuted with WakeWordManager
+  useEffect(() => {
+    if (!wakeWordManagerRef.current) return;
+    if (wakeWordEnabled && !isMicMuted) {
+      wakeWordManagerRef.current.enable();
+    } else if (wakeWordEnabled && isMicMuted) {
+      wakeWordManagerRef.current.setMuted(true);
+    } else {
+      wakeWordManagerRef.current.disable();
+    }
+  }, [wakeWordEnabled, isMicMuted]);
+
+  // Synchronize configured wake words list with WakeWordManager
+  useEffect(() => {
+    wakeWordManagerRef.current?.updateWakeWords(wakeWordsList);
+  }, [wakeWordsList]);
 
   // ── Send Message to FreeLLMAPI Gateway & Multimodal Router ──
   const handleSendMessage = async (customPrompt?: string, mode?: 'chat' | 'image_gen' | 'video_gen', isFromVoice = false) => {
@@ -1654,8 +1967,16 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
       <button
         onPointerDown={handlePointerDown}
         className="freellm-moon-button"
-        aria-label="Open Multimodal FreeLLM Assistant (Movable AI Moon Button)"
-        title="🌙 FreeLLM Multimodal AI Assistant • Drag to reposition, click to expand"
+        aria-label={
+          wakeWordEnabled && !isMicMuted
+            ? `Sami Voice Assistant listening ("${wakeWordsList[0] || 'Sami'}") - Click to expand`
+            : 'Open Multimodal FreeLLM Assistant (Movable AI Moon Button)'
+        }
+        title={
+          wakeWordEnabled && !isMicMuted
+            ? `🎙️ Sami Voice Assistant is actively listening for "${wakeWordsList[0] || 'Sami'}" or "Wake up"`
+            : '🌙 FreeLLM Multimodal AI Assistant • Drag to reposition, click to expand'
+        }
         style={{
           position: 'fixed',
           ...(btnPos
@@ -1684,6 +2005,10 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
             ? (isDark
                 ? '0 16px 36px rgba(0, 0, 0, 0.7), 0 0 28px var(--accent-glow)'
                 : '0 16px 36px rgba(15, 23, 42, 0.18), 0 0 24px var(--accent-glow)')
+            : wakeWordEnabled && !isMicMuted
+            ? (isDark
+                ? '0 0 24px rgba(16, 185, 129, 0.6), 0 8px 24px rgba(0, 0, 0, 0.5)'
+                : '0 0 20px rgba(16, 185, 129, 0.5), 0 8px 24px rgba(15, 23, 42, 0.15)')
             : (isDark
                 ? '0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px var(--accent-glow)'
                 : '0 8px 24px rgba(15, 23, 42, 0.1), 0 0 14px var(--accent-glow)'),
@@ -1739,6 +2064,29 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
               boxShadow: gatewayOnline === false ? '0 0 6px #ef4444' : '0 0 6px #10b981',
             }}
           />
+          {/* Always-Available Voice Listening Indicator Badge */}
+          {wakeWordEnabled && !isMicMuted && (
+            <span
+              title={`Voice assistant listening for "${wakeWordsList[0] || 'Sami'}" or "Wake up"`}
+              style={{
+                position: 'absolute',
+                top: -6,
+                left: -6,
+                width: 17,
+                height: 17,
+                borderRadius: '50%',
+                background: voiceLifecycleState === 'listening_wake_word' ? '#10b981' : '#38bdf8',
+                border: isDark ? '1.5px solid #0d0d11' : '1.5px solid #ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 0 10px rgba(16, 185, 129, 0.8)',
+                animation: 'pulse 1.8s infinite',
+              }}
+            >
+              <Mic style={{ width: 10, height: 10, color: '#ffffff' }} />
+            </span>
+          )}
         </div>
       </button>
       </>
@@ -2405,6 +2753,26 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                     <Volume2 style={{ width: 13, height: 13 }} />
                     Neural Voice (TTS)
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsActiveTab('wake')}
+                    style={{
+                      background: settingsActiveTab === 'wake' ? (isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(168, 85, 247, 0.15)') : 'transparent',
+                      border: '1px solid ' + (settingsActiveTab === 'wake' ? 'rgba(168, 85, 247, 0.4)' : 'transparent'),
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      color: settingsActiveTab === 'wake' ? '#c084fc' : 'var(--text-muted)',
+                      fontWeight: settingsActiveTab === 'wake' ? 600 : 400,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      fontSize: 11.5,
+                    }}
+                  >
+                    <Mic style={{ width: 13, height: 13 }} />
+                    Wake Word & Assistant
+                  </button>
                 </div>
                 <button
                   onClick={() => setShowSettingsModal(false)}
@@ -2420,7 +2788,7 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                 </button>
               </div>
 
-              {settingsActiveTab === 'gateway' ? (
+              {settingsActiveTab === 'gateway' && (
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -2530,7 +2898,9 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                     </div>
                   </div>
                 </>
-              ) : (
+              )}
+
+              {settingsActiveTab === 'voice' && (
                 /* ── Neural Voice (TTS) Settings Tab ── */
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
@@ -2864,6 +3234,275 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
                   })()}
                 </div>
               )}
+
+              {settingsActiveTab === 'wake' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {/* Wake-Word Always-On Toggle */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(15, 23, 42, 0.04)',
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)'),
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-primary)' }}>
+                        Always-Available Wake Word Listening
+                      </div>
+                      <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                        Listens locally while the tab is open without streaming audio to paid remote models.
+                      </div>
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative' }}>
+                      <input
+                        type="checkbox"
+                        checked={wakeWordEnabled}
+                        onChange={e => {
+                          const val = e.target.checked;
+                          setWakeWordEnabled(val);
+                          try {
+                            localStorage.setItem(STORAGE_KEY_WAKE_ENABLED, String(val));
+                          } catch {}
+                          if (val) {
+                            wakeWordManagerRef.current?.enable();
+                          } else {
+                            wakeWordManagerRef.current?.disable();
+                          }
+                        }}
+                        style={{ width: 18, height: 18, accentColor: '#a855f7', cursor: 'pointer' }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Wake Words & Aliases Chip Manager */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <label style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                        Active Wake Words & Spoken Aliases:
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWakeWordsList(DEFAULT_WAKE_WORDS);
+                          saveWakeWords(DEFAULT_WAKE_WORDS);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#a855f7',
+                          fontSize: 10.5,
+                          cursor: 'pointer',
+                          padding: 0,
+                          textDecoration: 'underline',
+                        }}
+                      >
+                        Reset Defaults
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {wakeWordsList.map(word => (
+                        <span
+                          key={word}
+                          style={{
+                            background: isDark ? 'rgba(168, 85, 247, 0.2)' : 'rgba(168, 85, 247, 0.1)',
+                            border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.4)' : 'rgba(168, 85, 247, 0.3)'),
+                            borderRadius: 16,
+                            padding: '3px 8px',
+                            fontSize: 11,
+                            color: isDark ? '#e9d5ff' : '#6b21a8',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          "{word}"
+                          {wakeWordsList.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = wakeWordsList.filter(w => w !== word);
+                                setWakeWordsList(next);
+                                saveWakeWords(next);
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'inherit',
+                                cursor: 'pointer',
+                                padding: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                              }}
+                              title={`Remove "${word}"`}
+                            >
+                              <X style={{ width: 11, height: 11 }} />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Add Wake Word Input */}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                      <input
+                        type="text"
+                        value={newWakeWordInput}
+                        onChange={e => setNewWakeWordInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            const val = newWakeWordInput.trim().toLowerCase();
+                            if (val && !wakeWordsList.includes(val)) {
+                              const next = [...wakeWordsList, val];
+                              setWakeWordsList(next);
+                              saveWakeWords(next);
+                              setNewWakeWordInput('');
+                            }
+                          }
+                        }}
+                        placeholder="Add new wake alias (e.g. 'assistant')..."
+                        style={{
+                          flex: 1,
+                          background: isDark ? 'rgba(0, 0, 0, 0.4)' : '#ffffff',
+                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          color: 'var(--text-primary)',
+                          borderRadius: 6,
+                          padding: '5px 8px',
+                          fontSize: 11,
+                          outline: 'none',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = newWakeWordInput.trim().toLowerCase();
+                          if (val && !wakeWordsList.includes(val)) {
+                            const next = [...wakeWordsList, val];
+                            setWakeWordsList(next);
+                            saveWakeWords(next);
+                            setNewWakeWordInput('');
+                          }
+                        }}
+                        style={{
+                          background: 'rgba(168, 85, 247, 0.25)',
+                          border: '1px solid rgba(168, 85, 247, 0.4)',
+                          borderRadius: 6,
+                          padding: '4px 10px',
+                          color: '#c084fc',
+                          fontSize: 11,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Neural Voice Output Toggle & Audio Chime */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.03)',
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-primary)' }}>
+                          Spoken Neural Voice Replies
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                          Assistant responds aloud using neural voice. Turn off for silent text-only responses to protect ElevenLabs quota.
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={voiceRepliesEnabled}
+                        onChange={e => {
+                          const val = e.target.checked;
+                          setVoiceRepliesEnabled(val);
+                          try {
+                            localStorage.setItem(STORAGE_KEY_VOICE_REPLIES, String(val));
+                          } catch {}
+                        }}
+                        style={{ width: 16, height: 16, accentColor: '#a855f7', cursor: 'pointer' }}
+                      />
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(15, 23, 42, 0.03)',
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-primary)' }}>
+                          Wake Tone Chime (520Hz → 780Hz)
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                          Plays a subtle dual-tone chime when a wake word is recognized.
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={wakeChimeEnabled}
+                        onChange={e => {
+                          const val = e.target.checked;
+                          setWakeChimeEnabled(val);
+                          try {
+                            localStorage.setItem(STORAGE_KEY_WAKE_CHIME, String(val));
+                          } catch {}
+                        }}
+                        style={{ width: 16, height: 16, accentColor: '#a855f7', cursor: 'pointer' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Status & Test Chime / Mic */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      background: isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(15, 23, 42, 0.04)',
+                      fontSize: 11,
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-secondary)' }}>
+                      Status: <strong>{voiceLifecycleState}</strong> {voiceLifecycleDetail ? `(${voiceLifecycleDetail})` : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => wakeWordManagerRef.current?.playWakeChime()}
+                      style={{
+                        background: 'rgba(168, 85, 247, 0.2)',
+                        border: '1px solid rgba(168, 85, 247, 0.4)',
+                        borderRadius: 4,
+                        padding: '3px 8px',
+                        color: '#c084fc',
+                        fontSize: 10.5,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Test Chime
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -3107,6 +3746,152 @@ export function FreeLLMAssistant({ isPhone = false, theme: propTheme }: { isPhon
           );
         })()}
       </div>
+
+      {/* ── Pending Voice Action Confirmation Banner ── */}
+      {pendingConfirmation && (
+        <div
+          style={{
+            padding: '10px 14px',
+            background: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(254, 226, 226, 0.95)',
+            borderBottom: '1px solid rgba(239, 68, 68, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            fontSize: 12,
+            backdropFilter: 'blur(10px)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+            <AlertTriangle style={{ width: 16, height: 16, color: '#ef4444', flexShrink: 0 }} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, color: isDark ? '#fca5a5' : '#b91c1c', fontSize: 12 }}>
+                {pendingConfirmation.confirmationPrompt || 'Confirmation Required'}
+              </div>
+              <div style={{ fontSize: 11, color: isDark ? '#f87171' : '#dc2626', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {pendingConfirmation.targetTitle ? `Target: "${pendingConfirmation.targetTitle}"` : pendingConfirmation.message}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <button
+              onClick={() => handleConfirmAction(false)}
+              style={{
+                background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)',
+                border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.15)'),
+                borderRadius: 6,
+                padding: '4px 10px',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: 11,
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => handleConfirmAction(true)}
+              style={{
+                background: '#ef4444',
+                border: 'none',
+                borderRadius: 6,
+                padding: '4px 12px',
+                color: '#ffffff',
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontSize: 11,
+                boxShadow: '0 0 10px rgba(239, 68, 68, 0.4)',
+              }}
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Active Wake-Word Assistant Status Strip ── */}
+      {wakeWordEnabled && !isMicMuted && (
+        <div
+          style={{
+            padding: '5px 12px',
+            background: isDark ? 'rgba(16, 185, 129, 0.08)' : 'rgba(236, 253, 245, 0.9)',
+            borderBottom: '1px solid ' + (isDark ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.25)'),
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: 11,
+            gap: 8,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background:
+                  voiceLifecycleState === 'listening_wake_word'
+                    ? '#10b981'
+                    : voiceLifecycleState === 'listening_command' || voiceLifecycleState === 'transcribing'
+                    ? '#38bdf8'
+                    : voiceLifecycleState === 'executing' || voiceLifecycleState === 'understanding'
+                    ? '#a855f7'
+                    : voiceLifecycleState === 'speaking_response'
+                    ? '#f59e0b'
+                    : '#94a3b8',
+                boxShadow: '0 0 6px currentColor',
+                animation: 'pulse 1.8s infinite',
+              }}
+            />
+            <span style={{ fontWeight: 600, color: isDark ? '#34d399' : '#059669', flexShrink: 0 }}>
+              {voiceLifecycleState === 'listening_wake_word'
+                ? `Listening for "${wakeWordsList[0] || 'Sami'}"`
+                : voiceLifecycleState === 'listening_command'
+                ? 'Listening for command...'
+                : voiceLifecycleState === 'understanding'
+                ? 'Understanding command...'
+                : voiceLifecycleState === 'executing'
+                ? 'Executing...'
+                : voiceLifecycleState === 'speaking_response'
+                ? 'Speaking response...'
+                : 'Wake Word Active'}
+            </span>
+
+            {liveTranscript && (
+              <span
+                style={{
+                  color: 'var(--text-muted)',
+                  fontStyle: 'italic',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                "{liveTranscript}"
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsMicMuted(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-muted)',
+              fontSize: 10,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 3,
+              padding: '2px 4px',
+            }}
+            title="Mute microphone"
+          >
+            <MicOff style={{ width: 11, height: 11 }} />
+            <span>Mute</span>
+          </button>
+        </div>
+      )}
 
       {/* ── Voice Mode Overlay ── */}
       {isVoiceModeActive && (

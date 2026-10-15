@@ -62,29 +62,17 @@ async function ensureSchema(sql: NonNullable<ReturnType<typeof getDb>>) {
   await schemaReady;
 }
 
-/** Convert a local wall-clock date/time to UTC using Intl, including DST validation. */
-export function zonedDateTimeToTimestamp(date: string, time: string, timezone: string): number {
-  const normTime = normalizeTimeString(time);
-  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  const timeMatch = /^(\d{2}):(\d{2})$/.exec(normTime);
-  if (!dateMatch || !timeMatch) throw new Error('Schedule needs a valid YYYY-MM-DD date and HH:mm time.');
-  const [year, month, day] = dateMatch.slice(1).map(Number);
-  const [hour, minute] = timeMatch.slice(1).map(Number);
-  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59) throw new Error('Schedule date or time is out of range.');
-  const targetAsUtc = Date.UTC(year, month - 1, day, hour, minute);
-  const calendarCheck = new Date(targetAsUtc);
-  if (calendarCheck.getUTCFullYear() !== year || calendarCheck.getUTCMonth() + 1 !== month || calendarCheck.getUTCDate() !== day) throw new Error('Schedule date is not a valid calendar date.');
-  let candidate = targetAsUtc;
-  const effectiveTz = timezone || 'Africa/Addis_Ababa';
-  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: effectiveTz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-  for (let i = 0; i < 4; i++) {
-    const values = Object.fromEntries(formatter.formatToParts(new Date(candidate)).map(part => [part.type, part.value]));
-    const renderedAsUtc = Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), Number(values.hour), Number(values.minute));
-    const delta = targetAsUtc - renderedAsUtc;
-    if (delta === 0) return candidate;
-    candidate += delta;
+import { getDeliveryZonedTimestamp as zonedDateTimeToTimestamp } from '../date/bookDeliverySchedule';
+export { zonedDateTimeToTimestamp };
+
+export async function cancelBookPublishJob(userId: string, assignmentId: string) {
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    await sql`DELETE FROM book_publish_jobs WHERE assignment_id = ${assignmentId} AND user_id = ${userId}`;
   }
-  throw new Error(`The requested local time does not exist in ${effectiveTz} (daylight-saving transition).`);
+  const all = readJobs().filter(item => !(item.assignmentId === assignmentId && item.userId === userId));
+  writeJson(JOBS_PATH, all);
 }
 
 export function makeBookPublishJob(

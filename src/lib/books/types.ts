@@ -50,7 +50,7 @@ export interface BookAssignmentRecord {
   estimatedMinutes: number;
   rationale: string;
   status: 'draft' | 'approved' | 'completed' | 'superseded';
-  deliveryStatus?: 'pending' | 'scheduled' | 'sending' | 'sent' | 'failed';
+  deliveryStatus?: 'pending' | 'scheduled' | 'sending' | 'sent' | 'failed' | 'cancelled' | 'overdue';
   lastDeliveryError?: string;
   deliveredAt?: number;
   studyNotes?: BookStudyNotes;

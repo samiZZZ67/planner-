@@ -139,6 +139,13 @@ export default function SamsSpaceApp() {
     const savedAvatar = localStorage.getItem('np_sams_ai_avatar');
     if (savedAvatar) setProfileAvatarUrl(savedAvatar);
 
+    // Voice assistant navigation listener
+    const handleVoiceNavigate = (e: any) => {
+      if (e.detail?.tab) setCurrentTab(e.detail.tab);
+      if (e.detail?.date) setCurrentDate(e.detail.date);
+    };
+    window.addEventListener('np-navigate', handleVoiceNavigate);
+
     // Full-Site Master Password Verification
     async function verifyAuthStatus() {
       const token = typeof window !== 'undefined' ? localStorage.getItem('np_session_token') : null;
@@ -590,7 +597,13 @@ export default function SamsSpaceApp() {
       />
 
       {/* ── 9. Independent FreeLLMAPI Assistant (Movable, Expandable AI Moon Button) ── */}
-      <FreeLLMAssistant isPhone={isPhone} theme={theme} />
+      <FreeLLMAssistant
+        isPhone={isPhone}
+        theme={theme}
+        currentTab={currentTab}
+        onNavigateTab={setCurrentTab}
+        currentDate={currentDate}
+      />
     </div>
   );
 }

@@ -27,6 +27,7 @@ import {
 import { apiFetch } from '@/lib/api/apiClient';
 import { notifyFeedback } from '@/lib/utils/actionFeedback';
 import { defaultPostingTimes, type BookAssignmentRecord, type BookPageRecord, type BookRecord } from '@/lib/books/types';
+import { describeScheduleRemaining } from '@/lib/date/bookDeliverySchedule';
 
 interface BookAnalyticsModalProps {
   isOpen: boolean;
@@ -862,6 +863,34 @@ export function BookAnalyticsModal({
                       </div>
                     </div>
 
+                    {(() => {
+                      const desc = describeScheduleRemaining(
+                        nextPendingAssignment.postingTime || book.postingTime,
+                        nextPendingAssignment.scheduledDate,
+                        book.timezone
+                      );
+                      return (
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            fontSize: 12,
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            border: '1px solid rgba(59, 130, 246, 0.25)',
+                            color: '#93c5fd',
+                          }}
+                        >
+                          <Clock size={13} style={{ flexShrink: 0 }} />
+                          <span>
+                            <strong>Countdown to delivery:</strong> {desc.remainingText}
+                          </span>
+                        </div>
+                      );
+                    })()}
+
                     <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                       <strong>Concepts: </strong>
                       {nextPendingAssignment.concepts.map(c => c.title).join(', ') || 'Core Reading Section'}
@@ -1373,6 +1402,27 @@ export function BookAnalyticsModal({
                         />
                       ))}
                     </div>
+                    <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {Array.from({ length: sectionsPerDay }).map((_, idx) => {
+                        const time = postingTimes[idx] || '08:00';
+                        const desc = describeScheduleRemaining(time, null, book.timezone);
+                        return (
+                          <span
+                            key={idx}
+                            style={{
+                              fontSize: 11,
+                              padding: '2px 7px',
+                              borderRadius: 6,
+                              background: 'rgba(59, 130, 246, 0.1)',
+                              border: '1px solid rgba(59, 130, 246, 0.2)',
+                              color: '#93c5fd',
+                            }}
+                          >
+                            Part {idx + 1} ({time}): {desc.remainingText}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -1606,6 +1656,34 @@ export function BookAnalyticsModal({
                                 />
                               </label>
                             </div>
+
+                            {assignmentDraft.postingTime && (
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  padding: '5px 10px',
+                                  borderRadius: 6,
+                                  background: 'rgba(59, 130, 246, 0.1)',
+                                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                                  color: '#93c5fd',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                }}
+                              >
+                                <Clock size={12} style={{ flexShrink: 0 }} />
+                                <span>
+                                  <strong>Estimated delivery:</strong>{' '}
+                                  {
+                                    describeScheduleRemaining(
+                                      assignmentDraft.postingTime,
+                                      assignmentDraft.scheduledDate || assignment.scheduledDate,
+                                      book.timezone
+                                    ).remainingText
+                                  }
+                                </span>
+                              </div>
+                            )}
 
                             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                               <button

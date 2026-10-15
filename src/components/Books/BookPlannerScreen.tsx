@@ -6,6 +6,8 @@ import { apiFetch } from '@/lib/api/apiClient';
 import { notifyFeedback } from '@/lib/utils/actionFeedback';
 import { BookAnalyticsModal } from './BookAnalyticsModal';
 import { BookReviewModal } from './BookReviewModal';
+import { LiveBookDeliveryCountdown } from './LiveBookDeliveryCountdown';
+import { describeScheduleRemaining } from '@/lib/date/bookDeliverySchedule';
 import type { BookAssignmentRecord, BookPageRecord, BookRecord, BookStudyNotes } from '@/lib/books/types';
 
 const fieldStyle: React.CSSProperties = { display: 'grid', gap: 6, color: 'var(--text-secondary)', fontSize: 13 };
@@ -84,6 +86,8 @@ export function BookPlannerScreen() {
   const [error, setError] = useState('');
   const [startPage, setStartPage] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
+  const [addPostingTime, setAddPostingTime] = useState('08:00');
+  const [addTimezone, setAddTimezone] = useState('Africa/Addis_Ababa');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [sendingAssignmentId, setSendingAssignmentId] = useState<string | null>(null);
   const [pagesByBook, setPagesByBook] = useState<Record<string, BookPageRecord[]>>({});
@@ -172,7 +176,21 @@ export function BookPlannerScreen() {
       const response = await apiFetch('/api/books');
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not load books.');
-      setBooks(data.books || []);
+      const loadedBooks: BookRecord[] = data.books || [];
+      setBooks(loadedBooks);
+      // Fetch assignments for active/completed books so the countdown timer immediately resolves the next delivery
+      for (const b of loadedBooks) {
+        if (b.extractionStatus === 'completed' || b.automationStatus === 'ready') {
+          void apiFetch(`/api/books/${encodeURIComponent(b.id)}/assignments`)
+            .then(res => res.json())
+            .then(aData => {
+              if (aData.assignments) {
+                setAssignmentsByBook(current => ({ ...current, [b.id]: aData.assignments }));
+              }
+            })
+            .catch(() => {});
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load books.');
     } finally {
@@ -520,6 +538,24 @@ export function BookPlannerScreen() {
         </div>
       </div>
 
+      {/* Live Countdown Timer & Alarm for Next Scheduled Book Delivery */}
+      <LiveBookDeliveryCountdown
+        books={books}
+        assignmentsByBook={assignmentsByBook}
+        onAssignmentsUpdated={(bookId, newAssignments) => {
+          setAssignmentsByBook(current => ({ ...current, [bookId]: newAssignments }));
+        }}
+        onBookUpdated={(updatedBook) => {
+          setBooks(current => current.map(b => b.id === updatedBook.id ? updatedBook : b));
+        }}
+        onSendNow={async (assignment, book) => {
+          await sendAssignmentNow(book, assignment);
+        }}
+        onOpenBookAnalytics={(book) => {
+          void openBookAnalytics(book);
+        }}
+      />
+
       <form className="v-card" onSubmit={handleUpload} style={{ padding: 18, display: 'grid', gap: 14 }}>
         <h3 style={{ margin: 0 }}>Add a book</h3>
         <label style={fieldStyle}>PDF file<input name="pdf" type="file" accept="application/pdf,.pdf" required style={inputStyle} /></label>
@@ -536,10 +572,33 @@ export function BookPlannerScreen() {
           <label style={fieldStyle}>Study minutes per day<input name="studyMinutes" type="number" min={5} max={1440} defaultValue={60} required style={inputStyle} /></label>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12 }}>
-          <label style={fieldStyle}>Daily posting time<input name="postingTime" type="time" defaultValue="08:00" required style={inputStyle} /></label>
-          <label style={fieldStyle}>Timezone<input name="timezone" defaultValue="Africa/Nairobi" required style={inputStyle} /></label>
+          <label style={fieldStyle}>Daily posting time<input name="postingTime" type="time" value={addPostingTime} onChange={e => setAddPostingTime(e.target.value)} required style={inputStyle} /></label>
+          <label style={fieldStyle}>Timezone<input name="timezone" value={addTimezone} onChange={e => setAddTimezone(e.target.value)} required style={inputStyle} /></label>
           <label style={fieldStyle}>Current PDF page<input name="currentPage" type="number" min={startPage} value={currentPage} onChange={event => setCurrentPage(Math.max(startPage, Number(event.target.value) || startPage))} required style={inputStyle} /></label>
         </div>
+        {(() => {
+          const preview = describeScheduleRemaining(addPostingTime, null, addTimezone);
+          return (
+            <div
+              style={{
+                fontSize: 12,
+                padding: '8px 12px',
+                borderRadius: 8,
+                background: 'rgba(59, 130, 246, 0.1)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                color: '#93c5fd',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <Clock3 size={14} style={{ flexShrink: 0 }} />
+              <span>
+                <strong>Next delivery estimate:</strong> {preview.remainingText} (at {addPostingTime} in {addTimezone})
+              </span>
+            </div>
+          );
+        })()}
         <button className="v-pill-btn" type="submit" disabled={isUploading} style={{ minHeight: 44, display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 8, cursor: isUploading ? 'wait' : 'pointer' }}>
           <FileUp size={17} /> {isUploading ? 'Saving PDF…' : 'Queue daily Telegram delivery'}
         </button>
@@ -683,6 +742,32 @@ export function BookPlannerScreen() {
                 <label style={fieldStyle}>Timezone<input style={inputStyle} value={String(bookDraft.timezone || '')} onChange={event => setBookDraft(current => ({ ...current, timezone: event.target.value }))} /></label>
                 <label style={fieldStyle}>Current PDF page<input type="number" min={book.startPage} max={book.endPage} style={inputStyle} value={Number(bookDraft.currentPage || book.startPage)} onChange={event => setBookDraft(current => ({ ...current, currentPage: Number(event.target.value) }))} /></label>
               </div>
+              {(() => {
+                const pTime = String(bookDraft.postingTime || '08:00');
+                const tz = String(bookDraft.timezone || 'Africa/Addis_Ababa');
+                const pDate = bookDraft.startDate ? String(bookDraft.startDate) : null;
+                const preview = describeScheduleRemaining(pTime, pDate, tz);
+                return (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      padding: '7px 11px',
+                      borderRadius: 8,
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      border: '1px solid rgba(59, 130, 246, 0.25)',
+                      color: '#93c5fd',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Clock3 size={13} style={{ flexShrink: 0 }} />
+                    <span>
+                      <strong>Next delivery estimate:</strong> {preview.remainingText} (at {pTime} in {tz})
+                    </span>
+                  </div>
+                );
+              })()}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" className="v-pill-btn" disabled={savingBookEditId === book.id} onClick={() => void saveBookEdit(book)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center', cursor: savingBookEditId === book.id ? 'wait' : 'pointer' }}>
                   <Save size={14} /> {savingBookEditId === book.id ? 'Saving changes…' : 'Save changes'}
