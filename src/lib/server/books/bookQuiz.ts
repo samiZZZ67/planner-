@@ -12,6 +12,7 @@ import {
   splitTelegramText,
   formatTelegramMessage,
   sanitizeUtf8,
+  truncateUnicode,
   type InlineKeyboardButton,
   type TelegramPollResult,
 } from '../telegram';
@@ -409,22 +410,22 @@ export function generateDeterministicQuestions(
         pdfPage: startPage,
       };
 
-      const correctAns = item.answer.slice(0, 95);
+      const correctAns = truncateUnicode(item.answer, 95);
       const distractors = [
         `Misinterpreting ${termDef.term} as standard passive reading without practice.`,
         `Relying solely on brief superficial reviews rather than deep analysis.`,
         `Postponing structured execution indefinitely without deliberate scheduling.`,
-      ].map(d => d.slice(0, 95));
+      ].map(d => truncateUnicode(d, 95));
 
       const options = [correctAns, ...distractors.slice(0, 3)].sort(() => 0.5 - ((i * 3 + 1) % 5));
       const correctOptionId = options.indexOf(correctAns);
 
       questions.push({
         id: `q_${questions.length}`,
-        question: item.question.slice(0, 290),
+        question: truncateUnicode(item.question, 290),
         options,
         correctOptionId,
-        conciseExplanation: `Correct! ${correctAns.slice(0, 180)}`,
+        conciseExplanation: `Correct! ${truncateUnicode(correctAns, 180)}`,
         detailedExplanation: `According to ${book.title} (PDF p. ${item.pdfPages?.join(', ') || startPage}): ${item.answer}`,
         definition: {
           term: termDef.term,
@@ -455,7 +456,7 @@ export function generateDeterministicQuestions(
     const coreSentence = sentences[qIdx % Math.max(1, sentences.length)] || `Key foundation from PDF page ${page.pdfPage} of ${book.title}.`;
     const prompt = `What core insight is established in PDF page ${page.pdfPage} of ${book.title}?`;
 
-    const correct = coreSentence.slice(0, 95);
+    const correct = truncateUnicode(coreSentence, 95);
     const options = [
       correct,
       `Superficial multitasking without concentrated focus.`,
@@ -465,10 +466,10 @@ export function generateDeterministicQuestions(
 
     questions.push({
       id: `q_${qIdx}`,
-      question: prompt.slice(0, 290),
+      question: truncateUnicode(prompt, 290),
       options,
       correctOptionId: 0,
-      conciseExplanation: `Correct! Grounded in PDF page ${page.pdfPage}: "${correct.slice(0, 150)}"`,
+      conciseExplanation: `Correct! Grounded in PDF page ${page.pdfPage}: "${truncateUnicode(correct, 150)}"`,
       detailedExplanation: `In ${book.title} (PDF page ${page.pdfPage}), the text directly emphasizes: "${coreSentence}"`,
       definition: {
         term: `Principle (PDF p. ${page.pdfPage})`,
@@ -547,8 +548,8 @@ Rules:
       const validated: BookQuizQuestion[] = [];
       for (let i = 0; i < Math.min(count, parsed.length); i++) {
         const item = parsed[i];
-        const question = String(item.question || '').trim().slice(0, 290);
-        const optionsList = Array.isArray(item.options) ? item.options.map((o: any) => String(o).trim().slice(0, 95)).filter(Boolean) : [];
+        const question = truncateUnicode(String(item.question || '').trim(), 290);
+        const optionsList = Array.isArray(item.options) ? item.options.map((o: any) => truncateUnicode(String(o).trim(), 95)).filter(Boolean) : [];
         if (question && optionsList.length >= 2) {
           const correctId = Number.isInteger(Number(item.correctOptionId))
             ? Math.max(0, Math.min(Number(item.correctOptionId), optionsList.length - 1))
@@ -558,7 +559,7 @@ Rules:
             question: sanitizeUtf8(question),
             options: optionsList.slice(0, 4).map((o: any) => sanitizeUtf8(o)),
             correctOptionId: correctId,
-            conciseExplanation: sanitizeUtf8(String(item.conciseExplanation || `Correct! Grounded in PDF pages ${startPage}-${endPage}.`).trim()).slice(0, 195),
+            conciseExplanation: truncateUnicode(sanitizeUtf8(String(item.conciseExplanation || `Correct! Grounded in PDF pages ${startPage}-${endPage}.`).trim()), 195),
             detailedExplanation: sanitizeUtf8(String(item.detailedExplanation || `Based on ${book.title}.`).trim()),
             definition: {
               term: sanitizeUtf8(String(item.definition?.term || book.title).trim()),
@@ -716,10 +717,10 @@ export async function sendQuizQuestion(
   // 1. Send native Telegram Quiz Poll
   const pollResult = await sendTelegramQuizPoll({
     chatId: session.chatId,
-    question: `[Day ${session.dayNumber} · S${sectionIndex + 1}:Q${questionIndex + 1}] ${question.question}`.slice(0, 300),
+    question: truncateUnicode(`[Day ${session.dayNumber} · S${sectionIndex + 1}:Q${questionIndex + 1}] ${question.question}`, 300),
     options: question.options,
     correctOptionId: question.correctOptionId,
-    explanation: question.conciseExplanation.slice(0, 200),
+    explanation: truncateUnicode(question.conciseExplanation, 200),
     isAnonymous: false,
   });
 

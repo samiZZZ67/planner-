@@ -71,15 +71,15 @@ export function escapeTelegramAttr(text: string): string {
 
 /**
  * Rigorously sanitizes a string to ensure 100% valid UTF-8 compliance for Telegram Bot API:
- * 1. Strips unpaired / lone surrogate code points (\uD800-\uDFFF) that cause Telegram "strings must be encoded in UTF-8"
- * 2. Invokes toWellFormed() if available in the runtime environment
+ * 1. Strips unpaired / lone surrogate code points (\uD800-\uDFFF) using unicode-aware regex
+ * 2. Invokes toWellFormed() if available in runtime
  * 3. Removes null bytes (\0) and non-printable ASCII control characters (preserving \n, \r, \t)
  * 4. Removes non-characters and corrupted unicode replacement sequences
  */
 export function sanitizeUtf8(str: string): string {
   if (typeof str !== 'string') return '';
-  // 1. Remove lone surrogate halves (high surrogate without low surrogate, or low without high)
-  let s = str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+  // 1. Remove lone surrogate code points without affecting valid surrogate pairs
+  let s = str.replace(/[\uD800-\uDFFF]/gu, '');
   // 2. Normalize to well-formed Unicode if runtime supports it
   if (typeof (s as any).toWellFormed === 'function') {
     s = (s as any).toWellFormed();
@@ -88,7 +88,30 @@ export function sanitizeUtf8(str: string): string {
   s = s.replace(/\0/g, '').replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
   // 4. Remove unicode specials and corrupted non-characters
   s = s.replace(/[\uFDD0-\uFDEF\uFFFE\uFFFF]/g, '');
+  // 5. Final fallback pass for any remaining unpaired surrogates
+  s = s.replace(/[\uD800-\uDFFF]/gu, '');
   return s;
+}
+
+/**
+ * Safely truncates a string by Unicode code points (not UTF-16 code units),
+ * guaranteeing that multi-byte code points, surrogate pairs, and emojis are never sliced.
+ */
+export function truncateUnicode(str: string, maxLength: number): string {
+  if (!str) return '';
+  const clean = sanitizeUtf8(str);
+  const codePoints = Array.from(clean);
+  if (codePoints.length <= maxLength) return clean;
+  return sanitizeUtf8(codePoints.slice(0, maxLength).join(''));
+}
+
+/**
+ * Deeply sanitizes serialized JSON text before sending to Telegram Bot API,
+ * removing any lone surrogate escape sequences (\ud800-\udfff) that TDLib / Telegram C++ parser rejects.
+ */
+export function sanitizeJsonPayloadString(jsonStr: string): string {
+  if (!jsonStr) return jsonStr;
+  return jsonStr.replace(/\\u[dD][89a-bA-Fa-f][0-9a-fA-F]{2}/gi, '');
 }
 
 /**
@@ -427,9 +450,8 @@ function formatBookExcerpt(text: string): string {
     /(?:^|\n)(\[PDF page \d+[^\]]*\]|📄\s*\[PDF Page \d+[^\]]*\])\n([\s\S]*?)(?=(?:\n\[PDF page |\n📄\s*\[PDF Page |$))/gi,
     (match, header, pageBody) => {
       const cleanHeader = header.trim();
-      const formattedHeader = cleanHeader.startsWith('📄')
-        ? `📄 <b>${cleanHeader.slice(1).trim()}</b>`
-        : `📄 <b>${cleanHeader}</b>`;
+      const titleWithoutEmoji = cleanHeader.replace(/^📄\s*/, '').trim();
+      const formattedHeader = `📄 <b>${titleWithoutEmoji}</b>`;
 
       // The body text is preserved verbatim with safe code block and entity escaping
       const formattedBody = formatMarkdownToTelegramHtml(pageBody.trim());
@@ -481,20 +503,22 @@ export function formatTelegramMessage(
  * Safely splits a Telegram HTML message into multiple parts of at most `maxChars`
  * (default 3800, well within Telegram's 4096 limit) while:
  * 1. Never splitting inside an HTML tag (<...>) or HTML entity (&...;)
- * 2. Never splitting inside a URL or inline formatting entity if possible
+ * 2. Never splitting inside a surrogate pair (high + low surrogate code unit)
  * 3. Closing all currently open tags at the end of each chunk
  * 4. Re-opening those exact tags at the beginning of the next chunk
+ * 5. Sanitizing every chunk to 100% valid UTF-8
  */
 export function splitTelegramHtml(html: string, maxChars = 3800): string[] {
   if (!html) return [''];
-  if (html.length <= maxChars) return [html];
+  const cleanSource = sanitizeUtf8(html);
+  if (cleanSource.length <= maxChars) return [cleanSource];
 
   const chunks: string[] = [];
-  let remaining = html;
+  let remaining = cleanSource;
 
   while (remaining.length > 0) {
     if (remaining.length <= maxChars) {
-      chunks.push(remaining);
+      chunks.push(sanitizeUtf8(remaining));
       break;
     }
 
@@ -536,6 +560,14 @@ export function splitTelegramHtml(html: string, maxChars = 3800): string[] {
       splitIdx = ampIdx;
     }
 
+    // 4. Ensure splitIdx never bisects a surrogate pair (high surrogate at splitIdx - 1)
+    if (splitIdx > 0 && splitIdx < remaining.length) {
+      const prevCode = remaining.charCodeAt(splitIdx - 1);
+      if (prevCode >= 0xd800 && prevCode <= 0xdbff) {
+        splitIdx -= 1;
+      }
+    }
+
     if (splitIdx <= 0) {
       splitIdx = maxChars;
     }
@@ -543,20 +575,21 @@ export function splitTelegramHtml(html: string, maxChars = 3800): string[] {
     let chunk = remaining.slice(0, splitIdx);
     remaining = remaining.slice(splitIdx);
 
-    // 4. Calculate which HTML tags are currently open in this chunk
+    // 5. Calculate which HTML tags are currently open in this chunk
     const openTags = getOpenHtmlTags(chunk);
 
-    // 5. Close all open tags at the end of current chunk
+    // 6. Close all open tags at the end of current chunk
     if (openTags.length > 0) {
       const closingTags = openTags.slice().reverse().map(t => `</${t.tag}>`).join('');
       chunk += closingTags;
 
-      // 6. Prepend the re-opened tags to the next remaining segment
+      // 7. Prepend the re-opened tags to the next remaining segment
       const reopeningTags = openTags.map(t => t.openHtml).join('');
       remaining = reopeningTags + remaining;
     }
 
-    chunks.push(chunk);
+    chunks.push(sanitizeUtf8(chunk));
+    remaining = sanitizeUtf8(remaining);
   }
 
   return chunks.length ? chunks : [''];

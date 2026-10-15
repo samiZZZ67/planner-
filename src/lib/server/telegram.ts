@@ -3,9 +3,9 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './neon';
 import type { BookAssignmentRecord, BookRecord, BookPageRecord } from '../books/types';
-import { formatTelegramMessage, splitTelegramHtml, stripHtml, sanitizeUtf8, sanitizePayload } from './telegramFormatter';
+import { formatTelegramMessage, splitTelegramHtml, stripHtml, sanitizeUtf8, sanitizePayload, truncateUnicode, sanitizeJsonPayloadString } from './telegramFormatter';
 
-export { formatTelegramMessage, splitTelegramHtml, stripHtml, sanitizeUtf8, sanitizePayload } from './telegramFormatter';
+export { formatTelegramMessage, splitTelegramHtml, stripHtml, sanitizeUtf8, sanitizePayload, truncateUnicode, sanitizeJsonPayloadString } from './telegramFormatter';
 
 export type TelegramDeliveryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'uncertain';
 export interface TelegramDeliveryRecord {
@@ -271,12 +271,16 @@ async function telegramCall<T>(method: string, payload?: unknown): Promise<T> {
   await loadTelegramConfigFromDb();
   const { token } = envConfig();
   const cleanPayload = payload !== undefined ? sanitizePayload(payload) : undefined;
+  let jsonBody = cleanPayload !== undefined ? JSON.stringify(cleanPayload) : undefined;
+  if (jsonBody !== undefined) {
+    jsonBody = sanitizeJsonPayloadString(jsonBody);
+  }
   let response: Response;
   try {
     response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-      method: cleanPayload === undefined ? 'GET' : 'POST',
-      headers: cleanPayload === undefined ? undefined : { 'content-type': 'application/json; charset=utf-8' },
-      body: cleanPayload === undefined ? undefined : JSON.stringify(cleanPayload),
+      method: jsonBody === undefined ? 'GET' : 'POST',
+      headers: jsonBody === undefined ? undefined : { 'content-type': 'application/json; charset=utf-8' },
+      body: jsonBody,
       signal: AbortSignal.timeout(15000),
       cache: 'no-store',
     });
@@ -387,13 +391,13 @@ export interface TelegramUpdate {
 }
 
 export async function sendTelegramQuizPoll(params: SendQuizPollParams): Promise<TelegramPollResult> {
-  const question = sanitizeUtf8(params.question.trim()).slice(0, 300);
-  const options = params.options.slice(0, 10).map(opt => sanitizeUtf8(opt.trim()).slice(0, 100));
+  const question = truncateUnicode(params.question.trim(), 300);
+  const options = params.options.slice(0, 10).map(opt => truncateUnicode(opt.trim(), 100));
   if (options.length < 2) {
     throw new Error('A quiz poll requires at least 2 answer options.');
   }
   const correctOptionId = Math.max(0, Math.min(params.correctOptionId, options.length - 1));
-  const explanation = params.explanation?.trim() ? sanitizeUtf8(params.explanation.trim()).slice(0, 200) : undefined;
+  const explanation = params.explanation?.trim() ? truncateUnicode(params.explanation.trim(), 200) : undefined;
 
   const payload: any = {
     chat_id: params.chatId,
@@ -609,7 +613,7 @@ export async function sendTelegramMediaToChannel(text: string, media: File) {
   const form = new FormData();
   form.set('chat_id', chatId);
   form.set(kind === 'photo' ? 'photo' : 'voice', media, media.name);
-  if (text) form.set('caption', sanitizeUtf8(text).slice(0, 1024));
+  if (text) form.set('caption', truncateUnicode(text, 1024));
 
   let response: Response;
   try {
@@ -632,9 +636,9 @@ export async function sendTelegramMediaToChannel(text: string, media: File) {
 
 export function splitTelegramText(text: string, max = 3500): string[] {
   if (/<[a-z/][\s\S]*>/i.test(text) && max >= 100) {
-    return splitTelegramHtml(text, max);
+    return splitTelegramHtml(text, max).map(chunk => sanitizeUtf8(chunk));
   }
-  const chars = Array.from(text);
+  const chars = Array.from(sanitizeUtf8(text));
   const parts: string[] = [];
   let start = 0;
   while (start < chars.length) {
@@ -652,7 +656,7 @@ export function splitTelegramText(text: string, max = 3500): string[] {
     parts.push(chars.slice(start, end).join(''));
     start = end;
   }
-  return parts.length ? parts : [''];
+  return parts.length ? parts.map(part => sanitizeUtf8(part)) : [''];
 }
 
 export function formatReadingAssignment(book: BookRecord, assignment: BookAssignmentRecord, pages: BookPageRecord[], previousAssignment?: BookAssignmentRecord): string[] {
@@ -847,7 +851,7 @@ async function sendPageImage(bookId: string, filename: string, caption: string) 
   const { token, chatId } = envConfig();
   const form = new FormData();
   form.set('chat_id', chatId);
-  form.set('caption', sanitizeUtf8(caption).slice(0, 1024));
+  form.set('caption', truncateUnicode(caption, 1024));
   form.set('photo', new Blob([image], { type: 'image/jpeg' }), filename);
   let response: Response;
   try {
