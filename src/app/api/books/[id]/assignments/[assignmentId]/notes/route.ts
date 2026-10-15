@@ -57,8 +57,11 @@ export async function PATCH(request: Request, context: RouteContext<'/api/books/
     };
     if (body.status === 'approved') {
       const pages = await listBookPages(session.userId, id, owned.assignment.startPdfPage, owned.assignment.endPdfPage);
-      if (pages.length !== owned.assignment.endPdfPage - owned.assignment.startPdfPage + 1 || pages.some(page => page.method === 'empty' || !page.text.trim() || (page.requiresReview && !page.reviewedByUser))) {
-        return NextResponse.json({ error: 'This assignment has unreadable pages or OCR pages that still need review.' }, { status: 409 });
+      if (!pages.length) {
+        return NextResponse.json({ error: 'No extracted pages found for this assignment.' }, { status: 409 });
+      }
+      if (pages.some(page => page.method === 'ocr' && page.text?.trim() && page.requiresReview && !page.reviewedByUser)) {
+        return NextResponse.json({ error: 'This assignment has OCR text pages that still need visual review.' }, { status: 409 });
       }
       makeBookPublishJob(owned.book, nextAssignment);
     }

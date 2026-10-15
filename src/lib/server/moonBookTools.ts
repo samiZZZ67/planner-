@@ -386,7 +386,8 @@ export async function executeMoonBookIntent(
   if (intent === 'approve') {
     if (assignment.status !== 'draft' || !assignment.studyNotes) throw new Error('This assignment needs draft study notes before approval.');
     const pages = await listBookPages(userId, book.id, assignment.startPdfPage, assignment.endPdfPage);
-    if (pages.length !== assignment.endPdfPage - assignment.startPdfPage + 1 || pages.some(page => page.method === 'empty' || !page.text.trim() || (page.requiresReview && !page.reviewedByUser))) throw new Error('The assignment contains unreadable pages or OCR pages that still need your visual review.');
+    if (!pages.length) throw new Error('No extracted pages found for this assignment.');
+    if (pages.some(page => page.method === 'ocr' && page.text?.trim() && page.requiresReview && !page.reviewedByUser)) throw new Error('The assignment contains OCR text pages that still need your visual review.');
     const notes = validateStudyNotes(assignment.studyNotes, assignment);
     const nextAssignment = { ...assignment, studyNotes: { ...notes, generatedByModel: assignment.studyNotes.generatedByModel || 'User-edited', generatedAt: assignment.studyNotes.generatedAt || Date.now() }, status: 'approved' as const, updatedAt: Date.now() };
     makeBookPublishJob(book, nextAssignment);

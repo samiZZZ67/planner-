@@ -64,6 +64,9 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
       console.warn('[Publish] Interactive quiz launch warning:', quizErr?.message || quizErr);
     }
 
+    // Check if the current section was completely blank/illustration pages
+    const isEntirelyBlank = pages.every(p => !p.text?.trim() || p.method === 'empty');
+
     // Preserve the original schedule and all dates; mark status completed and deliveryStatus sent
     await updateBookAssignment({
       ...assignment,
@@ -75,8 +78,8 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
     });
 
     // Advance book.currentPage to assignment.endPdfPage + 1
-    const nextCurrentPage = Math.min(book.endPage + 1, Math.max(book.currentPage, assignment.endPdfPage + 1));
-    const updatedBook = await updateBook({
+    let nextCurrentPage = Math.min(book.endPage + 1, Math.max(book.currentPage, assignment.endPdfPage + 1));
+    let updatedBook = await updateBook({
       ...book,
       currentPage: nextCurrentPage,
       status: nextCurrentPage > book.endPage ? 'ready' : book.status,
@@ -84,6 +87,43 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
 
     const job = (await listBookPublishJobs(session.userId)).find(item => item.assignmentId === assignmentId);
     if (job) await updateBookPublishJob({ ...job, status: 'completed', lastError: '' });
+
+    // If the section was completely blank or illustration pages, inform user and automatically proceed to next section
+    if (isEntirelyBlank) {
+      const allAssignments = await listBookAssignments(session.userId, id);
+      const nextAssignment = allAssignments.find(item => item.dayNumber === assignment.dayNumber + 1);
+      if (nextAssignment && nextAssignment.status !== 'completed') {
+        const nextPages = await listBookPages(session.userId, id, nextAssignment.startPdfPage, nextAssignment.endPdfPage);
+        if (nextPages.length > 0) {
+          try {
+            console.log(`[Publish] Auto-advancing from blank section Day ${assignment.dayNumber} to Day ${nextAssignment.dayNumber}...`);
+            if (nextAssignment.status === 'approved' && nextAssignment.studyNotes) {
+              await publishApprovedAssignment(session.userId, updatedBook, nextAssignment, nextPages, assignment);
+            } else {
+              await publishLoadPlanPagesToTelegram(session.userId, updatedBook, nextAssignment, nextPages, assignment);
+            }
+            await updateBookAssignment({
+              ...nextAssignment,
+              status: 'completed',
+              deliveryStatus: 'sent',
+              deliveredAt: Date.now(),
+              lastDeliveryError: undefined,
+              updatedAt: Date.now(),
+            });
+            nextCurrentPage = Math.min(updatedBook.endPage + 1, Math.max(updatedBook.currentPage, nextAssignment.endPdfPage + 1));
+            updatedBook = await updateBook({
+              ...updatedBook,
+              currentPage: nextCurrentPage,
+              status: nextCurrentPage > updatedBook.endPage ? 'ready' : updatedBook.status,
+            });
+            const nextJob = (await listBookPublishJobs(session.userId)).find(item => item.assignmentId === nextAssignment.id);
+            if (nextJob) await updateBookPublishJob({ ...nextJob, status: 'completed', lastError: '' });
+          } catch (nextErr) {
+            console.warn('[Publish] Auto-advance next assignment dispatch warning:', nextErr);
+          }
+        }
+      }
+    }
 
     return NextResponse.json({
       ok: true,

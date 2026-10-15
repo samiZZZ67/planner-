@@ -133,4 +133,54 @@ describe('Telegram reading assignment formatting', () => {
       if (oldChat === undefined) delete process.env.TELEGRAM_CHAT_ID; else process.env.TELEGRAM_CHAT_ID = oldChat;
     }
   });
+
+  it('sanitizes strings with lone surrogates, null bytes, and non-printable control characters', async () => {
+    const { sanitizeUtf8, sanitizePayload } = await import('./telegram');
+    const corrupted = 'Hello\u0000\uD800 World\uDFFF \x07with Emoji 📖 and Ethiopian ሰላም';
+    const cleaned = sanitizeUtf8(corrupted);
+    expect(cleaned).toBe('Hello World with Emoji 📖 and Ethiopian ሰላም');
+
+    const nested = {
+      title: 'Book\uD800',
+      items: ['Safe', 'Bad\u0000String\uDFFF'],
+      meta: { note: 'Text\x1Fhere' },
+    };
+    const sanitized = sanitizePayload(nested);
+    expect(sanitized).toEqual({
+      title: 'Book',
+      items: ['Safe', 'BadString'],
+      meta: { note: 'Texthere' },
+    });
+  });
+
+  it('formats empty and illustration pages gracefully without throwing errors', () => {
+    const emptyPage: BookPageRecord = {
+      bookId: 'book-1',
+      pdfPage: 1,
+      text: '',
+      method: 'empty',
+      confidence: null,
+      warnings: ['Empty page'],
+      requiresReview: false,
+      reviewedByUser: false,
+      updatedAt: 1,
+    };
+
+    // Format reading assignment with an empty page
+    const assignmentParts = formatReadingAssignment(book, approved, [emptyPage]);
+    const assignmentText = assignmentParts.join('');
+    expect(assignmentText).toContain('Blank / Illustration Page');
+    expect(assignmentText).toContain('proceeding to the next reading section');
+
+    // Format load plan pages with an empty page
+    const draftAssignment: BookAssignmentRecord = {
+      ...approved,
+      status: 'draft',
+      studyNotes: undefined,
+    };
+    const loadPlanParts = formatLoadPlanPages(book, draftAssignment, [emptyPage]);
+    const loadPlanText = loadPlanParts.join('');
+    expect(loadPlanText).toContain('Blank / Illustration Page');
+    expect(loadPlanText).toContain('proceeding to the next reading section');
+  });
 });

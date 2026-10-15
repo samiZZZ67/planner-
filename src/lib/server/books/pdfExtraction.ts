@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { BookPageRecord } from '@/lib/books/types';
+import { sanitizeUtf8 } from '../telegramFormatter';
 
 export interface PdfExtractionOptions {
   bookId: string;
@@ -19,6 +20,8 @@ function reconstructText(items: any[]) {
   let previous: any = null;
   for (const item of items) {
     if (typeof item?.str !== 'string' || item.str.length === 0) continue;
+    const cleanStr = sanitizeUtf8(item.str);
+    if (!cleanStr) continue;
     if (previous) {
       if (previous.hasEOL) {
         if (output && !output.endsWith('\n')) output += '\n';
@@ -32,24 +35,26 @@ function reconstructText(items: any[]) {
           const previousEndX = Number(previous.transform?.[4] ?? previous.x ?? 0) + Number(previous.width || 0);
           const itemStartX = Number(item.transform?.[4] ?? item.x ?? 0);
           const gap = itemStartX - previousEndX;
-          if (gap > fontSize * 0.18 && output && !/[\s]$/.test(output) && !/^[\s]/.test(item.str)) output += ' ';
+          if (gap > fontSize * 0.18 && output && !/[\s]$/.test(output) && !/^[\s]/.test(cleanStr)) output += ' ';
         }
       }
     }
-    output += item.str;
+    output += cleanStr;
     if (item.hasEOL && !output.endsWith('\n')) output += '\n';
     previous = item;
   }
-  return output;
+  return sanitizeUtf8(output);
 }
 
 function reconstructLinesWithTables(lines: any[][]): string {
-  return lines
+  const result = lines
     .map(line => {
       let output = '';
       let previous: any = null;
       for (const item of line) {
         if (typeof item?.str !== 'string' || item.str.length === 0) continue;
+        const cleanStr = sanitizeUtf8(item.str);
+        if (!cleanStr) continue;
         if (previous) {
           const previousEndX = Number(previous.x ?? previous.transform?.[4] ?? 0) + Number(previous.width || 0);
           const itemStartX = Number(item.x ?? item.transform?.[4] ?? 0);
@@ -58,17 +63,18 @@ function reconstructLinesWithTables(lines: any[][]): string {
           // Large horizontal gap between items on the same line indicates structured table columns:
           if (gap > fontSize * 2.5) {
             output += '\t';
-          } else if (gap > fontSize * 0.18 && !/[\s]$/.test(output) && !/^[\s]/.test(item.str)) {
+          } else if (gap > fontSize * 0.18 && !/[\s]$/.test(output) && !/^[\s]/.test(cleanStr)) {
             output += ' ';
           }
         }
-        output += item.str;
+        output += cleanStr;
         previous = item;
       }
       return output.trimEnd();
     })
     .filter(line => line.length > 0)
     .join('\n');
+  return sanitizeUtf8(result);
 }
 
 async function recognizePage(page: any, canvasModule: any, worker: any) {
@@ -77,7 +83,7 @@ async function recognizePage(page: any, canvasModule: any, worker: any) {
   await page.render({ canvas, viewport, background: '#ffffff' }).promise;
   const png = canvas.toBuffer('image/png');
   const result = await worker.recognize(png, {}, { text: true });
-  return { text: String(result.data.text || '').trim(), confidence: Number(result.data.confidence || 0) };
+  return { text: sanitizeUtf8(String(result.data.text || '').trim()), confidence: Number(result.data.confidence || 0) };
 }
 
 async function renderPagePreview(page: any, canvasModule: any, filePath: string, bookId: string, pdfPage: number) {

@@ -26,4 +26,41 @@ describe('supplementary study notes validation', () => {
     expect(() => validateStudyNotes({ ...notes, example: { ...notes.example, sourceDisclosure: 'A true story.' } }, assignment)).toThrow(/illustrative|hypothetical/i);
     expect(() => validateStudyNotes({ ...notes, questions: [{ ...notes.questions[0], pdfPages: [99] }, notes.questions[1]] }, assignment)).toThrow(/citations/);
   });
+
+  it('generates safe study notes when all pages in assignment are empty/illustration pages', async () => {
+    const { generateAssignmentStudyNotes } = await import('./studyNotes');
+    const book = {
+      id: 'book',
+      userId: 'owner',
+      title: 'Visual Book',
+      author: 'Author',
+      metadata: '',
+      originalFilename: 'book.pdf',
+      storedFilename: 'book.pdf',
+      fileSize: 100,
+      startPage: 1,
+      endPage: 4,
+      durationDays: 1,
+      startDate: '2026-01-01',
+      studyMinutes: 30,
+      postingTime: '08:00',
+      timezone: 'UTC',
+      currentPage: 1,
+      status: 'ready' as const,
+      extractionStatus: 'completed' as const,
+      extractionMessage: '',
+      totalPdfPages: 4,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const emptyPages = [
+      { bookId: 'book', pdfPage: 25, text: '', method: 'empty' as const, confidence: null, warnings: [], requiresReview: false, reviewedByUser: false, updatedAt: 1 },
+      { bookId: 'book', pdfPage: 26, text: '   ', method: 'empty' as const, confidence: null, warnings: [], requiresReview: false, reviewedByUser: false, updatedAt: 1 },
+    ];
+    const result = await generateAssignmentStudyNotes({ book, assignment, pages: emptyPages });
+    expect(result.studyNotes).toBeDefined();
+    expect(result.studyNotes.summary).toContain('illustration, cover, or blank divider pages');
+    expect(result.studyNotes.questions).toHaveLength(2);
+    expect(result.studyNotes.example.kind).toBe('illustrative');
+  });
 });

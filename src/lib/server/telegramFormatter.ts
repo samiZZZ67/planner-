@@ -70,12 +70,55 @@ export function escapeTelegramAttr(text: string): string {
 }
 
 /**
+ * Rigorously sanitizes a string to ensure 100% valid UTF-8 compliance for Telegram Bot API:
+ * 1. Strips unpaired / lone surrogate code points (\uD800-\uDFFF) that cause Telegram "strings must be encoded in UTF-8"
+ * 2. Invokes toWellFormed() if available in the runtime environment
+ * 3. Removes null bytes (\0) and non-printable ASCII control characters (preserving \n, \r, \t)
+ * 4. Removes non-characters and corrupted unicode replacement sequences
+ */
+export function sanitizeUtf8(str: string): string {
+  if (typeof str !== 'string') return '';
+  // 1. Remove lone surrogate halves (high surrogate without low surrogate, or low without high)
+  let s = str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+  // 2. Normalize to well-formed Unicode if runtime supports it
+  if (typeof (s as any).toWellFormed === 'function') {
+    s = (s as any).toWellFormed();
+  }
+  // 3. Remove null characters and non-printable control characters, preserving \t, \n, \r
+  s = s.replace(/\0/g, '').replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+  // 4. Remove unicode specials and corrupted non-characters
+  s = s.replace(/[\uFDD0-\uFDEF\uFFFE\uFFFF]/g, '');
+  return s;
+}
+
+/**
+ * Recursively traverses and sanitizes every string property of an object or array
+ * before JSON serialization to the Telegram Bot API.
+ */
+export function sanitizePayload<T>(value: T): T {
+  if (typeof value === 'string') {
+    return sanitizeUtf8(value) as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => sanitizePayload(item)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    const copy: any = {};
+    for (const [k, v] of Object.entries(value)) {
+      copy[k] = sanitizePayload(v);
+    }
+    return copy as T;
+  }
+  return value;
+}
+
+/**
  * Strips all HTML tags and decodes common entities back to plain text.
  * Used for safe fallback delivery when Telegram rejects HTML entities.
  */
 export function stripHtml(html: string): string {
   if (!html) return '';
-  return html
+  const stripped = html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
     .replace(/<\/div>/gi, '\n')
@@ -86,6 +129,7 @@ export function stripHtml(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, ' ');
+  return sanitizeUtf8(stripped);
 }
 
 /**
@@ -402,28 +446,35 @@ export function formatTelegramMessage(
   text: string,
   options?: TelegramFormatOptions
 ): string {
-  if (!text || !text.trim()) return '';
+  const cleanInput = sanitizeUtf8(text || '');
+  if (!cleanInput || !cleanInput.trim()) return '';
 
-  const contentType = options?.contentType || detectTelegramContentType(text);
+  const contentType = options?.contentType || detectTelegramContentType(cleanInput);
 
+  let result = '';
   switch (contentType) {
     case 'book_excerpt': {
       // If the text contains both book header/notes AND excerpts, handle excerpts safely
-      if (/\[PDF\s*page\s*\d+/i.test(text)) {
-        return formatBookExcerpt(text);
+      if (/\[PDF\s*page\s*\d+/i.test(cleanInput)) {
+        result = formatBookExcerpt(cleanInput);
+      } else {
+        result = formatMarkdownToTelegramHtml(cleanInput);
       }
-      return formatMarkdownToTelegramHtml(text);
+      break;
     }
     case 'educational': {
-      return formatEducationalContent(text);
+      result = formatEducationalContent(cleanInput);
+      break;
     }
     case 'technical':
     case 'list_instruction':
     case 'general':
     default: {
-      return formatMarkdownToTelegramHtml(text);
+      result = formatMarkdownToTelegramHtml(cleanInput);
+      break;
     }
   }
+  return sanitizeUtf8(result);
 }
 
 /**

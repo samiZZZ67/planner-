@@ -1,4 +1,4 @@
-import { claimDueBookPublishJobs, updateBookPublishJob } from '../bookScheduler';
+import { claimDueBookPublishJobs, listBookPublishJobs, updateBookPublishJob } from '../bookScheduler';
 import { listBookAssignments, updateBookAssignment } from '../bookAssignments';
 import { getBook, listBookPages, updateBook } from '../books';
 import { envConfig, publishApprovedAssignment, publishLoadPlanPagesToTelegram, sendTelegramTextToChannel } from '../telegram';
@@ -127,17 +127,21 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
               targetChatId,
               { skipFirstExcerpt: true }
             );
-            if (quizSession.lastPollMessageId) {
+            if (quizSession?.lastPollMessageId) {
               telegramMessageIds.push(quizSession.lastPollMessageId);
             }
-            if (quizSession.lastControlMessageId) {
+            if (quizSession?.lastControlMessageId) {
               telegramMessageIds.push(quizSession.lastControlMessageId);
             }
-            console.log(`[Scheduler] 🎯 Interactive Book Quiz session started for Day ${assignment.dayNumber} (${quizSession.totalQuestions} questions across ${quizSession.totalSections} section(s)).`);
+            if (quizSession) {
+              console.log(`[Scheduler] 🎯 Interactive Book Quiz session started for Day ${assignment.dayNumber} (${quizSession.totalQuestions} questions across ${quizSession.totalSections} section(s)).`);
+            }
           }
         } catch (quizErr: any) {
           console.warn(`[Scheduler] ⚠️ Interactive Quiz launch warning:`, quizErr?.message || quizErr);
         }
+
+        const isEntirelyBlank = pages.every(p => !p.text?.trim() || p.method === 'empty');
 
         // Mark assignment completed and update deliveryStatus
         await updateBookAssignment({
@@ -150,8 +154,8 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
         });
 
         // Automatically advance book.currentPage
-        const nextCurrentPage = Math.min(book.endPage + 1, Math.max(book.currentPage, assignment.endPdfPage + 1));
-        await updateBook({
+        let nextCurrentPage = Math.min(book.endPage + 1, Math.max(book.currentPage, assignment.endPdfPage + 1));
+        let updatedBook = await updateBook({
           ...book,
           currentPage: nextCurrentPage,
           status: nextCurrentPage > book.endPage ? 'ready' : book.status,
@@ -165,6 +169,51 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
 
         console.log(`[Scheduler] ✅ Successfully published Day ${assignment.dayNumber} of "${book.title}"! Telegram IDs: [${telegramMessageIds.join(', ')}]`);
         result.bookJobs.completed++;
+
+        // If the section was completely blank/illustration pages, automatically advance to and publish the next section!
+        if (isEntirelyBlank) {
+          const nextAssignment = assignments.find(item => item.dayNumber === assignment.dayNumber + 1);
+          if (nextAssignment && nextAssignment.status !== 'completed') {
+            const nextPages = await listBookPages(job.userId, job.bookId, nextAssignment.startPdfPage, nextAssignment.endPdfPage);
+            if (nextPages.length > 0) {
+              try {
+                console.log(`[Scheduler] ⏩ Auto-advancing from blank section Day ${assignment.dayNumber} to Day ${nextAssignment.dayNumber}...`);
+                let nextTelegramIds: number[] = [];
+                if (nextAssignment.status === 'approved' && nextAssignment.studyNotes) {
+                  try {
+                    const nextDel = await publishApprovedAssignment(job.userId, updatedBook, nextAssignment, nextPages, assignment);
+                    nextTelegramIds = nextDel.telegramMessageIds;
+                  } catch {
+                    const nextFallback = await publishLoadPlanPagesToTelegram(job.userId, updatedBook, nextAssignment, nextPages, assignment);
+                    nextTelegramIds = nextFallback.telegramMessageIds;
+                  }
+                } else {
+                  const nextFallback = await publishLoadPlanPagesToTelegram(job.userId, updatedBook, nextAssignment, nextPages, assignment);
+                  nextTelegramIds = nextFallback.telegramMessageIds;
+                }
+                await updateBookAssignment({
+                  ...nextAssignment,
+                  status: 'completed',
+                  deliveryStatus: 'sent',
+                  deliveredAt: Date.now(),
+                  lastDeliveryError: undefined,
+                  updatedAt: Date.now(),
+                });
+                nextCurrentPage = Math.min(updatedBook.endPage + 1, Math.max(updatedBook.currentPage, nextAssignment.endPdfPage + 1));
+                updatedBook = await updateBook({
+                  ...updatedBook,
+                  currentPage: nextCurrentPage,
+                  status: nextCurrentPage > updatedBook.endPage ? 'ready' : updatedBook.status,
+                });
+                const nextJob = (await listBookPublishJobs(job.userId)).find(item => item.assignmentId === nextAssignment.id);
+                if (nextJob) await updateBookPublishJob({ ...nextJob, status: 'completed', lastError: `Telegram IDs: ${nextTelegramIds.join(', ')}` });
+                result.bookJobs.completed++;
+              } catch (nextErr) {
+                console.warn('[Scheduler] Auto-advance next assignment dispatch warning:', nextErr);
+              }
+            }
+          }
+        }
       } catch (jobErr: any) {
         const errMsg = jobErr instanceof Error ? jobErr.message : 'Publishing failed';
         console.error(`[Scheduler] ❌ Failed publishing assignment ${job.assignmentId}:`, errMsg);

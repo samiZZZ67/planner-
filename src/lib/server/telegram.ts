@@ -3,9 +3,9 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getDb } from './neon';
 import type { BookAssignmentRecord, BookRecord, BookPageRecord } from '../books/types';
-import { formatTelegramMessage, splitTelegramHtml, stripHtml } from './telegramFormatter';
+import { formatTelegramMessage, splitTelegramHtml, stripHtml, sanitizeUtf8, sanitizePayload } from './telegramFormatter';
 
-export { formatTelegramMessage, splitTelegramHtml, stripHtml } from './telegramFormatter';
+export { formatTelegramMessage, splitTelegramHtml, stripHtml, sanitizeUtf8, sanitizePayload } from './telegramFormatter';
 
 export type TelegramDeliveryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'uncertain';
 export interface TelegramDeliveryRecord {
@@ -270,12 +270,13 @@ export function envConfig() {
 async function telegramCall<T>(method: string, payload?: unknown): Promise<T> {
   await loadTelegramConfigFromDb();
   const { token } = envConfig();
+  const cleanPayload = payload !== undefined ? sanitizePayload(payload) : undefined;
   let response: Response;
   try {
     response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-      method: payload === undefined ? 'GET' : 'POST',
-      headers: payload === undefined ? undefined : { 'content-type': 'application/json' },
-      body: payload === undefined ? undefined : JSON.stringify(payload),
+      method: cleanPayload === undefined ? 'GET' : 'POST',
+      headers: cleanPayload === undefined ? undefined : { 'content-type': 'application/json; charset=utf-8' },
+      body: cleanPayload === undefined ? undefined : JSON.stringify(cleanPayload),
       signal: AbortSignal.timeout(15000),
       cache: 'no-store',
     });
@@ -316,21 +317,22 @@ export async function sendTelegramMessageWithFallback(
   formattedText: string,
   disableWebPagePreview = true
 ): Promise<{ message_id: number }> {
+  const cleanFormattedText = sanitizeUtf8(formattedText);
   try {
     return await telegramCall<{ message_id: number }>('sendMessage', {
       chat_id: chatId,
-      text: formattedText,
+      text: cleanFormattedText,
       parse_mode: 'HTML',
       disable_web_page_preview: disableWebPagePreview,
     });
   } catch (error: any) {
     const errMsg = String(error?.message || error);
-    // If Telegram rejects due to entity parsing or bad HTML formatting, retry safely with plain text
-    if (/can't parse entities|entity|tag|parse|html|bad request/i.test(errMsg)) {
-      console.warn('[Telegram] HTML formatting rejected by Telegram API; falling back to plain text:', errMsg);
+    // If Telegram rejects due to entity parsing, bad HTML formatting, or UTF-8 encoding issues, retry safely with plain text
+    if (/can't parse entities|entity|tag|parse|html|bad request|utf-8|encoded/i.test(errMsg)) {
+      console.warn('[Telegram] HTML formatting or encoding rejected by Telegram API; falling back to sanitized plain text:', errMsg);
       return await telegramCall<{ message_id: number }>('sendMessage', {
         chat_id: chatId,
-        text: stripHtml(formattedText),
+        text: sanitizeUtf8(stripHtml(cleanFormattedText)),
         disable_web_page_preview: disableWebPagePreview,
       });
     }
@@ -385,13 +387,13 @@ export interface TelegramUpdate {
 }
 
 export async function sendTelegramQuizPoll(params: SendQuizPollParams): Promise<TelegramPollResult> {
-  const question = params.question.trim().slice(0, 300);
-  const options = params.options.slice(0, 10).map(opt => opt.trim().slice(0, 100));
+  const question = sanitizeUtf8(params.question.trim()).slice(0, 300);
+  const options = params.options.slice(0, 10).map(opt => sanitizeUtf8(opt.trim()).slice(0, 100));
   if (options.length < 2) {
     throw new Error('A quiz poll requires at least 2 answer options.');
   }
   const correctOptionId = Math.max(0, Math.min(params.correctOptionId, options.length - 1));
-  const explanation = params.explanation?.trim() ? params.explanation.trim().slice(0, 200) : undefined;
+  const explanation = params.explanation?.trim() ? sanitizeUtf8(params.explanation.trim()).slice(0, 200) : undefined;
 
   const payload: any = {
     chat_id: params.chatId,
@@ -423,20 +425,21 @@ export async function sendTelegramMessageWithKeyboard(
   keyboard: InlineKeyboardButton[][],
   disableWebPagePreview = true
 ): Promise<{ message_id: number }> {
+  const cleanFormattedText = sanitizeUtf8(formattedText);
   try {
     return await telegramCall<{ message_id: number }>('sendMessage', {
       chat_id: chatId,
-      text: formattedText,
+      text: cleanFormattedText,
       parse_mode: 'HTML',
       disable_web_page_preview: disableWebPagePreview,
       reply_markup: { inline_keyboard: keyboard },
     });
   } catch (error: any) {
     const errMsg = String(error?.message || error);
-    if (/can't parse entities|entity|tag|parse|html|bad request/i.test(errMsg)) {
+    if (/can't parse entities|entity|tag|parse|html|bad request|utf-8|encoded/i.test(errMsg)) {
       return await telegramCall<{ message_id: number }>('sendMessage', {
         chat_id: chatId,
-        text: stripHtml(formattedText),
+        text: sanitizeUtf8(stripHtml(cleanFormattedText)),
         disable_web_page_preview: disableWebPagePreview,
         reply_markup: { inline_keyboard: keyboard },
       });
@@ -606,7 +609,7 @@ export async function sendTelegramMediaToChannel(text: string, media: File) {
   const form = new FormData();
   form.set('chat_id', chatId);
   form.set(kind === 'photo' ? 'photo' : 'voice', media, media.name);
-  if (text) form.set('caption', text);
+  if (text) form.set('caption', sanitizeUtf8(text).slice(0, 1024));
 
   let response: Response;
   try {
@@ -655,27 +658,43 @@ export function splitTelegramText(text: string, max = 3500): string[] {
 export function formatReadingAssignment(book: BookRecord, assignment: BookAssignmentRecord, pages: BookPageRecord[], previousAssignment?: BookAssignmentRecord): string[] {
   if (assignment.status !== 'approved' || !assignment.studyNotes) throw new Error('Only assignments with approved study notes can be published.');
   const orderedPages = [...pages].sort((a, b) => a.pdfPage - b.pdfPage);
-  if (orderedPages.length !== assignment.endPdfPage - assignment.startPdfPage + 1 || orderedPages.some((page, index) => page.pdfPage !== assignment.startPdfPage + index || page.method === 'empty' || !page.text.trim() || (page.requiresReview && !page.reviewedByUser))) {
-    throw new Error('The source pages are incomplete, unreadable, or still need OCR review.');
+  if (orderedPages.length !== assignment.endPdfPage - assignment.startPdfPage + 1 || orderedPages.some((page, index) => page.pdfPage !== assignment.startPdfPage + index)) {
+    throw new Error('The source pages are incomplete or missing.');
+  }
+  if (orderedPages.some(page => page.method === 'ocr' && page.text?.trim() && page.requiresReview && !page.reviewedByUser)) {
+    throw new Error('The source pages contain OCR pages that still need OCR review.');
   }
   const notes = assignment.studyNotes;
   const continuity = previousAssignment?.studyNotes
     ? `Connection to yesterday's post (Day ${previousAssignment.dayNumber})\nYesterday's takeaway: ${previousAssignment.studyNotes.summary}\nToday builds on: ${assignment.concepts.map(item => item.title).join(', ')}`
     : '';
+
+  const hasReadablePages = orderedPages.some(p => p.text?.trim() && p.method !== 'empty');
+  const emptyNotice = !hasReadablePages
+    ? `\nℹ️ Notice: All pages in this section (PDF pages ${assignment.startPdfPage}–${assignment.endPdfPage}) are blank or illustration pages. Automatically proceeding to the next reading section.\n`
+    : '';
+
   const pageChunks = orderedPages.flatMap(page => {
-    const parts = splitTelegramText(page.text, 3200);
+    const rawText = page.text?.trim();
+    if (!rawText || page.method === 'empty') {
+      return [`\n📄 [PDF Page ${page.pdfPage} · Blank / Illustration Page]\nℹ️ (No extractable text found on page ${page.pdfPage} — automatically proceeding to next page)`];
+    }
+    const cleanText = sanitizeUtf8(rawText);
+    const parts = splitTelegramText(cleanText, 3200);
     return parts.map((part, index) => `\n[PDF page ${page.pdfPage}${parts.length > 1 ? `, part ${index + 1}/${parts.length}` : ''}]\n${part}`);
   });
+
   const chunks: string[] = [
-    `📖 ${book.title}${book.author ? ` — ${book.author}` : ''}\nReading assignment for ${assignment.scheduledDate}\nPDF pages ${assignment.startPdfPage}–${assignment.endPdfPage}`,
+    `📖 ${sanitizeUtf8(book.title)}${book.author ? ` — ${sanitizeUtf8(book.author)}` : ''}\nReading assignment for ${assignment.scheduledDate}\nPDF pages ${assignment.startPdfPage}–${assignment.endPdfPage}`,
+    ...(emptyNotice ? [emptyNotice] : []),
     ...pageChunks,
-    `\nStudy summary\n${notes.summary}\n\nKey concepts\n${notes.keyConcepts.map(item => `• ${item}`).join('\n')}`,
-    `Definitions\n${notes.definitions.map(item => `• ${item.term} (PDF p. ${item.pdfPage}): ${item.explanation}`).join('\n')}`,
-    `${notes.example.kind === 'source' ? `Real-world example from the book (PDF p. ${notes.example.pdfPage})` : 'Practical application (illustrative)'}\n${notes.example.situation}\n${notes.example.conceptInAction}\nLesson: ${notes.example.lesson}\n${notes.example.sourceDisclosure}`,
-    ...(continuity ? [continuity] : []),
-    `Revision questions\n${notes.questions.map((item, index) => `${index + 1}. ${item.question}\nAnswer: ${item.answer}\nSource: PDF page${item.pdfPages.length === 1 ? '' : 's'} ${item.pdfPages.join(', ')}`).join('\n\n')}\n\nStudy notes\n${notes.notes}`,
+    `\nStudy summary\n${sanitizeUtf8(notes.summary)}\n\nKey concepts\n${notes.keyConcepts.map(item => `• ${sanitizeUtf8(item)}`).join('\n')}`,
+    `Definitions\n${notes.definitions.map(item => `• ${sanitizeUtf8(item.term)} (PDF p. ${item.pdfPage}): ${sanitizeUtf8(item.explanation)}`).join('\n')}`,
+    `${notes.example.kind === 'source' ? `Real-world example from the book (PDF p. ${notes.example.pdfPage})` : 'Practical application (illustrative)'}\n${sanitizeUtf8(notes.example.situation)}\n${sanitizeUtf8(notes.example.conceptInAction)}\nLesson: ${sanitizeUtf8(notes.example.lesson)}\n${notes.example.sourceDisclosure}`,
+    ...(continuity ? [sanitizeUtf8(continuity)] : []),
+    `Revision questions\n${notes.questions.map((item, index) => `${index + 1}. ${sanitizeUtf8(item.question)}\nAnswer: ${sanitizeUtf8(item.answer)}\nSource: PDF page${item.pdfPages.length === 1 ? '' : 's'} ${item.pdfPages.join(', ')}`).join('\n\n')}\n\nStudy notes\n${sanitizeUtf8(notes.notes)}`,
   ];
-  return chunks.flatMap(chunk => splitTelegramText(chunk));
+  return chunks.flatMap(chunk => splitTelegramText(sanitizeUtf8(chunk)));
 }
 
 export function formatLoadPlanPages(
@@ -689,17 +708,24 @@ export function formatLoadPlanPages(
     throw new Error(`No extracted pages available for Day ${assignment.dayNumber} (PDF pages ${assignment.startPdfPage}–${assignment.endPdfPage}). Please make sure pages have been extracted first.`);
   }
 
+  const hasReadablePages = orderedPages.some(p => p.text?.trim() && p.method !== 'empty');
+
   const header = [
-    `📖 ${book.title}${book.author ? ` — ${book.author}` : ''}`,
+    `📖 ${sanitizeUtf8(book.title)}${book.author ? ` — ${sanitizeUtf8(book.author)}` : ''}`,
     `📅 Reading Load Plan · Day ${assignment.dayNumber} (${assignment.scheduledDate})`,
     `📄 PDF Pages: ${assignment.startPdfPage}–${assignment.endPdfPage}`,
-    assignment.concepts?.length ? `💡 Concepts: ${assignment.concepts.map(item => item.title).join(', ')}` : '',
+    assignment.concepts?.length ? `💡 Concepts: ${assignment.concepts.map(item => sanitizeUtf8(item.title)).join(', ')}` : '',
     assignment.estimatedMinutes ? `⏱ Estimated time: ${assignment.estimatedMinutes} minutes` : '',
+    !hasReadablePages ? `ℹ️ Notice: All pages in this section (PDF pages ${assignment.startPdfPage}–${assignment.endPdfPage}) are blank or illustration pages. Automatically proceeding to the next reading section.` : '',
   ].filter(Boolean).join('\n');
 
   const pageChunks = orderedPages.flatMap(page => {
-    const text = page.text?.trim() || '(Page has no extractable text)';
-    const parts = splitTelegramText(text, 3200);
+    const raw = page.text?.trim();
+    if (!raw || page.method === 'empty') {
+      return [`\n📄 [PDF Page ${page.pdfPage} · Blank / Illustration Page]\nℹ️ (No extractable text found on page ${page.pdfPage} — automatically proceeding to next page)`];
+    }
+    const cleanText = sanitizeUtf8(raw);
+    const parts = splitTelegramText(cleanText, 3200);
     return parts.map((part, index) =>
       `\n📄 [PDF Page ${page.pdfPage}${parts.length > 1 ? ` · Part ${index + 1}/${parts.length}` : ''}]\n${part}`
     );
@@ -709,21 +735,21 @@ export function formatLoadPlanPages(
   if (assignment.studyNotes) {
     const notes = assignment.studyNotes;
     if (notes.summary) {
-      notesChunks.push(`\n📝 Study Summary\n${notes.summary}`);
+      notesChunks.push(`\n📝 Study Summary\n${sanitizeUtf8(notes.summary)}`);
     }
     if (notes.keyConcepts?.length) {
-      notesChunks.push(`Key Concepts:\n${notes.keyConcepts.map(item => `• ${item}`).join('\n')}`);
+      notesChunks.push(`Key Concepts:\n${notes.keyConcepts.map(item => `• ${sanitizeUtf8(item)}`).join('\n')}`);
     }
     if (notes.definitions?.length) {
-      notesChunks.push(`Definitions:\n${notes.definitions.map(item => `• ${item.term} (PDF p. ${item.pdfPage}): ${item.explanation}`).join('\n')}`);
+      notesChunks.push(`Definitions:\n${notes.definitions.map(item => `• ${sanitizeUtf8(item.term)} (PDF p. ${item.pdfPage}): ${sanitizeUtf8(item.explanation)}`).join('\n')}`);
     }
     if (notes.questions?.length) {
-      notesChunks.push(`Revision Questions:\n${notes.questions.map((item, index) => `${index + 1}. ${item.question}\nAnswer: ${item.answer}`).join('\n\n')}`);
+      notesChunks.push(`Revision Questions:\n${notes.questions.map((item, index) => `${index + 1}. ${sanitizeUtf8(item.question)}\nAnswer: ${sanitizeUtf8(item.answer)}`).join('\n\n')}`);
     }
   }
 
   const continuity = previousAssignment?.studyNotes
-    ? `\nConnection to Day ${previousAssignment.dayNumber}:\nYesterday: ${previousAssignment.studyNotes.summary}`
+    ? `\nConnection to Day ${previousAssignment.dayNumber}:\nYesterday: ${sanitizeUtf8(previousAssignment.studyNotes.summary)}`
     : '';
 
   const chunks: string[] = [
@@ -733,7 +759,7 @@ export function formatLoadPlanPages(
     ...(continuity ? [continuity] : []),
   ];
 
-  return chunks.flatMap(chunk => splitTelegramText(chunk));
+  return chunks.flatMap(chunk => splitTelegramText(sanitizeUtf8(chunk)));
 }
 
 export async function listTelegramDeliveries(userId: string) {
@@ -821,7 +847,7 @@ async function sendPageImage(bookId: string, filename: string, caption: string) 
   const { token, chatId } = envConfig();
   const form = new FormData();
   form.set('chat_id', chatId);
-  form.set('caption', caption.slice(0, 1024));
+  form.set('caption', sanitizeUtf8(caption).slice(0, 1024));
   form.set('photo', new Blob([image], { type: 'image/jpeg' }), filename);
   let response: Response;
   try {

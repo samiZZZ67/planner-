@@ -11,6 +11,7 @@ import {
   sendTelegramTextToChannel,
   splitTelegramText,
   formatTelegramMessage,
+  sanitizeUtf8,
   type InlineKeyboardButton,
   type TelegramPollResult,
 } from '../telegram';
@@ -554,21 +555,21 @@ Rules:
             : 0;
           validated.push({
             id: `q_${i}`,
-            question,
-            options: optionsList.slice(0, 4),
+            question: sanitizeUtf8(question),
+            options: optionsList.slice(0, 4).map((o: any) => sanitizeUtf8(o)),
             correctOptionId: correctId,
-            conciseExplanation: String(item.conciseExplanation || `Correct! Grounded in PDF pages ${startPage}-${endPage}.`).trim().slice(0, 195),
-            detailedExplanation: String(item.detailedExplanation || `Based on ${book.title}.`).trim(),
+            conciseExplanation: sanitizeUtf8(String(item.conciseExplanation || `Correct! Grounded in PDF pages ${startPage}-${endPage}.`).trim()).slice(0, 195),
+            detailedExplanation: sanitizeUtf8(String(item.detailedExplanation || `Based on ${book.title}.`).trim()),
             definition: {
-              term: String(item.definition?.term || book.title).trim(),
-              explanation: String(item.definition?.explanation || 'Core book concept.').trim(),
+              term: sanitizeUtf8(String(item.definition?.term || book.title).trim()),
+              explanation: sanitizeUtf8(String(item.definition?.explanation || 'Core book concept.').trim()),
               pdfPage: Number(item.definition?.pdfPage) || startPage,
             },
             practicalExample: {
               kind: item.practicalExample?.kind === 'source' ? 'source' : 'illustrative',
-              situation: String(item.practicalExample?.situation || 'Applying this principle in study.').trim(),
-              lesson: String(item.practicalExample?.lesson || 'Focus and practice yield success.').trim(),
-              sourceDisclosure: String(item.practicalExample?.sourceDisclosure || `PDF page ${startPage}`).trim(),
+              situation: sanitizeUtf8(String(item.practicalExample?.situation || 'Applying this principle in study.').trim()),
+              lesson: sanitizeUtf8(String(item.practicalExample?.lesson || 'Focus and practice yield success.').trim()),
+              sourceDisclosure: sanitizeUtf8(String(item.practicalExample?.sourceDisclosure || `PDF page ${startPage}`).trim()),
               pdfPage: Number(item.practicalExample?.pdfPage) || startPage,
             },
             sourcePdfPages: Array.isArray(item.sourcePdfPages) ? item.sourcePdfPages.map(Number) : [startPage],
@@ -801,6 +802,33 @@ export async function startQuizSessionForAssignment(
   chatId: string,
   options?: { skipFirstExcerpt?: boolean }
 ): Promise<BookQuizSession> {
+  const hasReadablePages = pages.some(p => p.text?.trim() && p.method !== 'empty');
+  if (!hasReadablePages) {
+    console.log(`[BookQuiz] Skipping interactive quiz for Day ${assignment.dayNumber}: all pages in section are blank or illustration pages.`);
+    const emptySession: BookQuizSession = {
+      id: randomUUID(),
+      userId,
+      bookId: book.id,
+      assignmentId: assignment.id,
+      bookTitle: book.title,
+      author: book.author,
+      dayNumber: assignment.dayNumber,
+      chatId,
+      status: 'completed',
+      currentSectionIndex: 0,
+      currentQuestionIndex: 0,
+      totalSections: 0,
+      totalQuestions: 0,
+      sections: [],
+      answers: {},
+      settings: await getBookQuizSettings(userId),
+      score: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      completedAt: Date.now(),
+    };
+    return emptySession;
+  }
   const settings = await getBookQuizSettings(userId);
   const sections = await buildQuizSectionsForAssignment(book, assignment, pages, settings);
 
