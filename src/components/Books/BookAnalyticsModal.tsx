@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -52,10 +52,15 @@ export function BookAnalyticsModal({
   const [loadingPages, setLoadingPages] = useState(false);
   const [selectedPageNum, setSelectedPageNum] = useState<number>(book.startPage);
   const [editedText, setEditedText] = useState<string>('');
+  const [loadingSinglePage, setLoadingSinglePage] = useState(false);
   const [savingPage, setSavingPage] = useState(false);
   const [pageFilter, setPageFilter] = useState<'all' | 'needs_review' | 'empty'>('all');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  const singlePageAbortRef = useRef<AbortController | null>(null);
+  const previewAbortRef = useRef<AbortController | null>(null);
+  const planAbortRef = useRef<AbortController | null>(null);
 
   // Flexible Plan Config
   const [sectionsPerDay, setSectionsPerDay] = useState<number>(book.sectionsPerDay || 1);
@@ -90,13 +95,13 @@ export function BookAnalyticsModal({
     return () => clearTimeout(t);
   }, [notice]);
 
-  // Load extracted pages when modal opens or book changes
+  // Load extracted pages (summary metadata only to prevent browser freeze on large books)
   const loadPages = useCallback(async () => {
     if (!isOpen) return;
     setLoadingPages(true);
     try {
       const response = await apiFetch(
-        `/api/books/${encodeURIComponent(book.id)}/pages?all=true&from=${book.startPage}&to=${book.endPage}`
+        `/api/books/${encodeURIComponent(book.id)}/pages?summaryOnly=true&from=${book.startPage}&to=${book.endPage}`
       );
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to load pages.');
@@ -104,7 +109,6 @@ export function BookAnalyticsModal({
       setPages(loadedPages);
       if (loadedPages.length > 0 && !loadedPages.some(p => p.pdfPage === selectedPageNum)) {
         setSelectedPageNum(loadedPages[0].pdfPage);
-        setEditedText(loadedPages[0].text);
       }
     } catch (err) {
       console.error('Error loading pages for BA:', err);
@@ -125,50 +129,110 @@ export function BookAnalyticsModal({
     }
   }, [isOpen, book.id, loadPages, book.sectionsPerDay, book.postingTimes, book.postingTime]);
 
-  // Keep editedText synced when selectedPageNum changes
-  useEffect(() => {
-    const p = pages.find(item => item.pdfPage === selectedPageNum);
-    if (p) {
-      setEditedText(p.text);
+  // Load full single page text on demand to avoid downloading whole book at once
+  const loadSinglePageText = useCallback(async (pageNum: number) => {
+    if (singlePageAbortRef.current) {
+      singlePageAbortRef.current.abort();
     }
-  }, [selectedPageNum, pages]);
-
-  // Load preview image for selected page
-  useEffect(() => {
-    if (!isOpen || activeTab !== 'pages') return;
-    const p = pages.find(item => item.pdfPage === selectedPageNum);
-    if (!p?.visualPreview) {
-      setPreviewUrl(null);
-      return;
+    const controller = new AbortController();
+    singlePageAbortRef.current = controller;
+    setLoadingSinglePage(true);
+    try {
+      const response = await apiFetch(
+        `/api/books/${encodeURIComponent(book.id)}/pages?pageNumber=${pageNum}`,
+        { signal: controller.signal }
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to load page text.');
+      if (data.page) {
+        setEditedText(data.page.text || '');
+        setPages(prev => prev.map(p => (p.pdfPage === pageNum ? { ...p, text: data.page.text, charCount: data.page.charCount } : p)));
+      }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError' && !controller.signal.aborted) {
+        console.error('Error fetching page text:', err);
+      }
+    } finally {
+      if (singlePageAbortRef.current === controller) {
+        singlePageAbortRef.current = null;
+        setLoadingSinglePage(false);
+      }
     }
+  }, [book.id]);
 
-    let active = true;
-    let objectUrl: string | null = null;
+  // Load single page text whenever selectedPageNum changes or modal switches to pages tab
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'pages' || !selectedPageNum) return;
+    void loadSinglePageText(selectedPageNum);
+  }, [isOpen, activeTab, selectedPageNum, loadSinglePageText]);
+
+  // Load preview image on-demand for selected page
+  const loadPreviewImage = useCallback(async (pageNum: number) => {
+    if (previewAbortRef.current) {
+      previewAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    previewAbortRef.current = controller;
     setPreviewLoading(true);
 
-    void apiFetch(`/api/books/${encodeURIComponent(book.id)}/pages/${selectedPageNum}/preview`)
-      .then(async res => {
-        if (!active) return;
-        if (res.ok) {
-          const blob = await res.blob();
-          objectUrl = URL.createObjectURL(blob);
-          setPreviewUrl(objectUrl);
-        } else {
-          setPreviewUrl(null);
-        }
-      })
-      .catch(() => {
-        if (active) setPreviewUrl(null);
-      })
-      .finally(() => {
-        if (active) setPreviewLoading(false);
-      });
+    try {
+      const res = await apiFetch(
+        `/api/books/${encodeURIComponent(book.id)}/pages/${pageNum}/preview`,
+        { signal: controller.signal }
+      );
+      if (controller.signal.aborted) return;
+      if (res.ok) {
+        const blob = await res.blob();
+        if (controller.signal.aborted) return;
+        const objectUrl = URL.createObjectURL(blob);
+        setPreviewUrl(prev => {
+          if (prev) URL.revokeObjectURL(prev);
+          return objectUrl;
+        });
+      } else {
+        setPreviewUrl(prev => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
+      }
+    } catch (err: any) {
+      if (!controller.signal.aborted && err?.name !== 'AbortError') {
+        setPreviewUrl(prev => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
+      }
+    } finally {
+      if (previewAbortRef.current === controller) {
+        previewAbortRef.current = null;
+        setPreviewLoading(false);
+      }
+    }
+  }, [book.id]);
 
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'pages' || !selectedPageNum) {
+      setPreviewUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+    void loadPreviewImage(selectedPageNum);
+  }, [isOpen, activeTab, selectedPageNum, loadPreviewImage]);
+
+  // Cleanup all abort controllers and object URLs on unmount
+  useEffect(() => {
     return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      singlePageAbortRef.current?.abort();
+      previewAbortRef.current?.abort();
+      planAbortRef.current?.abort();
+      setPreviewUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
     };
-  }, [isOpen, activeTab, selectedPageNum, book.id, pages]);
+  }, []);
 
   // Handle sectionsPerDay change
   const handleSectionsPerDayChange = (count: number) => {
@@ -279,6 +343,11 @@ export function BookAnalyticsModal({
   // Regenerate Flexible Plan
   const handleRegeneratePlan = async () => {
     if (regeneratingPlan) return;
+    if (planAbortRef.current) {
+      planAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    planAbortRef.current = controller;
     setRegeneratingPlan(true);
     setError('');
     try {
@@ -286,6 +355,7 @@ export function BookAnalyticsModal({
       const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           sectionsPerDay,
           postingTimes,
@@ -297,7 +367,9 @@ export function BookAnalyticsModal({
       if (!response.ok) throw new Error(data.error || 'Plan generation failed.');
 
       // Refresh assignments
-      const listRes = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments`);
+      const listRes = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments`, {
+        signal: controller.signal,
+      });
       const listData = await listRes.json();
       if (listRes.ok && listData.assignments) {
         onAssignmentsUpdated(listData.assignments);
@@ -306,10 +378,26 @@ export function BookAnalyticsModal({
         `Generated ${data.assignments.length} sections (${sectionsPerDay} per day) for remaining pages. Historical sent readings are preserved!`
       );
     } catch (err: any) {
-      showError(err.message || 'Failed to generate plan.');
+      if (err?.name === 'AbortError' || controller.signal.aborted) {
+        showNotice('Plan generation cancelled.');
+      } else {
+        showError(err.message || 'Failed to generate plan.');
+      }
     } finally {
-      setRegeneratingPlan(false);
+      if (planAbortRef.current === controller) {
+        planAbortRef.current = null;
+        setRegeneratingPlan(false);
+      }
     }
+  };
+
+  const handleCancelPlanRegeneration = () => {
+    if (planAbortRef.current) {
+      planAbortRef.current.abort();
+      planAbortRef.current = null;
+    }
+    setRegeneratingPlan(false);
+    showNotice('Plan generation cancelled.');
   };
 
   // Edit Assignment
@@ -1006,7 +1094,7 @@ export function BookAnalyticsModal({
                 }
 
                 return (
-                  <div style={{ display: 'grid', gridTemplateColumns: previewUrl ? '1fr 1fr' : '1fr', gap: 16 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
                     {/* Left/Main Column: Text Editor & Metadata */}
                     <div style={{ display: 'grid', gap: 12 }}>
                       <div
@@ -1030,16 +1118,16 @@ export function BookAnalyticsModal({
                               borderRadius: 6,
                               background:
                                 currentPageRecord.method === 'ocr'
-                                  ? 'rgba(234, 179, 8, 0.2)'
-                                  : currentPageRecord.method === 'empty'
-                                  ? 'rgba(239, 68, 68, 0.2)'
-                                  : 'rgba(34, 197, 94, 0.2)',
+                                    ? 'rgba(234, 179, 8, 0.2)'
+                                    : currentPageRecord.method === 'empty'
+                                    ? 'rgba(239, 68, 68, 0.2)'
+                                    : 'rgba(34, 197, 94, 0.2)',
                               color:
                                 currentPageRecord.method === 'ocr'
-                                  ? '#facc15'
-                                  : currentPageRecord.method === 'empty'
-                                  ? '#fca5a5'
-                                  : '#86efac',
+                                    ? '#facc15'
+                                    : currentPageRecord.method === 'empty'
+                                    ? '#fca5a5'
+                                    : '#86efac',
                             }}
                           >
                             {currentPageRecord.method.toUpperCase()}
@@ -1064,7 +1152,7 @@ export function BookAnalyticsModal({
                           <button
                             type="button"
                             className="v-pill-btn"
-                            disabled={savingPage}
+                            disabled={savingPage || loadingSinglePage}
                             onClick={() => void handleSavePageText()}
                             style={{
                               padding: '6px 12px',
@@ -1103,9 +1191,17 @@ export function BookAnalyticsModal({
 
                       {/* Editable Text Area */}
                       <label style={{ display: 'grid', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
-                        <span>Extracted Page Text (Editable — Corrections will be permanently saved to database):</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span>Extracted Page Text (Editable — Corrections are saved to DB):</span>
+                          {loadingSinglePage && (
+                            <span style={{ fontSize: 11, color: '#93c5fd', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <Loader2 size={11} style={{ animation: 'sams-action-spin .8s linear infinite' }} /> Loading page text…
+                            </span>
+                          )}
+                        </div>
                         <textarea
-                          value={editedText}
+                          value={loadingSinglePage ? 'Loading page text…' : editedText}
+                          disabled={loadingSinglePage}
                           onChange={e => setEditedText(e.target.value)}
                           rows={16}
                           style={{
@@ -1120,37 +1216,51 @@ export function BookAnalyticsModal({
                             fontSize: 13,
                             lineHeight: 1.6,
                             resize: 'vertical',
+                            opacity: loadingSinglePage ? 0.6 : 1,
                           }}
                         />
                       </label>
                     </div>
 
                     {/* Right Column: Visual Preview (Thumbnail/Full Image) */}
-                    {previewUrl && (
-                      <div
-                        style={{
-                          display: 'grid',
-                          gap: 8,
-                          alignContent: 'start',
-                          borderLeft: '1px solid var(--v-glass-border)',
-                          paddingLeft: 16,
-                        }}
-                      >
+                    <div
+                      style={{
+                        display: 'grid',
+                        gap: 8,
+                        alignContent: 'start',
+                        borderLeft: '1px solid var(--v-glass-border)',
+                        paddingLeft: 16,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
                           Original PDF Visual Page Preview
                         </div>
-                        <div
-                          style={{
-                            borderRadius: 10,
-                            overflow: 'hidden',
-                            border: '1px solid var(--v-glass-border)',
-                            background: '#ffffff',
-                            maxHeight: 520,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
+                        {previewLoading && (
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Loader2 size={11} style={{ animation: 'sams-action-spin .8s linear infinite' }} /> Rendering…
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          borderRadius: 10,
+                          overflow: 'hidden',
+                          border: '1px solid var(--v-glass-border)',
+                          background: previewUrl ? '#ffffff' : 'rgba(0,0,0,0.2)',
+                          minHeight: 280,
+                          maxHeight: 520,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {previewLoading ? (
+                          <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>
+                            <Loader2 size={24} style={{ animation: 'sams-action-spin .8s linear infinite', margin: '0 auto 8px' }} />
+                            <div style={{ fontSize: 12 }}>Rendering original PDF page view…</div>
+                          </div>
+                        ) : previewUrl ? (
                           <img
                             src={previewUrl}
                             alt={`Preview page ${selectedPageNum}`}
@@ -1162,12 +1272,24 @@ export function BookAnalyticsModal({
                               display: 'block',
                             }}
                           />
-                        </div>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                          Compare original layout, diagrams, or right-to-left typography against the extracted text on the left.
-                        </span>
+                        ) : (
+                          <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>
+                            <p style={{ margin: '0 0 10px', fontSize: 12 }}>No page preview rendered yet.</p>
+                            <button
+                              type="button"
+                              className="v-pill-btn"
+                              onClick={() => void loadPreviewImage(selectedPageNum)}
+                              style={{ padding: '6px 12px', fontSize: 12 }}
+                            >
+                              Render Page View
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        Compare original layout, diagrams, or typography against the extracted text on the left.
+                      </span>
+                    </div>
                   </div>
                 );
               })()}
@@ -1258,29 +1380,51 @@ export function BookAnalyticsModal({
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                     Already delivered sections will remain untouched. Only uncompleted pages will be re-partitioned.
                   </span>
-                  <button
-                    type="button"
-                    className="v-pill-btn"
-                    disabled={regeneratingPlan}
-                    onClick={() => void handleRegeneratePlan()}
-                    style={{
-                      padding: '8px 16px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      background: 'rgba(99, 102, 241, 0.25)',
-                      borderColor: 'rgba(99, 102, 241, 0.45)',
-                      color: '#a5b4fc',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {regeneratingPlan ? (
-                      <Loader2 size={14} style={{ animation: 'sams-action-spin .8s linear infinite' }} />
-                    ) : (
-                      <Sparkles size={14} />
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="v-pill-btn"
+                      disabled={regeneratingPlan}
+                      onClick={() => void handleRegeneratePlan()}
+                      style={{
+                        padding: '8px 16px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: 'rgba(99, 102, 241, 0.25)',
+                        borderColor: 'rgba(99, 102, 241, 0.45)',
+                        color: '#a5b4fc',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {regeneratingPlan ? (
+                        <Loader2 size={14} style={{ animation: 'sams-action-spin .8s linear infinite' }} />
+                      ) : (
+                        <Sparkles size={14} />
+                      )}
+                      <span>{regeneratingPlan ? 'Generating Concept Plan…' : 'Regenerate Flexible Reading Plan'}</span>
+                    </button>
+                    {regeneratingPlan && (
+                      <button
+                        type="button"
+                        className="v-pill-btn"
+                        onClick={handleCancelPlanRegeneration}
+                        style={{
+                          padding: '8px 14px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          background: 'rgba(239, 68, 68, 0.2)',
+                          borderColor: 'rgba(239, 68, 68, 0.45)',
+                          color: '#fca5a5',
+                          fontWeight: 600,
+                        }}
+                      >
+                        <X size={14} />
+                        <span>Cancel</span>
+                      </button>
                     )}
-                    <span>Regenerate Flexible Reading Plan</span>
-                  </button>
+                  </div>
                 </div>
               </div>
 

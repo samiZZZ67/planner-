@@ -57,17 +57,15 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
 
   try {
     const pages = await listBookPages(session.userId, id, book.startPage, book.endPage);
-    let plan: { assignments: any[]; issues: string[]; model: string; provider: string };
-
-    if (sectionsPerDay === 1 && startPlanningPage === book.startPage && !completedAssignments.length && !existing.some(a => a.status === 'approved')) {
-      try {
-        plan = await generateConceptReadingPlan({ book, pages, model });
-      } catch {
-        plan = await generateFlexibleReadingPlan({ book, pages, sectionsPerDay, postingTimes, model, startFromPage: startPlanningPage });
-      }
-    } else {
-      plan = await generateFlexibleReadingPlan({ book, pages, sectionsPerDay, postingTimes, model, startFromPage: startPlanningPage });
-    }
+    const plan = await generateConceptReadingPlan({
+      book,
+      pages,
+      sectionsPerDay,
+      postingTimes,
+      model,
+      startFromPage: startPlanningPage,
+      signal: request.signal,
+    });
 
     await replaceDraftAssignments(session.userId, id, plan.assignments);
     await updateBook({ ...book, sectionsPerDay, postingTimes, status: 'draft' });

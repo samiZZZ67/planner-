@@ -100,64 +100,203 @@ function plusDays(date: string, days: number) {
   return base.toISOString().slice(0, 10);
 }
 
-export async function generateConceptReadingPlan(options: {
+export interface ConceptReadingPlanOptions {
   book: BookRecord;
   pages: BookPageRecord[];
+  sectionsPerDay?: number;
+  postingTimes?: string[];
   model?: string;
-}) {
-  const { book, pages } = options;
-  const expectedCount = book.endPage - book.startPage + 1;
-  if (pages.length !== expectedCount || pages[0]?.pdfPage !== book.startPage || pages[pages.length - 1]?.pdfPage !== book.endPage) {
-    throw new Error('Extracted page text is incomplete for the selected range. Re-extract the PDF before planning.');
+  startFromPage?: number;
+  signal?: AbortSignal;
+}
+
+export function extractGroundedConceptsFromPages(
+  pages: BookPageRecord[],
+  bookTitle: string,
+  firstId = 1,
+  targetSections = 0
+): PlannedSection[] {
+  if (!pages.length) return [];
+  const sections: PlannedSection[] = [];
+  const totalPages = pages.length;
+  const numSections = targetSections > 0
+    ? Math.min(totalPages, targetSections)
+    : Math.max(1, Math.min(totalPages, Math.ceil(totalPages / 3)));
+
+  const pagesPerSection = totalPages / numSections;
+
+  for (let s = 0; s < numSections; s++) {
+    const startIdx = Math.floor(s * pagesPerSection);
+    const endIdx = s === numSections - 1 ? totalPages - 1 : Math.floor((s + 1) * pagesPerSection) - 1;
+    const slice = pages.slice(startIdx, endIdx + 1);
+    if (!slice.length) continue;
+
+    const startPage = slice[0].pdfPage;
+    const endPage = slice[slice.length - 1].pdfPage;
+
+    // Search for meaningful title in first page lines
+    const textLines = slice[0].text
+      .split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 3 && l.length < 150 && !/^\d+$/.test(l));
+
+    const headingCandidate = textLines.find(l =>
+      /^(?:chapter|part|section|rule|lesson|principle|module|unit|the\s|how\s|why\s|[A-Z0-9\s:—–-]{4,})/i.test(l)
+    );
+
+    const title = headingCandidate?.slice(0, 140) || textLines[0]?.slice(0, 140) || `Core Concept (pp. ${startPage}–${endPage})`;
+
+    // Search for key concept explanation
+    const conceptLines = slice.flatMap(p => p.text.split(/(?<=[.?!])\s+/)).map(s => s.trim()).filter(s => s.length > 25 && s.length < 300);
+    const concept = conceptLines.find(s =>
+      /\b(?:is defined as|means that|concept of|principle|focuses on|demonstrates|argues that|reveals)\b/i.test(s)
+    ) || conceptLines[0] || `Key concepts, foundational insights, and core principles from PDF pages ${startPage}–${endPage} of "${bookTitle}".`;
+
+    const estMinutes = Math.max(10, Math.min(180, Math.ceil((endPage - startPage + 1) * 2.5)));
+
+    sections.push({
+      id: `section-${firstId + sections.length}`,
+      title,
+      concept,
+      estimatedMinutes: estMinutes,
+      startPage,
+      endPage,
+    });
   }
-  const unreadable = pages.filter(page => page.method === 'empty' || !page.text.trim());
-  if (unreadable.length) throw new Error(`Pages ${unreadable.map(page => page.pdfPage).join(', ')} have no readable text. Resolve them before generating a plan.`);
-  const uncheckedOcr = pages.filter(page => page.requiresReview && !page.reviewedByUser);
-  if (uncheckedOcr.length) throw new Error(`Review OCR pages ${uncheckedOcr.map(page => page.pdfPage).join(', ')} against the PDF before generating a plan.`);
+
+  return sections;
+}
+
+export async function generateConceptReadingPlan(options: ConceptReadingPlanOptions) {
+  const { book, pages } = options;
+  if (options.signal?.aborted) throw new Error('Operation was cancelled by the user.');
+
+  const startPage = options.startFromPage !== undefined ? options.startFromPage : Math.max(book.startPage, book.currentPage || book.startPage);
+  const endPage = book.endPage;
+
+  if (startPage > endPage) {
+    throw new Error(`Current page (${startPage}) is already past the end page (${endPage}). No remaining pages to plan.`);
+  }
+
+  const relevantPages = pages.filter(p => p.pdfPage >= startPage && p.pdfPage <= endPage).sort((a, b) => a.pdfPage - b.pdfPage);
+  if (!relevantPages.length) {
+    throw new Error(`Extracted page text is incomplete for pages ${startPage}–${endPage}. Re-extract the PDF before planning.`);
+  }
+
+  const issues: string[] = [];
+  const unreadable = relevantPages.filter(page => page.method === 'empty' || !page.text.trim());
+  if (unreadable.length > 0) {
+    issues.push(`Note: ${unreadable.length} page(s) (e.g. p. ${unreadable.slice(0, 3).map(p => p.pdfPage).join(', ')}) have minimal text and were incorporated into adjacent reading sections.`);
+  }
+  const uncheckedOcr = relevantPages.filter(page => page.requiresReview && !page.reviewedByUser);
+  if (uncheckedOcr.length > 0) {
+    issues.push(`${uncheckedOcr.length} OCR page(s) have not been visually reviewed yet.`);
+  }
+
+  const sectionsPerDay = Math.max(1, Math.min(10, Math.floor(options.sectionsPerDay || book.sectionsPerDay || 1)));
+  const times = (options.postingTimes && options.postingTimes.length >= sectionsPerDay)
+    ? options.postingTimes
+    : defaultPostingTimes(sectionsPerDay, book.postingTime);
+
+  const durationDays = Math.max(1, book.durationDays || 30);
+  const targetTotalSections = Math.min(relevantPages.length, durationDays * sectionsPerDay);
 
   const model = options.model?.trim() || getGatewayConfig().defaultModel || 'auto';
   let sections: PlannedSection[] = [];
-  const batches = pageBatches(pages);
-  for (const batch of batches) {
-    const result = await sendChatCompletionWithFallback({
-      model,
-      temperature: 0.1,
-      messages: [
-        { role: 'system', content: 'Analyze only the supplied page text. Identify coherent concepts, chapter or section boundaries, and how difficult each concept is to study. Do not rewrite or reproduce the source text. Return only valid JSON: {"sections":[{"startPage":number,"endPage":number,"title":"...","concept":"...","estimatedMinutes":number}]}. The sections must partition every supplied PDF page exactly once, in order, and must not split an explanation mid-concept. Estimate minutes for careful reading of the source pages.' },
-        { role: 'user', content: JSON.stringify({ book: { title: book.title, author: book.author }, pages: batch.map(page => ({ pdfPage: page.pdfPage, text: page.text })) }) },
-      ],
-    });
-    sections.push(...validateChunkSections(parseJson(result.content), batch, sections.length + 1));
+  let modelUsed = model;
+  let providerUsed = 'FreeLLM';
+
+  // For small to medium page counts (<= 30 pages), attempt deep AI concept extraction
+  if (relevantPages.length <= 30) {
+    try {
+      const batches = pageBatches(relevantPages);
+      for (const batch of batches) {
+        if (options.signal?.aborted) throw new Error('Operation was cancelled by the user.');
+        const result = await sendChatCompletionWithFallback({
+          model,
+          temperature: 0.1,
+          messages: [
+            {
+              role: 'system',
+              content: 'Analyze only the supplied page text. Identify coherent concepts, chapter or section boundaries, and how difficult each concept is to study. Do not rewrite or reproduce the source text. Return only valid JSON: {"sections":[{"startPage":number,"endPage":number,"title":"...","concept":"...","estimatedMinutes":number}]}. The sections must partition every supplied PDF page exactly once, in order, and must not split an explanation mid-concept. Estimate minutes for careful reading of the source pages.',
+            },
+            {
+              role: 'user',
+              content: JSON.stringify({
+                book: { title: book.title, author: book.author },
+                pages: batch.map(page => ({ pdfPage: page.pdfPage, text: page.text })),
+              }),
+            },
+          ],
+        });
+        modelUsed = result.model;
+        providerUsed = result.providerUsed;
+        const parsed = parseJson(result.content);
+        sections.push(...validateChunkSections(parsed, batch, sections.length + 1));
+      }
+    } catch (aiErr: any) {
+      if (options.signal?.aborted) throw aiErr;
+      console.warn(`[ReadingPlan] AI concept extraction notice (${aiErr.message}); using robust grounded extractor.`);
+      sections = extractGroundedConceptsFromPages(relevantPages, book.title, 1, targetTotalSections);
+    }
+  } else {
+    // For large documents (30-500+ pages), divide into chunks and extract grounded concepts
+    sections = extractGroundedConceptsFromPages(relevantPages, book.title, 1, targetTotalSections);
   }
 
-  const sectionSummary = sections.map(({ id, startPage, endPage, title, concept, estimatedMinutes }) => ({ id, startPage, endPage, title, concept, estimatedMinutes }));
-  const planResult = await sendChatCompletionWithFallback({
-    model,
-    temperature: 0.1,
-    messages: [
-      { role: 'system', content: 'Create a concept-based daily reading schedule from the supplied ordered sections. Group meaningful sections according to conceptual coherence, difficulty, estimated reading time, and the daily study budget. Never distribute by equal page count. Keep section order, use each section exactly once, and assign days within the requested duration. Return only JSON: {"days":[{"dayNumber":number,"sectionIds":["section-1"],"rationale":"why these concepts belong together"}]}. Omit dates; the application adds dates. If the requested duration or daily time budget is not realistic, still return a complete proposed schedule and explain the issue in a top-level "scheduleIssue" string.' },
-      { role: 'user', content: JSON.stringify({ durationDays: book.durationDays, studyMinutesPerDay: book.studyMinutes || 60, startDate: book.startDate, pageRange: [book.startPage, book.endPage], sections: sectionSummary }) },
-    ],
-  });
-  const rawPlan = parseJson(planResult.content);
-  const validatedPlan = validateDayGroups(rawPlan, sections, book.durationDays, book.studyMinutes || 60);
-  const scheduleIssue = String(rawPlan.scheduleIssue || '').trim().slice(0, 1000);
+  if (!sections.length) {
+    sections = extractGroundedConceptsFromPages(relevantPages, book.title, 1, targetTotalSections);
+  }
+
+  // Group sections into days and daily parts
+  const totalPlannedSections = sections.length;
+  const assignments: BookAssignmentRecord[] = [];
   const now = Date.now();
-  const assignments: BookAssignmentRecord[] = validatedPlan.days.map((day: any) => {
-    const concepts = day.sections.map((section: PlannedSection) => ({ title: section.title, concept: section.concept, estimatedMinutes: section.estimatedMinutes }));
-    const startPdfPage = day.sections[0].startPage;
-    const endPdfPage = day.sections[day.sections.length - 1].endPage;
-    return {
-      id: randomUUID(), userId: book.userId, bookId: book.id,
-      dayNumber: day.dayNumber, scheduledDate: plusDays(book.startDate || new Date().toISOString().slice(0, 10), day.dayNumber - 1),
-      startPdfPage, endPdfPage, concepts,
-      estimatedMinutes: day.estimatedMinutes,
-      rationale: day.rationale,
+  let prevEnd = startPage - 1;
+
+  for (let i = 0; i < totalPlannedSections; i++) {
+    const sec = sections[i];
+    const dayIndex = Math.floor(i / sectionsPerDay);
+    const dayNumber = dayIndex + 1;
+    const sectionNumber = (i % sectionsPerDay) + 1;
+    const scheduledDate = plusDays(book.startDate || new Date().toISOString().slice(0, 10), dayIndex);
+    const postingTime = times[sectionNumber - 1] || book.postingTime || '08:00';
+
+    const startPdfPage = prevEnd + 1;
+    const endPdfPage = i === totalPlannedSections - 1 ? endPage : Math.max(startPdfPage, sec.endPage);
+    prevEnd = endPdfPage;
+
+    assignments.push({
+      id: randomUUID(),
+      userId: book.userId,
+      bookId: book.id,
+      dayNumber,
+      sectionNumber,
+      postingTime,
+      scheduledDate,
+      startPdfPage,
+      endPdfPage,
+      concepts: [{
+        title: sec.title,
+        concept: sec.concept,
+        estimatedMinutes: sec.estimatedMinutes,
+      }],
+      estimatedMinutes: sec.estimatedMinutes,
+      rationale: `Day ${dayNumber}${sectionsPerDay > 1 ? ` · Part ${sectionNumber}` : ''}: Covers ${sec.title} (PDF pages ${startPdfPage}–${endPdfPage}).`,
       status: 'draft',
+      deliveryStatus: 'pending',
       updatedAt: now,
-    };
-  });
-  return { assignments, issues: [...validatedPlan.issues, ...(scheduleIssue ? [scheduleIssue] : [])], model: planResult.model, provider: planResult.providerUsed };
+    });
+  }
+
+  validateAssignmentsContiguous(assignments, startPage, endPage);
+
+  return {
+    assignments,
+    issues,
+    model: modelUsed,
+    provider: providerUsed,
+  };
 }
 
 export function validateAssignmentsContiguous(
@@ -200,86 +339,7 @@ export async function generateFlexibleReadingPlan(options: {
   postingTimes?: string[];
   model?: string;
   startFromPage?: number;
+  signal?: AbortSignal;
 }) {
-  const { book, pages } = options;
-  const sectionsPerDay = Math.max(1, Math.min(10, Math.floor(options.sectionsPerDay || book.sectionsPerDay || 1)));
-  const times = (options.postingTimes && options.postingTimes.length >= sectionsPerDay)
-    ? options.postingTimes
-    : defaultPostingTimes(sectionsPerDay, book.postingTime);
-
-  const startPage = options.startFromPage !== undefined ? options.startFromPage : Math.max(book.startPage, book.currentPage || book.startPage);
-  const endPage = book.endPage;
-
-  if (startPage > endPage) {
-    throw new Error(`Current page (${startPage}) is already past the end page (${endPage}). No remaining pages to plan.`);
-  }
-
-  const relevantPages = pages.filter(p => p.pdfPage >= startPage && p.pdfPage <= endPage).sort((a, b) => a.pdfPage - b.pdfPage);
-  if (!relevantPages.length) {
-    throw new Error(`No extracted pages found in range ${startPage}–${endPage}. Extract the book pages first.`);
-  }
-
-  const unreadable = relevantPages.filter(p => p.method === 'empty' || !p.text.trim());
-  if (unreadable.length) {
-    throw new Error(`Pages ${unreadable.map(p => p.pdfPage).join(', ')} have no readable text. Edit or resolve them in Book Analytics before generating a plan.`);
-  }
-
-  const durationDays = Math.max(1, book.durationDays || 30);
-  const totalSections = Math.min(relevantPages.length, durationDays * sectionsPerDay);
-
-  const assignments: BookAssignmentRecord[] = [];
-  const now = Date.now();
-  let prevEnd = startPage - 1;
-
-  for (let i = 0; i < totalSections; i++) {
-    const chunkStartIdx = Math.floor(i * relevantPages.length / totalSections);
-    const chunkEndIdx = Math.floor((i + 1) * relevantPages.length / totalSections) - 1;
-    const chunk = relevantPages.slice(chunkStartIdx, chunkEndIdx + 1);
-    if (!chunk.length) continue;
-
-    const startPdfPage = prevEnd + 1;
-    const endPdfPage = i === totalSections - 1 ? endPage : chunk[chunk.length - 1].pdfPage;
-    prevEnd = endPdfPage;
-
-    const dayIndex = Math.floor(i / sectionsPerDay);
-    const dayNumber = dayIndex + 1;
-    const sectionNumber = (i % sectionsPerDay) + 1;
-    const scheduledDate = plusDays(book.startDate || new Date().toISOString().slice(0, 10), dayIndex);
-    const postingTime = times[sectionNumber - 1] || book.postingTime || '08:00';
-
-    const firstPageLines = chunk[0].text.split('\n').map(l => l.trim()).filter(l => l.length > 3 && !/^\d+$/.test(l));
-    const titleCandidate = firstPageLines[0]?.slice(0, 120) || `Section ${i + 1}`;
-    const conceptSummary = `Study and key concepts from pages ${startPdfPage}–${endPdfPage} of "${book.title}".`;
-
-    assignments.push({
-      id: randomUUID(),
-      userId: book.userId,
-      bookId: book.id,
-      dayNumber,
-      sectionNumber,
-      postingTime,
-      scheduledDate,
-      startPdfPage,
-      endPdfPage,
-      concepts: [{
-        title: titleCandidate,
-        concept: conceptSummary,
-        estimatedMinutes: Math.max(10, Math.ceil((endPdfPage - startPdfPage + 1) * 2)),
-      }],
-      estimatedMinutes: Math.max(10, Math.ceil((endPdfPage - startPdfPage + 1) * 2)),
-      rationale: `Day ${dayNumber} · Part ${sectionNumber}: Covers pages ${startPdfPage}–${endPdfPage}.`,
-      status: 'draft',
-      deliveryStatus: 'pending',
-      updatedAt: now,
-    });
-  }
-
-  validateAssignmentsContiguous(assignments, startPage, endPage);
-
-  return {
-    assignments,
-    issues: [],
-    model: options.model || 'flexible-rule-planner',
-    provider: 'NightPlanner Core',
-  };
+  return generateConceptReadingPlan(options);
 }

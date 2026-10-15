@@ -503,6 +503,73 @@ export async function getBookPagePreviewPath(userId: string, id: string, pdfPage
   return fs.existsSync(previewDiskPath) ? previewDiskPath : null;
 }
 
+export async function ensurePagePreview(userId: string, id: string, pdfPage: number): Promise<string | null> {
+  const existingPath = await getBookPagePreviewPath(userId, id, pdfPage);
+  if (existingPath && fs.existsSync(existingPath)) {
+    try {
+      const stats = fs.statSync(existingPath);
+      if (stats.size > 0) return existingPath;
+    } catch {}
+  }
+
+  const previewDir = path.join(DATA_DIR, id, 'page-previews');
+  const filename = `page-${pdfPage}.jpg`;
+  const previewDiskPath = path.join(previewDir, filename);
+  if (fs.existsSync(previewDiskPath)) {
+    try {
+      const stats = fs.statSync(previewDiskPath);
+      if (stats.size > 0) return previewDiskPath;
+    } catch {}
+  }
+
+  const pdfPath = await getBookPdfPath(userId, id);
+  if (!pdfPath || !fs.existsSync(pdfPath)) return null;
+
+  let renderDocTask: any = null;
+  try {
+    const bytes = fs.readFileSync(pdfPath);
+    const canvasModule = await import('@napi-rs/canvas');
+    const { getDocument } = await import('./books/pdf.js-extract/lib/pdfjs/pdf.mjs');
+    renderDocTask = getDocument({ data: new Uint8Array(bytes), verbosity: -1 });
+    const doc = await renderDocTask.promise;
+    if (pdfPage < 1 || pdfPage > doc.numPages) return null;
+
+    const pageProxy = await doc.getPage(pdfPage);
+    const baseViewport = pageProxy.getViewport({ scale: 1 });
+    const scale = Math.min(1.5, 1400 / Math.max(baseViewport.width, baseViewport.height));
+    const viewport = pageProxy.getViewport({ scale });
+    const canvas = canvasModule.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    await pageProxy.render({ canvas, viewport, background: '#ffffff' }).promise;
+    pageProxy.cleanup?.();
+
+    fs.mkdirSync(previewDir, { recursive: true });
+    const jpegBuffer = canvas.toBuffer('image/jpeg', 80);
+    fs.writeFileSync(previewDiskPath, jpegBuffer);
+
+    const sql = getDb();
+    if (sql) {
+      await ensureBookSchema(sql);
+      const b64 = jpegBuffer.toString('base64');
+      await sql`
+        INSERT INTO book_previews (book_id, pdf_page, filename, mime_type, data, updated_at)
+        VALUES (${id}, ${pdfPage}, ${filename}, 'image/jpeg', decode(${b64}, 'base64'), ${Date.now()})
+        ON CONFLICT (book_id, pdf_page) DO UPDATE SET
+          filename = EXCLUDED.filename,
+          mime_type = EXCLUDED.mime_type,
+          data = EXCLUDED.data,
+          updated_at = EXCLUDED.updated_at
+      `.catch(err => console.error('[Books] Error saving on-demand preview to DB:', err));
+    }
+
+    return previewDiskPath;
+  } catch (err) {
+    console.error(`[Books] Failed to render on-demand preview for page ${pdfPage}:`, err);
+    return null;
+  } finally {
+    if (renderDocTask) await renderDocTask.destroy().catch(() => null);
+  }
+}
+
 export async function deleteBook(userId: string, id: string) {
   const book = await getBook(userId, id);
   if (!book) return false;

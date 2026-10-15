@@ -10,6 +10,7 @@ export interface PdfExtractionOptions {
   pageNumbers?: number[];
   skipPages?: Set<number> | number[];
   maxPages?: number;
+  signal?: AbortSignal;
   onProgress?: (page: BookPageRecord, completedPages: number, totalPages: number) => Promise<void>;
 }
 
@@ -164,6 +165,7 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
 
   try {
     for (const pdfPage of targetPages) {
+      if (options.signal?.aborted) throw new Error('PDF extraction cancelled by user.');
       const pageData: any = extractResult.pages.find((p: any) => p?.info?.num === pdfPage);
       const items: any[] = pageData?.content || [];
 

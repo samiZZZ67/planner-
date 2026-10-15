@@ -95,6 +95,8 @@ export function BookPlannerScreen() {
   const [bookDraft, setBookDraft] = useState<Partial<BookRecord>>({});
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const previewUrlsRef = useRef<Record<string, string>>({});
+  const extractAbortRef = useRef<AbortController | null>(null);
+  const planAbortRef = useRef<AbortController | null>(null);
   const [baModalBook, setBaModalBook] = useState<BookRecord | null>(null);
   const [reviewModalBook, setReviewModalBook] = useState<BookRecord | null>(null);
 
@@ -128,7 +130,29 @@ export function BookPlannerScreen() {
   }, [notice]);
 
   useEffect(() => { previewUrlsRef.current = previewUrls; }, [previewUrls]);
-  useEffect(() => () => Object.values(previewUrlsRef.current).forEach(url => URL.revokeObjectURL(url)), []);
+  useEffect(() => () => {
+    Object.values(previewUrlsRef.current).forEach(url => URL.revokeObjectURL(url));
+    extractAbortRef.current?.abort();
+    planAbortRef.current?.abort();
+  }, []);
+
+  function cancelExtraction() {
+    if (extractAbortRef.current) {
+      extractAbortRef.current.abort();
+      extractAbortRef.current = null;
+    }
+    setProcessingId(null);
+    showNotice('PDF extraction cancelled by user.');
+  }
+
+  function cancelPlanGeneration() {
+    if (planAbortRef.current) {
+      planAbortRef.current.abort();
+      planAbortRef.current = null;
+    }
+    setGeneratingPlanBookId(null);
+    showNotice('Plan generation cancelled by user.');
+  }
 
   async function loadPagePreviews(bookId: string, pages: BookPageRecord[]) {
     const entries = await Promise.all(pages.filter(page => page.visualPreview).map(async page => {
@@ -170,6 +194,11 @@ export function BookPlannerScreen() {
   }, [processingId, refresh]);
 
   async function extractBook(book: BookRecord) {
+    if (extractAbortRef.current) {
+      extractAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    extractAbortRef.current = controller;
     setError('');
     setNotice('');
     setProcessingId(book.id);
@@ -178,6 +207,9 @@ export function BookPlannerScreen() {
       let isComplete = false;
       let batchNum = 1;
       while (!isComplete) {
+        if (controller.signal.aborted) {
+          throw new DOMException('Aborted', 'AbortError');
+        }
         setBooks(current => current.map(item => item.id === book.id ? {
           ...item,
           status: 'processing',
@@ -189,6 +221,7 @@ export function BookPlannerScreen() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ batchSize: 25, force: batchNum > 1 }),
+          signal: controller.signal,
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'PDF extraction failed.');
@@ -200,11 +233,18 @@ export function BookPlannerScreen() {
         batchNum++;
       }
       showNotice(currentBook.extractionMessage || 'PDF extraction complete.');
-    } catch (err) {
-      showError(err instanceof Error ? err.message : 'PDF extraction failed.');
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted) {
+        showNotice('PDF extraction cancelled.');
+      } else {
+        showError(err instanceof Error ? err.message : 'PDF extraction failed.');
+      }
       await refresh();
     } finally {
-      setProcessingId(null);
+      if (extractAbortRef.current === controller) {
+        extractAbortRef.current = null;
+        setProcessingId(null);
+      }
     }
   }
 
@@ -257,13 +297,21 @@ export function BookPlannerScreen() {
   }
 
   async function generatePlan(book: BookRecord) {
+    if (planAbortRef.current) {
+      planAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    planAbortRef.current = controller;
     setError('');
     setNotice('');
     setGeneratingPlanBookId(book.id);
     try {
       const model = localStorage.getItem('np_freellm_selected_model') || 'auto';
       const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+        signal: controller.signal,
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Reading plan generation failed.');
@@ -271,10 +319,17 @@ export function BookPlannerScreen() {
       showNotice(`Draft plan created with ${data.assignments.length} reading assignments using ${data.model} via ${data.provider}.`);
       if (data.issues?.length) showError(data.issues.join(' '));
       await refresh();
-    } catch (err) {
-      showError(err instanceof Error ? err.message : 'Reading plan generation failed.');
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted) {
+        showNotice('Reading plan generation cancelled.');
+      } else {
+        showError(err instanceof Error ? err.message : 'Reading plan generation failed.');
+      }
     } finally {
-      setGeneratingPlanBookId(null);
+      if (planAbortRef.current === controller) {
+        planAbortRef.current = null;
+        setGeneratingPlanBookId(null);
+      }
     }
   }
 
@@ -640,8 +695,26 @@ export function BookPlannerScreen() {
             </div>
             {book.extractionProgress && <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 12 }}>Progress: {book.extractionProgress.completedPages} / {book.extractionProgress.totalPages} selected pages</p>}
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5 }}>{book.extractionMessage}</p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <button type="button" className="v-pill-btn" disabled={processingId !== null} onClick={() => void extractBook(book)} style={{ padding: '8px 12px', cursor: processingId !== null ? 'wait' : 'pointer' }}>{processingId === book.id ? 'Extracting…' : book.extractionStatus === 'pending' ? 'Extract PDF text / OCR' : book.extractionStatus === 'processing' ? 'Resume / retry extraction' : 'Re-extract PDF pages'}</button>
+              {processingId === book.id && (
+                <button
+                  type="button"
+                  className="v-pill-btn"
+                  onClick={cancelExtraction}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'rgba(239, 68, 68, 0.2)',
+                    borderColor: 'rgba(239, 68, 68, 0.45)',
+                    color: '#fca5a5',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <X size={14} /> Cancel Extraction
+                </button>
+              )}
               {book.extractionStatus !== 'pending' && (
                 <button
                   type="button"
@@ -656,10 +729,28 @@ export function BookPlannerScreen() {
                 <Eye size={14} /> Inspect Extracted Pages in BA
               </button>
             </div>
-            {book.extractionStatus === 'completed' && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {book.extractionStatus === 'completed' && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <button type="button" className="v-pill-btn" disabled={generatingPlanBookId === book.id} onClick={() => void generatePlan(book)} style={{ padding: '8px 12px', cursor: generatingPlanBookId === book.id ? 'wait' : 'pointer' }}>
                 {generatingPlanBookId === book.id ? 'Generating plan…' : 'Generate concept-based plan'}
               </button>
+              {generatingPlanBookId === book.id && (
+                <button
+                  type="button"
+                  className="v-pill-btn"
+                  onClick={cancelPlanGeneration}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'rgba(239, 68, 68, 0.2)',
+                    borderColor: 'rgba(239, 68, 68, 0.45)',
+                    color: '#fca5a5',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <X size={14} /> Cancel Plan Generation
+                </button>
+              )}
               <button type="button" className="v-pill-btn" disabled={loadingAssignmentsBookId === book.id} onClick={() => void loadAssignments(book)} style={{ padding: '8px 12px', cursor: loadingAssignmentsBookId === book.id ? 'wait' : 'pointer' }}>
                 {loadingAssignmentsBookId === book.id ? 'Loading plan…' : 'Load saved plan'}
               </button>

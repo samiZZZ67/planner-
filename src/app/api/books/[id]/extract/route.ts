@@ -89,6 +89,7 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
       startPage: book.startPage,
       endPage: book.endPage,
       pageNumbers: pagesToExtract,
+      signal: request.signal,
       onProgress: async (page, completedInBatch) => {
         pendingPages.push(page);
         if (pendingPages.length >= 8 || completedInBatch === pagesToExtract.length) {

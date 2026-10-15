@@ -53,6 +53,12 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
   const [notice, setNotice] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
+  const [pageWindowIndex, setPageWindowIndex] = useState<number>(0);
+  const PAGE_WINDOW_SIZE = 50;
+
+  const extractionAbortRef = useRef<AbortController | null>(null);
+  const pageAbortRef = useRef<AbortController | null>(null);
+  const previewAbortRef = useRef<AbortController | null>(null);
 
   // Sync state with incoming prop
   useEffect(() => {
@@ -61,6 +67,15 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
       setSelectedPageNum(book.startPage);
     }
   }, [book]);
+
+  // Clean up all pending requests on unmount or close
+  useEffect(() => {
+    return () => {
+      extractionAbortRef.current?.abort();
+      pageAbortRef.current?.abort();
+      previewAbortRef.current?.abort();
+    };
+  }, []);
 
   const showNotice = useCallback((msg: string) => {
     setNotice(msg);
@@ -123,21 +138,30 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
     }
   }, [isOpen, currentBook?.id, loadSummariesAndStats]);
 
-  // Load single page full text
+  // Load single page full text with request cancellation
   const loadSinglePage = useCallback(async (pageNum: number) => {
     if (!currentBook) return;
+    pageAbortRef.current?.abort();
+    const controller = new AbortController();
+    pageAbortRef.current = controller;
     setLoadingPage(true);
     try {
-      const res = await apiFetch(`/api/books/${encodeURIComponent(currentBook.id)}/pages?pageNumber=${pageNum}`);
+      const res = await apiFetch(`/api/books/${encodeURIComponent(currentBook.id)}/pages?pageNumber=${pageNum}`, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load page text.');
       const page: BookPageRecord = data.page;
       setCurrentPage(page);
       setEditedText(page ? page.text : '');
-    } catch (err) {
+    } catch (err: any) {
+      if (controller.signal.aborted || err?.name === 'AbortError') return;
       showError(err instanceof Error ? err.message : `Failed to load page ${pageNum}.`);
     } finally {
-      setLoadingPage(false);
+      if (!controller.signal.aborted) {
+        setLoadingPage(false);
+      }
     }
   }, [currentBook, showError]);
 
@@ -147,40 +171,48 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
     }
   }, [isOpen, currentBook?.id, selectedPageNum, loadSinglePage]);
 
-  // Load visual page preview
-  useEffect(() => {
-    if (!isOpen || !currentBook || !selectedPageNum) {
+  // Load visual page preview with abort controller and cleanup
+  const loadPagePreview = useCallback((pageNum: number) => {
+    if (!isOpen || !currentBook || !pageNum) {
       setPreviewUrl(null);
       return;
     }
 
-    let active = true;
+    previewAbortRef.current?.abort();
+    const controller = new AbortController();
+    previewAbortRef.current = controller;
+
     let objectUrl: string | null = null;
     setLoadingPreview(true);
 
-    void apiFetch(`/api/books/${encodeURIComponent(currentBook.id)}/pages/${selectedPageNum}/preview`)
+    void apiFetch(`/api/books/${encodeURIComponent(currentBook.id)}/pages/${pageNum}/preview`, {
+      signal: controller.signal,
+    })
       .then(async res => {
-        if (!active) return;
+        if (controller.signal.aborted) return;
         if (res.ok) {
           const blob = await res.blob();
+          if (controller.signal.aborted) return;
           objectUrl = URL.createObjectURL(blob);
           setPreviewUrl(objectUrl);
         } else {
           setPreviewUrl(null);
         }
       })
-      .catch(() => {
-        if (active) setPreviewUrl(null);
+      .catch((err: any) => {
+        if (controller.signal.aborted || err?.name === 'AbortError') return;
+        setPreviewUrl(null);
       })
       .finally(() => {
-        if (active) setLoadingPreview(false);
+        if (!controller.signal.aborted) {
+          setLoadingPreview(false);
+        }
       });
+  }, [isOpen, currentBook]);
 
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [isOpen, currentBook?.id, selectedPageNum]);
+  useEffect(() => {
+    loadPagePreview(selectedPageNum);
+  }, [selectedPageNum, loadPagePreview]);
 
   // Filtered pages list for navigation
   const filteredSummaries = useMemo(() => {
@@ -197,6 +229,21 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
   }, [summaries, filter]);
 
   const currentIndex = filteredSummaries.findIndex(p => p.pdfPage === selectedPageNum);
+
+  // Sync window index when selected page changes
+  useEffect(() => {
+    const idx = filteredSummaries.findIndex(p => p.pdfPage === selectedPageNum);
+    if (idx >= 0) {
+      setPageWindowIndex(Math.floor(idx / PAGE_WINDOW_SIZE));
+    }
+  }, [selectedPageNum, filteredSummaries, PAGE_WINDOW_SIZE]);
+
+  const totalWindows = Math.max(1, Math.ceil(filteredSummaries.length / PAGE_WINDOW_SIZE));
+  const windowedSummaries = useMemo(() => {
+    if (filteredSummaries.length <= PAGE_WINDOW_SIZE) return filteredSummaries;
+    const start = pageWindowIndex * PAGE_WINDOW_SIZE;
+    return filteredSummaries.slice(start, start + PAGE_WINDOW_SIZE);
+  }, [filteredSummaries, pageWindowIndex, PAGE_WINDOW_SIZE]);
 
   const goToNextPage = () => {
     if (currentIndex >= 0 && currentIndex < filteredSummaries.length - 1) {
@@ -300,21 +347,36 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
     }
   };
 
-  // Resume / batch extraction from modal
+  const cancelBatchExtraction = () => {
+    if (extractionAbortRef.current) {
+      extractionAbortRef.current.abort();
+      extractionAbortRef.current = null;
+      setExtractingBatch(false);
+      showNotice('Batch extraction cancelled by user. Already extracted pages have been preserved.');
+    }
+  };
+
+  // Resume / batch extraction from modal with cancellation support
   const resumeBatchExtraction = async () => {
     if (!currentBook || extractingBatch) return;
     setExtractingBatch(true);
     setError('');
+    const controller = new AbortController();
+    extractionAbortRef.current = controller;
+
     try {
       let isDone = false;
       let bCount = 1;
       while (!isDone) {
+        if (controller.signal.aborted) break;
         showNotice(`Extracting batch ${bCount}...`);
         const res = await apiFetch(`/api/books/${encodeURIComponent(currentBook.id)}/extract`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ batchSize: 25, force: true }),
+          signal: controller.signal,
         });
+        if (controller.signal.aborted) break;
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Batch extraction failed.');
         setCurrentBook(data.book);
@@ -324,11 +386,18 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
         // Refresh summaries and stats after each batch
         await loadSummariesAndStats();
       }
-      showNotice('Extraction fully completed! All pages are now available for review.');
-    } catch (err) {
-      showError(err instanceof Error ? err.message : 'Batch extraction failed.');
+      if (!controller.signal.aborted) {
+        showNotice('Extraction fully completed! All pages are now available for review.');
+      }
+    } catch (err: any) {
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        showNotice('Batch extraction stopped by user. Progress is preserved.');
+      } else {
+        showError(err instanceof Error ? err.message : 'Batch extraction failed.');
+      }
       await loadSummariesAndStats();
     } finally {
+      extractionAbortRef.current = null;
       setExtractingBatch(false);
     }
   };
@@ -496,18 +565,32 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* If partially extracted, allow resume from header */}
+            {/* If partially extracted, allow resume or cancel from header */}
             {isPartiallyExtracted && (
-              <button
-                type="button"
-                className="v-pill-btn v-pill-btn-accent"
-                disabled={extractingBatch}
-                onClick={() => void resumeBatchExtraction()}
-                style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}
-              >
-                {extractingBatch ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                {extractingBatch ? 'Extracting Remaining...' : `Resume Extraction (${totalPages - extractedCount} left)`}
-              </button>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="v-pill-btn v-pill-btn-accent"
+                  disabled={extractingBatch}
+                  onClick={() => void resumeBatchExtraction()}
+                  style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}
+                >
+                  {extractingBatch ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                  {extractingBatch ? 'Extracting Remaining...' : `Resume Extraction (${totalPages - extractedCount} left)`}
+                </button>
+                {extractingBatch && (
+                  <button
+                    type="button"
+                    className="v-pill-btn"
+                    onClick={cancelBatchExtraction}
+                    style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center', color: '#fca5a5', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                    title="Cancel active extraction batch"
+                  >
+                    <X size={13} />
+                    <span>Cancel</span>
+                  </button>
+                )}
+              </div>
             )}
 
             <button
@@ -541,27 +624,48 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              gap: 10,
+              flexWrap: 'wrap',
             }}
           >
             <span>
               ℹ️ <b>Partial Extraction:</b> {extractedCount} of {totalPages} pages are currently extracted and saved. You can review available pages or resume batch extraction anytime.
             </span>
-            <button
-              type="button"
-              disabled={extractingBatch}
-              onClick={() => void resumeBatchExtraction()}
-              style={{
-                background: 'rgba(234, 179, 8, 0.25)',
-                border: '1px solid rgba(234, 179, 8, 0.4)',
-                borderRadius: 6,
-                padding: '3px 8px',
-                color: '#fff',
-                fontSize: 11,
-                cursor: 'pointer',
-              }}
-            >
-              {extractingBatch ? 'Processing...' : 'Extract Next Batch'}
-            </button>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button
+                type="button"
+                disabled={extractingBatch}
+                onClick={() => void resumeBatchExtraction()}
+                style={{
+                  background: 'rgba(234, 179, 8, 0.25)',
+                  border: '1px solid rgba(234, 179, 8, 0.4)',
+                  borderRadius: 6,
+                  padding: '3px 8px',
+                  color: '#fff',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                }}
+              >
+                {extractingBatch ? 'Processing...' : 'Extract Next Batch'}
+              </button>
+              {extractingBatch && (
+                <button
+                  type="button"
+                  onClick={cancelBatchExtraction}
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.25)',
+                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    borderRadius: 6,
+                    padding: '3px 8px',
+                    color: '#fca5a5',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -818,11 +922,34 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
               overflow: 'hidden',
             }}
           >
-            <div style={{ padding: '8px 10px', fontSize: 11, color: 'var(--text-muted, #94a3b8)', borderBottom: '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.05))', fontWeight: 600 }}>
-              PAGES ({filteredSummaries.length})
+            <div style={{ padding: '8px 10px', fontSize: 11, color: 'var(--text-muted, #94a3b8)', borderBottom: '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.05))', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>PAGES ({filteredSummaries.length})</span>
+              {totalWindows > 1 && (
+                <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    disabled={pageWindowIndex === 0}
+                    onClick={() => setPageWindowIndex(w => Math.max(0, w - 1))}
+                    style={{ background: 'none', border: 'none', color: pageWindowIndex === 0 ? '#475569' : '#94a3b8', cursor: pageWindowIndex === 0 ? 'not-allowed' : 'pointer', padding: '0 2px' }}
+                    title="Previous 50 pages"
+                  >
+                    ◀
+                  </button>
+                  <span style={{ fontSize: 9 }}>{pageWindowIndex + 1}/{totalWindows}</span>
+                  <button
+                    type="button"
+                    disabled={pageWindowIndex >= totalWindows - 1}
+                    onClick={() => setPageWindowIndex(w => Math.min(totalWindows - 1, w + 1))}
+                    style={{ background: 'none', border: 'none', color: pageWindowIndex >= totalWindows - 1 ? '#475569' : '#94a3b8', cursor: pageWindowIndex >= totalWindows - 1 ? 'not-allowed' : 'pointer', padding: '0 2px' }}
+                    title="Next 50 pages"
+                  >
+                    ▶
+                  </button>
+                </div>
+              )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: 6, display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4, alignContent: 'start' }}>
-              {filteredSummaries.map(p => {
+              {windowedSummaries.map(p => {
                 const isSelected = p.pdfPage === selectedPageNum;
                 const isUnreviewed = p.requiresReview && !p.reviewedByUser;
                 const isOcr = p.method === 'ocr';
@@ -955,8 +1082,19 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                   />
                 ) : (
                   <div style={{ textAlign: 'center', color: 'var(--text-muted, #94a3b8)', padding: 32 }}>
-                    <p style={{ margin: '0 0 6px', fontSize: 14 }}>No visual preview available for page {selectedPageNum}.</p>
-                    <span style={{ fontSize: 12, opacity: 0.7 }}>Visual previews are generated automatically during extraction.</span>
+                    <p style={{ margin: '0 0 6px', fontSize: 14 }}>Page {selectedPageNum} preview is not rendered yet.</p>
+                    <span style={{ fontSize: 12, opacity: 0.7 }}>Click below to render the original PDF page view on-demand.</span>
+                    <div style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        className="v-pill-btn v-pill-btn-accent"
+                        onClick={() => loadPagePreview(selectedPageNum)}
+                        style={{ padding: '6px 14px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}
+                      >
+                        <Eye size={13} />
+                        <span>Render Page {selectedPageNum} View</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
