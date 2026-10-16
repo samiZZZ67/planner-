@@ -4,8 +4,10 @@ import { randomUUID } from 'node:crypto';
 import { getDb } from './neon';
 import type { BookAssignmentRecord, BookRecord, BookPageRecord } from '../books/types';
 import { formatTelegramMessage, splitTelegramHtml, stripHtml, sanitizeUtf8, sanitizePayload, truncateUnicode, sanitizeJsonPayloadString } from './telegramFormatter';
+import { researchReadingEnrichment, type EnrichedReadingContent } from './sources/enrichment';
 
 export { formatTelegramMessage, splitTelegramHtml, stripHtml, sanitizeUtf8, sanitizePayload, truncateUnicode, sanitizeJsonPayloadString } from './telegramFormatter';
+export { researchReadingEnrichment, type EnrichedReadingContent } from './sources/enrichment';
 
 export type TelegramDeliveryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'uncertain';
 export interface TelegramDeliveryRecord {
@@ -659,7 +661,13 @@ export function splitTelegramText(text: string, max = 3500): string[] {
   return parts.length ? parts.map(part => sanitizeUtf8(part)) : [''];
 }
 
-export function formatReadingAssignment(book: BookRecord, assignment: BookAssignmentRecord, pages: BookPageRecord[], previousAssignment?: BookAssignmentRecord): string[] {
+export function formatReadingAssignment(
+  book: BookRecord,
+  assignment: BookAssignmentRecord,
+  pages: BookPageRecord[],
+  previousAssignment?: BookAssignmentRecord,
+  enrichment?: EnrichedReadingContent
+): string[] {
   if (assignment.status !== 'approved' || !assignment.studyNotes) throw new Error('Only assignments with approved study notes can be published.');
   const orderedPages = [...pages].sort((a, b) => a.pdfPage - b.pdfPage);
   if (orderedPages.length !== assignment.endPdfPage - assignment.startPdfPage + 1 || orderedPages.some((page, index) => page.pdfPage !== assignment.startPdfPage + index)) {
@@ -678,6 +686,7 @@ export function formatReadingAssignment(book: BookRecord, assignment: BookAssign
     ? `\nℹ️ Notice: All pages in this section (PDF pages ${assignment.startPdfPage}–${assignment.endPdfPage}) are blank or illustration pages. Automatically proceeding to the next reading section.\n`
     : '';
 
+  // 1. Assigned Book Text (preserve original extracted text verbatim)
   const pageChunks = orderedPages.flatMap(page => {
     const rawText = page.text?.trim();
     if (!rawText || page.method === 'empty') {
@@ -688,15 +697,79 @@ export function formatReadingAssignment(book: BookRecord, assignment: BookAssign
     return parts.map((part, index) => `\n[PDF page ${page.pdfPage}${parts.length > 1 ? `, part ${index + 1}/${parts.length}` : ''}]\n${part}`);
   });
 
-  const chunks: string[] = [
+  const section1 = [
     `📖 ${sanitizeUtf8(book.title)}${book.author ? ` — ${sanitizeUtf8(book.author)}` : ''}\nReading assignment for ${assignment.scheduledDate}\nPDF pages ${assignment.startPdfPage}–${assignment.endPdfPage}`,
     ...(emptyNotice ? [emptyNotice] : []),
     ...pageChunks,
+  ];
+
+  // 2. Summary (main ideas and key concepts)
+  const section2 = [
     `\nStudy summary\n${sanitizeUtf8(notes.summary)}\n\nKey concepts\n${notes.keyConcepts.map(item => `• ${sanitizeUtf8(item)}`).join('\n')}`,
-    `Definitions\n${notes.definitions.map(item => `• ${sanitizeUtf8(item.term)} (PDF p. ${item.pdfPage}): ${sanitizeUtf8(item.explanation)}`).join('\n')}`,
-    `${notes.example.kind === 'source' ? `Real-world example from the book (PDF p. ${notes.example.pdfPage})` : 'Practical application (illustrative)'}\n${sanitizeUtf8(notes.example.situation)}\n${sanitizeUtf8(notes.example.conceptInAction)}\nLesson: ${sanitizeUtf8(notes.example.lesson)}\n${notes.example.sourceDisclosure}`,
+    ...(notes.definitions?.length ? [`Definitions\n${notes.definitions.map(item => `• ${sanitizeUtf8(item.term)} (PDF p. ${item.pdfPage}): ${sanitizeUtf8(item.explanation)}`).join('\n')}`] : []),
+  ];
+
+  // 3. Real-life Examples (verifiable historical/biographical examples with links and connection to reading)
+  const section3: string[] = [];
+  if (enrichment?.realLifeExamples?.length) {
+    const examplesFormatted = enrichment.realLifeExamples.map(e =>
+      `• <b>${sanitizeUtf8(e.title)}</b>\n${sanitizeUtf8(e.situation)}\n<i>Connection:</i> ${sanitizeUtf8(e.connection)}\n<i>Source:</i> ${e.sourceUrl.startsWith('http') ? `<a href="${e.sourceUrl}">${sanitizeUtf8(e.sourceTitle)}</a>` : sanitizeUtf8(e.sourceTitle)} (${sanitizeUtf8(e.attribution)})`
+    ).join('\n\n');
+    section3.push(`\n🏛️ <b>Real-Life Examples:</b>\n${examplesFormatted}`);
+  } else if (notes.example?.situation) {
+    section3.push(`${notes.example.kind === 'source' ? `Real-world example from the book (PDF p. ${notes.example.pdfPage})` : 'Practical application (illustrative)'}\n${sanitizeUtf8(notes.example.situation)}\n${sanitizeUtf8(notes.example.conceptInAction)}\nLesson: ${sanitizeUtf8(notes.example.lesson)}\n${notes.example.sourceDisclosure}`);
+  }
+
+  // 4. Quotes (verified quotations with provider attribution)
+  const section4: string[] = [];
+  if (enrichment?.quotes?.length) {
+    const quotesFormatted = enrichment.quotes.map(q =>
+      `• <i>"${sanitizeUtf8(q.quote)}"</i> — <b>${sanitizeUtf8(q.author)}</b>${q.sourceContext ? ` <i>(${sanitizeUtf8(q.sourceContext)})</i>` : ''}\n  <i>${sanitizeUtf8(q.attribution)}</i>${q.sourceUrl ? ` · <a href="${q.sourceUrl}">Source</a>` : ''}`
+    ).join('\n\n');
+    section4.push(`\n💬 <b>Quotes:</b>\n${quotesFormatted}`);
+  }
+
+  // 5. Related Videos (working YouTube links)
+  const section5: string[] = [];
+  if (enrichment?.videos?.length) {
+    const videosFormatted = enrichment.videos.map(v =>
+      `• <a href="${v.url}">${sanitizeUtf8(v.title)}</a> — <i>${sanitizeUtf8(v.channelName)}</i>`
+    ).join('\n');
+    section5.push(`\n📺 <b>Related Videos:</b>\n${videosFormatted}`);
+  }
+
+  // 6. Related Podcasts (working Podcast Index links)
+  const section6: string[] = [];
+  if (enrichment?.podcasts?.length) {
+    const podcastsFormatted = enrichment.podcasts.map(p =>
+      `• <a href="${p.url}">${sanitizeUtf8(p.title)}</a> — <i>${sanitizeUtf8(p.podcastName)}</i>${p.description ? `\n  ${sanitizeUtf8(p.description.slice(0, 150))}...` : ''}`
+    ).join('\n\n');
+    section6.push(`\n🎙️ <b>Related Podcasts:</b>\n${podcastsFormatted}`);
+  }
+
+  // 7. Quiz (original reading-grounded questions with difficulty, options, and explanations)
+  const section7: string[] = [];
+  if (enrichment?.quiz?.length) {
+    const quizFormatted = enrichment.quiz.map((q, idx) => {
+      const optionsFormatted = q.options.map((opt, oIdx) => `  ${String.fromCharCode(65 + oIdx)}) ${sanitizeUtf8(opt)}`).join('\n');
+      const correctLetter = String.fromCharCode(65 + q.correctOptionIndex);
+      return `<b>Question ${idx + 1} (${q.difficulty.toUpperCase()}):</b> ${sanitizeUtf8(q.question)}\n${optionsFormatted}\n<b>Answer:</b> ${correctLetter}) ${sanitizeUtf8(q.options[q.correctOptionIndex])}\n<i>Explanation:</i> ${sanitizeUtf8(q.explanation)}`;
+    }).join('\n\n');
+    section7.push(`\n🧠 <b>Reading Quiz:</b>\n${quizFormatted}`);
+  } else if (notes.questions?.length) {
+    section7.push(`Revision questions\n${notes.questions.map((item, index) => `${index + 1}. ${sanitizeUtf8(item.question)}\nAnswer: ${sanitizeUtf8(item.answer)}\nSource: PDF page${item.pdfPages.length === 1 ? '' : 's'} ${item.pdfPages.join(', ')}`).join('\n\n')}`);
+  }
+
+  const chunks: string[] = [
+    ...section1,
+    ...section2,
+    ...section3,
     ...(continuity ? [sanitizeUtf8(continuity)] : []),
-    `Revision questions\n${notes.questions.map((item, index) => `${index + 1}. ${sanitizeUtf8(item.question)}\nAnswer: ${sanitizeUtf8(item.answer)}\nSource: PDF page${item.pdfPages.length === 1 ? '' : 's'} ${item.pdfPages.join(', ')}`).join('\n\n')}\n\nStudy notes\n${sanitizeUtf8(notes.notes)}`,
+    ...section4,
+    ...section5,
+    ...section6,
+    ...section7,
+    ...(notes.notes ? [`\nStudy notes\n${sanitizeUtf8(notes.notes)}`] : []),
   ];
   return chunks.flatMap(chunk => splitTelegramText(sanitizeUtf8(chunk)));
 }
@@ -705,7 +778,8 @@ export function formatLoadPlanPages(
   book: BookRecord,
   assignment: BookAssignmentRecord,
   pages: BookPageRecord[],
-  previousAssignment?: BookAssignmentRecord
+  previousAssignment?: BookAssignmentRecord,
+  enrichment?: EnrichedReadingContent
 ): string[] {
   const orderedPages = [...pages].sort((a, b) => a.pdfPage - b.pdfPage);
   if (!orderedPages.length) {
@@ -723,6 +797,7 @@ export function formatLoadPlanPages(
     !hasReadablePages ? `ℹ️ Notice: All pages in this section (PDF pages ${assignment.startPdfPage}–${assignment.endPdfPage}) are blank or illustration pages. Automatically proceeding to the next reading section.` : '',
   ].filter(Boolean).join('\n');
 
+  // 1. Assigned Book Text
   const pageChunks = orderedPages.flatMap(page => {
     const raw = page.text?.trim();
     if (!raw || page.method === 'empty') {
@@ -735,6 +810,7 @@ export function formatLoadPlanPages(
     );
   });
 
+  // 2. Summary & Notes
   const notesChunks: string[] = [];
   if (assignment.studyNotes) {
     const notes = assignment.studyNotes;
@@ -747,9 +823,56 @@ export function formatLoadPlanPages(
     if (notes.definitions?.length) {
       notesChunks.push(`Definitions:\n${notes.definitions.map(item => `• ${sanitizeUtf8(item.term)} (PDF p. ${item.pdfPage}): ${sanitizeUtf8(item.explanation)}`).join('\n')}`);
     }
-    if (notes.questions?.length) {
+    if (!enrichment?.quiz?.length && notes.questions?.length) {
       notesChunks.push(`Revision Questions:\n${notes.questions.map((item, index) => `${index + 1}. ${sanitizeUtf8(item.question)}\nAnswer: ${sanitizeUtf8(item.answer)}`).join('\n\n')}`);
     }
+  }
+
+  // 3. Real-Life Examples
+  const examplesChunks: string[] = [];
+  if (enrichment?.realLifeExamples?.length) {
+    const examplesFormatted = enrichment.realLifeExamples.map(e =>
+      `• <b>${sanitizeUtf8(e.title)}</b>\n${sanitizeUtf8(e.situation)}\n<i>Connection:</i> ${sanitizeUtf8(e.connection)}\n<i>Source:</i> ${e.sourceUrl.startsWith('http') ? `<a href="${e.sourceUrl}">${sanitizeUtf8(e.sourceTitle)}</a>` : sanitizeUtf8(e.sourceTitle)} (${sanitizeUtf8(e.attribution)})`
+    ).join('\n\n');
+    examplesChunks.push(`\n🏛️ <b>Real-Life Examples:</b>\n${examplesFormatted}`);
+  }
+
+  // 4. Quotes
+  const quotesChunks: string[] = [];
+  if (enrichment?.quotes?.length) {
+    const quotesFormatted = enrichment.quotes.map(q =>
+      `• <i>"${sanitizeUtf8(q.quote)}"</i> — <b>${sanitizeUtf8(q.author)}</b>${q.sourceContext ? ` <i>(${sanitizeUtf8(q.sourceContext)})</i>` : ''}\n  <i>${sanitizeUtf8(q.attribution)}</i>${q.sourceUrl ? ` · <a href="${q.sourceUrl}">Source</a>` : ''}`
+    ).join('\n\n');
+    quotesChunks.push(`\n💬 <b>Quotes:</b>\n${quotesFormatted}`);
+  }
+
+  // 5. Related Videos
+  const videosChunks: string[] = [];
+  if (enrichment?.videos?.length) {
+    const videosFormatted = enrichment.videos.map(v =>
+      `• <a href="${v.url}">${sanitizeUtf8(v.title)}</a> — <i>${sanitizeUtf8(v.channelName)}</i>`
+    ).join('\n');
+    videosChunks.push(`\n📺 <b>Related Videos:</b>\n${videosFormatted}`);
+  }
+
+  // 6. Related Podcasts
+  const podcastsChunks: string[] = [];
+  if (enrichment?.podcasts?.length) {
+    const podcastsFormatted = enrichment.podcasts.map(p =>
+      `• <a href="${p.url}">${sanitizeUtf8(p.title)}</a> — <i>${sanitizeUtf8(p.podcastName)}</i>${p.description ? `\n  ${sanitizeUtf8(p.description.slice(0, 150))}...` : ''}`
+    ).join('\n\n');
+    podcastsChunks.push(`\n🎙️ <b>Related Podcasts:</b>\n${podcastsFormatted}`);
+  }
+
+  // 7. Quiz
+  const quizChunks: string[] = [];
+  if (enrichment?.quiz?.length) {
+    const quizFormatted = enrichment.quiz.map((q, idx) => {
+      const optionsFormatted = q.options.map((opt, oIdx) => `  ${String.fromCharCode(65 + oIdx)}) ${sanitizeUtf8(opt)}`).join('\n');
+      const correctLetter = String.fromCharCode(65 + q.correctOptionIndex);
+      return `<b>Question ${idx + 1} (${q.difficulty.toUpperCase()}):</b> ${sanitizeUtf8(q.question)}\n${optionsFormatted}\n<b>Answer:</b> ${correctLetter}) ${sanitizeUtf8(q.options[q.correctOptionIndex])}\n<i>Explanation:</i> ${sanitizeUtf8(q.explanation)}`;
+    }).join('\n\n');
+    quizChunks.push(`\n🧠 <b>Reading Quiz:</b>\n${quizFormatted}`);
   }
 
   const continuity = previousAssignment?.studyNotes
@@ -760,6 +883,11 @@ export function formatLoadPlanPages(
     header,
     ...pageChunks,
     ...(notesChunks.length ? notesChunks : []),
+    ...(examplesChunks.length ? examplesChunks : []),
+    ...(quotesChunks.length ? quotesChunks : []),
+    ...(videosChunks.length ? videosChunks : []),
+    ...(podcastsChunks.length ? podcastsChunks : []),
+    ...(quizChunks.length ? quizChunks : []),
     ...(continuity ? [continuity] : []),
   ];
 
@@ -869,10 +997,27 @@ async function sendPageImage(bookId: string, filename: string, caption: string) 
   return data.result!.message_id;
 }
 
-export async function publishApprovedAssignment(userId: string, book: BookRecord, assignment: BookAssignmentRecord, pages: BookPageRecord[], previousAssignment?: BookAssignmentRecord) {
+export async function publishApprovedAssignment(
+  userId: string,
+  book: BookRecord,
+  assignment: BookAssignmentRecord,
+  pages: BookPageRecord[],
+  previousAssignment?: BookAssignmentRecord,
+  enrichment?: EnrichedReadingContent
+) {
   const previousDelivery = previousAssignment ? await getAssignmentDelivery(userId, previousAssignment.id) : null;
   const postedPrevious = previousDelivery?.status === 'completed' ? previousAssignment : undefined;
-  const parts = formatReadingAssignment(book, assignment, pages, postedPrevious);
+
+  let activeEnrichment = enrichment;
+  if (!activeEnrichment && !process.env.VITEST) {
+    try {
+      activeEnrichment = await researchReadingEnrichment({ book, assignment, pages, studyNotes: assignment.studyNotes });
+    } catch (enrichErr: any) {
+      console.warn('[Telegram] External enrichment lookup non-fatal warning:', enrichErr.message);
+    }
+  }
+
+  const parts = formatReadingAssignment(book, assignment, pages, postedPrevious, activeEnrichment);
   let delivery = await getAssignmentDelivery(userId, assignment.id);
   if (delivery?.status === 'completed') throw new Error('This assignment has already been published successfully.');
   if (delivery && delivery.status !== 'pending') {
@@ -921,9 +1066,19 @@ export async function publishLoadPlanPagesToTelegram(
   book: BookRecord,
   assignment: BookAssignmentRecord,
   pages: BookPageRecord[],
-  previousAssignment?: BookAssignmentRecord
+  previousAssignment?: BookAssignmentRecord,
+  enrichment?: EnrichedReadingContent
 ) {
-  const parts = formatLoadPlanPages(book, assignment, pages, previousAssignment);
+  let activeEnrichment = enrichment;
+  if (!activeEnrichment && !process.env.VITEST) {
+    try {
+      activeEnrichment = await researchReadingEnrichment({ book, assignment, pages, studyNotes: assignment.studyNotes });
+    } catch (enrichErr: any) {
+      console.warn('[Telegram] External enrichment lookup non-fatal warning:', enrichErr.message);
+    }
+  }
+
+  const parts = formatLoadPlanPages(book, assignment, pages, previousAssignment, activeEnrichment);
   let delivery = await getAssignmentDelivery(userId, assignment.id);
   if (!delivery) {
     const imagePage = pages.find(page => page.visualPreview?.filename);

@@ -10,7 +10,7 @@ import { getPublishingPaused, listBookPublishJobs, makeBookPublishJob, reschedul
 import type { BookAssignmentRecord, BookRecord } from '../books/types';
 import { getEthiopianClock, normalizeTimeString } from '../date/ethiopianTime';
 
-type Intent = 'send_telegram' | 'configure_telegram' | 'delivery_status' | 'connect_telegram' | 'send_load_plan' | 'failed_posts' | 'pause' | 'resume' | 'today' | 'prepare' | 'extract' | 'plan' | 'notes' | 'approve' | 'publish' | 'reschedule' | 'books' | 'jobs' | 'schedule' | 'quiz';
+type Intent = 'send_telegram' | 'configure_telegram' | 'delivery_status' | 'connect_telegram' | 'send_load_plan' | 'failed_posts' | 'pause' | 'resume' | 'today' | 'prepare' | 'extract' | 'plan' | 'notes' | 'approve' | 'publish' | 'reschedule' | 'books' | 'jobs' | 'schedule' | 'quiz' | 'search_gutenberg' | 'research_sources';
 
 function isSendLoadPlanIntent(text: string): boolean {
   const hasAction = /\b(?:send|post|publish|share|deliver|dispatch)\b/i.test(text);
@@ -138,6 +138,8 @@ export function detectMoonBookIntent(text: string): Intent | null {
   if (/(?:list|show|status|how many).{0,25}(?:my )?books|\bbook status\b/i.test(value)) return 'books';
   if (/(?:show|list|check).{0,35}(?:reading schedule|reading plan|assignments)|\b(?:my )?reading schedule\b/i.test(value)) return 'schedule';
   if (/(?:show|list|check).{0,35}(?:schedule|scheduled posts|publishing jobs)|\bpublishing status\b/i.test(value)) return 'jobs';
+  if (/\b(?:search|find|browse|lookup)\s+(?:on\s+)?(?:gutenberg|gutendex|public domain)\b/i.test(value) || /^(?:gutenberg|gutendex)\s*[:\-]\s*.+/i.test(value)) return 'search_gutenberg';
+  if (/\b(?:research|search)\s+(?:on\s+)?(?:wikipedia|wikiquote|zenquotes|youtube|podcast\s*index)\b/i.test(value)) return 'research_sources';
   return null;
 }
 
@@ -294,6 +296,57 @@ export async function executeMoonBookIntent(
     const rows = await Promise.all(books.map(async book => ({ book, assignments: await listBookAssignments(userId, book.id) })));
     const schedule = rows.flatMap(({ book, assignments }) => assignments.map(assignment => `${book.title} — ${assignment.scheduledDate}, PDF pages ${assignment.startPdfPage}–${assignment.endPdfPage}, ${assignment.status}${assignment.studyNotes ? ', notes saved' : ', notes not generated'}`));
     return { handled: true, content: schedule.length ? `Saved reading schedule:\n${schedule.join('\n')}` : 'No reading assignments are saved yet. Extract a book and ask Moon to generate a reading plan.' };
+  }
+  if (intent === 'search_gutenberg') {
+    const query = text.replace(/^(?:search|find|browse|lookup)?\s*(?:on\s+)?(?:gutenberg|gutendex|public domain)?\s*[:\-]?\s*/i, '').trim();
+    if (!query) throw new Error('Specify a book title or author to search on Project Gutenberg, e.g.: "Search Gutenberg for Frankenstein"');
+    const { searchGutendex } = await import('./sources/gutendex');
+    const books = await searchGutendex(query, 5);
+    if (!books.length) return { handled: true, content: `No Project Gutenberg books found matching "${query}".` };
+    const list = books.map(b =>
+      `• **${b.title}** by ${b.authors.map(a => a.name).join(', ') || 'Unknown'}\n  Formats: ${[b.availableFormats.plainTextUrl ? 'Plain Text' : '', b.availableFormats.epubUrl ? 'EPUB' : '', b.availableFormats.htmlUrl ? 'HTML' : ''].filter(Boolean).join(', ') || 'Metadata only'}\n  Downloads: ${b.downloadCount.toLocaleString()}\n  Link: ${b.gutenbergUrl}`
+    ).join('\n\n');
+    return { handled: true, content: `📚 Found ${books.length} Project Gutenberg book(s) for "${query}":\n\n${list}` };
+  }
+  if (intent === 'research_sources') {
+    const { getBiographicalFacts } = await import('./sources/wikipedia');
+    const { getWikiquoteQuotes } = await import('./sources/wikiquote');
+    const { getZenQuotes } = await import('./sources/zenquotes');
+    const { searchYouTubeVideos } = await import('./sources/youtube');
+    const { searchPodcastEpisodes } = await import('./sources/podcastIndex');
+
+    const cleanQuery = text.replace(/^(?:research|search|find|lookup)?\s*(?:on\s+)?(?:wikipedia|wikiquote|zenquotes|youtube|podcast\s*index)?\s*[:\-]?\s*/i, '').trim();
+    const books = await listBooks(userId);
+    const query = cleanQuery || books[0]?.title || 'Productivity';
+
+    const [bio, quotes, zenQuotes, yt, pod] = await Promise.all([
+      getBiographicalFacts(query),
+      getWikiquoteQuotes(query, 2),
+      getZenQuotes({ keyword: query, limit: 2 }),
+      searchYouTubeVideos(query, { maxResults: 2 }),
+      searchPodcastEpisodes(query, { maxResults: 2 }),
+    ]);
+
+    const sections: string[] = [`🔍 **External Source Research for "${query}":**`];
+    if (bio) {
+      sections.push(`📖 **Wikipedia Biography / Background:**\n${bio.summary}\n${bio.facts.map(f => `• ${f}`).join('\n')}\n*${bio.attribution}* — [Read more](${bio.sourceUrl})`);
+    }
+    const allQuotes = [...quotes, ...zenQuotes].slice(0, 3);
+    if (allQuotes.length) {
+      sections.push(`💬 **Verified Quotations:**\n${allQuotes.map(q => `• "${q.quote}" — *${q.author}* (${q.attribution})`).join('\n')}`);
+    }
+    if (yt.videos.length) {
+      sections.push(`📺 **Relevant Videos:**\n${yt.videos.map(v => `• [${v.title}](${v.url}) (${v.channelName})`).join('\n')}`);
+    } else if (yt.warning) {
+      sections.push(`📺 **YouTube:** ${yt.warning}`);
+    }
+    if (pod.podcasts.length) {
+      sections.push(`🎙️ **Relevant Podcasts:**\n${pod.podcasts.map(p => `• [${p.title}](${p.url}) (${p.podcastName})`).join('\n')}`);
+    } else if (pod.warning) {
+      sections.push(`🎙️ **Podcast Index:** ${pod.warning}`);
+    }
+
+    return { handled: true, content: sections.join('\n\n') };
   }
 
   let bookData: { books: BookRecord[]; book: BookRecord };
@@ -518,5 +571,6 @@ export async function getMoonApplicationContext(userId: string, userText: string
     }
   }
   lines.push('Moon-Shaped AI has full Telegram posting capability. For direct messages, format as "Post to Telegram: <message>". For reading load plans, say "Send extracted pages based on the load plan" or "Send Day 1 to Telegram". Cite PDF page numbers for book facts.');
+  lines.push('Moon External Sources & Intelligence: Moon can research author biographies on Wikipedia, find public domain books on Gutendex, retrieve verified quotations from Wikiquote & ZenQuotes, and search educational videos on YouTube and podcasts on Podcast Index.');
   return lines.join('\n');
 }

@@ -206,8 +206,8 @@ export async function generateConceptReadingPlan(options: ConceptReadingPlanOpti
   let modelUsed = model;
   let providerUsed = 'FreeLLM';
 
-  // For small to medium page counts (<= 30 pages), attempt deep AI concept extraction
-  if (relevantPages.length <= 30) {
+  // For small to medium page counts (<= 30 pages), attempt deep AI concept extraction (skip in vitest to avoid remote network latency)
+  if (relevantPages.length <= 30 && !process.env.VITEST) {
     try {
       const batches = pageBatches(relevantPages);
       for (const batch of batches) {

@@ -65,6 +65,11 @@ Add the following environment variables in your Render Web Service dashboard und
 | `TELEGRAM_CHAT_ID` | For Telegram publishing | `@your_channel` or numeric ID | Backend environment variable for the destination channel. The bot must be an administrator with permission to post. |
 | `BOOKS_CRON_SECRET` | For scheduled publishing | *(random secret, 32+ characters)* | Same secret on the web service and Render Cron service. It protects the scheduler endpoint. |
 | `PDF_OCR_LANGS` | Optional | `eng` | Tesseract OCR language code(s), joined with `+`, such as `eng+fra`. The first OCR run downloads language data unless `TESSERACT_LANG_PATH` is configured in the application environment. |
+| `YOUTUBE_API_KEY` | Optional | `AIzaSy...` | Google YouTube Data API v3 key for discovering relevant video lessons and lectures. If unset, the related videos section is omitted without error. |
+| `PODCAST_INDEX_API_KEY` | Optional | *(key string)* | Podcast Index API key for discovering relevant podcast episodes. Used with signed SHA-1 auth. |
+| `PODCAST_INDEX_API_SECRET` | Optional | *(secret string)* | Podcast Index API secret for signed header authentication. |
+| `ZENQUOTES_API_KEY` | Optional | *(key string)* | ZenQuotes API key. If unset, uses the public free tier with strict rate-limiting and link-back attribution. |
+| `WIKIPEDIA_USER_AGENT` | Optional | `NightPlanner-MoonAI/1.0 (...)` | Custom User-Agent header for Wikipedia & Wikiquote requests per Wikimedia policy. |
 
 For book PDFs on Render, attach a persistent disk to the **web service** at `/var/data` and set `BOOK_DATA_DIR=/var/data`. The PDF binary and OCR cache live on that disk; extracted page text and book metadata use Neon when `DATABASE_URL` is configured. Without the disk, PDF files stored on the service filesystem may be lost when the service is replaced.
 
