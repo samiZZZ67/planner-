@@ -25,9 +25,9 @@ import {
   X,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
-import { notifyFeedback } from '@/lib/utils/actionFeedback';
-import { defaultPostingTimes, type BookAssignmentRecord, type BookPageRecord, type BookRecord } from '@/lib/books/types';
+import { defaultPostingTimes, type BookAssignmentRecord, type BookPageRecord, type BookRecord, type BookLearningPackage, type QuizQuestionItem } from '@/lib/books/types';
 import { describeScheduleRemaining } from '@/lib/date/bookDeliverySchedule';
+import { InteractiveQuizCard } from './InteractiveQuizCard';
 
 interface BookAnalyticsModalProps {
   isOpen: boolean;
@@ -48,7 +48,7 @@ export function BookAnalyticsModal({
   onAssignmentsUpdated,
   onSendNow,
 }: BookAnalyticsModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'pages' | 'schedule' | 'notes'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'pages' | 'schedule' | 'quiz'>('overview');
   const [pages, setPages] = useState<BookPageRecord[]>([]);
   const [loadingPages, setLoadingPages] = useState(false);
   const [selectedPageNum, setSelectedPageNum] = useState<number>(book.startPage);
@@ -78,16 +78,93 @@ export function BookAnalyticsModal({
   const [savingAssignmentId, setSavingAssignmentId] = useState<string | null>(null);
   const [sendingAssignmentId, setSendingAssignmentId] = useState<string | null>(null);
 
+  // Quiz & Learning Package State
+  const [selectedQuizAssignmentId, setSelectedQuizAssignmentId] = useState<string>(() => {
+    const firstPending = assignments.find(a => a.status !== 'completed');
+    return firstPending?.id || assignments[0]?.id || '';
+  });
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestionItem[]>([]);
+  const [learningPackage, setLearningPackage] = useState<BookLearningPackage | null>(null);
+  const [loadingQuiz, setLoadingQuiz] = useState(false);
+  const [regeneratingQuiz, setRegeneratingQuiz] = useState(false);
+  const [regeneratingSummary, setRegeneratingSummary] = useState(false);
+
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
   const showNotice = (msg: string) => {
     setNotice(msg);
-    notifyFeedback('success', msg);
   };
   const showError = (msg: string) => {
     setError(msg);
-    notifyFeedback('error', msg);
+  };
+
+  const loadLearningPackageForAssignment = useCallback(async (assignmentId: string) => {
+    if (!assignmentId) return;
+    setLoadingQuiz(true);
+    try {
+      const res = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(assignmentId)}/learning-package`);
+      const data = await res.json();
+      if (res.ok && data.learningPackage) {
+        setLearningPackage(data.learningPackage);
+        setQuizQuestions(data.learningPackage.quiz || []);
+      }
+    } catch (err: any) {
+      console.warn('Could not load learning package:', err);
+    } finally {
+      setLoadingQuiz(false);
+    }
+  }, [book.id]);
+
+  useEffect(() => {
+    if (activeTab === 'quiz' && selectedQuizAssignmentId) {
+      void loadLearningPackageForAssignment(selectedQuizAssignmentId);
+    }
+  }, [activeTab, selectedQuizAssignmentId, loadLearningPackageForAssignment]);
+
+  const handleRegenerateQuizOnly = async () => {
+    if (!selectedQuizAssignmentId) return;
+    setRegeneratingQuiz(true);
+    try {
+      const res = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(selectedQuizAssignmentId)}/learning-package`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ component: 'quiz' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to regenerate quiz.');
+      if (data.learningPackage) {
+        setLearningPackage(data.learningPackage);
+        setQuizQuestions(data.learningPackage.quiz || []);
+        showNotice('Adaptive quiz regenerated successfully!');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Quiz regeneration failed.');
+    } finally {
+      setRegeneratingQuiz(false);
+    }
+  };
+
+  const handleRegenerateSummaryOnly = async () => {
+    if (!selectedQuizAssignmentId) return;
+    setRegeneratingSummary(true);
+    try {
+      const res = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(selectedQuizAssignmentId)}/learning-package`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ component: 'summary' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to regenerate summary.');
+      if (data.learningPackage) {
+        setLearningPackage(data.learningPackage);
+        showNotice('Section summary regenerated successfully!');
+      }
+    } catch (err: any) {
+      showError(err.message || 'Summary regeneration failed.');
+    } finally {
+      setRegeneratingSummary(false);
+    }
   };
 
   useEffect(() => {
@@ -570,6 +647,7 @@ export function BookAnalyticsModal({
             { id: 'overview', label: 'BA Overview & Analytics', icon: BarChart3 },
             { id: 'pages', label: `Extracted Pages (${pages.length})`, icon: FileText },
             { id: 'schedule', label: `Reading Plan & Multi-Sections (${assignments.length})`, icon: Calendar },
+            { id: 'quiz', label: 'Learning & Interactive Quiz', icon: HelpCircle },
           ].map(tab => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -1547,6 +1625,19 @@ export function BookAnalyticsModal({
 
                             <button
                               type="button"
+                              className="v-pill-btn"
+                              onClick={() => {
+                                setSelectedQuizAssignmentId(assignment.id);
+                                setActiveTab('quiz');
+                              }}
+                              style={{ padding: '5px 10px', fontSize: 11, display: 'inline-flex', gap: 4, alignItems: 'center' }}
+                              title="Open interactive quiz for this section"
+                            >
+                              <HelpCircle size={12} /> Quiz
+                            </button>
+
+                            <button
+                              type="button"
                               className={`v-pill-btn ${isDelivered ? 'v-pill-btn-success' : 'v-pill-btn-accent'}`}
                               disabled={sendingAssignmentId === assignment.id}
                               onClick={() => void handleSendNowInternal(assignment)}
@@ -1726,6 +1817,203 @@ export function BookAnalyticsModal({
                   })
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'quiz' && (
+            <div style={{ display: 'grid', gap: 20 }}>
+              {/* Assignment Switcher & Controls */}
+              <div
+                className="v-card"
+                style={{
+                  padding: 16,
+                  borderRadius: 12,
+                  border: '1px solid var(--v-glass-border)',
+                  background: 'var(--v-glass-bg-subtle)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <label htmlFor="quiz-assignment-select" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Reading Section:
+                  </label>
+                  <select
+                    id="quiz-assignment-select"
+                    value={selectedQuizAssignmentId}
+                    onChange={e => setSelectedQuizAssignmentId(e.target.value)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid var(--v-glass-border)',
+                      color: 'var(--text-primary)',
+                      fontSize: 13,
+                    }}
+                  >
+                    {assignments.map(a => (
+                      <option key={a.id} value={a.id} style={{ background: '#1e293b', color: '#f8fafc' }}>
+                        Day {a.dayNumber} (PDF pp. {a.startPdfPage}–{a.endPdfPage}) {a.status === 'completed' ? '✓ Delivered' : `(${a.scheduledDate})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="v-pill-btn"
+                    disabled={regeneratingSummary || loadingQuiz}
+                    onClick={() => void handleRegenerateSummaryOnly()}
+                    style={{ padding: '6px 12px', fontSize: 11, display: 'inline-flex', gap: 5, alignItems: 'center' }}
+                    title="Regenerate only this section's summary without affecting the quiz"
+                  >
+                    <RefreshCw size={12} style={{ animation: regeneratingSummary ? 'sams-action-spin .8s linear infinite' : 'none' }} />
+                    <span>{regeneratingSummary ? 'Regenerating…' : 'Regenerate Summary Only'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="v-pill-btn v-pill-btn-accent"
+                    disabled={regeneratingQuiz || loadingQuiz}
+                    onClick={() => void handleRegenerateQuizOnly()}
+                    style={{ padding: '6px 12px', fontSize: 11, display: 'inline-flex', gap: 5, alignItems: 'center', fontWeight: 600 }}
+                    title="Regenerate only the quiz questions without affecting the summary"
+                  >
+                    <Sparkles size={12} style={{ animation: regeneratingQuiz ? 'sams-action-spin .8s linear infinite' : 'none' }} />
+                    <span>{regeneratingQuiz ? 'Regenerating…' : 'Regenerate Quiz Only'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {loadingQuiz ? (
+                <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+                  <Loader2 size={24} style={{ animation: 'sams-action-spin .8s linear infinite', margin: '0 auto 12px auto' }} />
+                  <p style={{ margin: 0, fontSize: 13 }}>Loading reading concepts, summary, and quiz questions…</p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary & Core Concepts Card */}
+                  {learningPackage?.summary && (
+                    <div
+                      className="v-card"
+                      style={{
+                        padding: 18,
+                        borderRadius: 14,
+                        border: '1px solid var(--v-glass-border)',
+                        background: 'var(--v-glass-bg-subtle)',
+                        display: 'grid',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent-color, #60a5fa)', fontWeight: 600, fontSize: 14 }}>
+                        <BookOpen size={16} />
+                        <span>Section Summary & Conceptual Breakdown</span>
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                        {learningPackage.summary}
+                      </div>
+                      {learningPackage.keyConcepts && learningPackage.keyConcepts.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingTop: 4 }}>
+                          {learningPackage.keyConcepts.map((c, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                fontSize: 11,
+                                padding: '3px 8px',
+                                borderRadius: 6,
+                                background: 'rgba(96, 165, 250, 0.12)',
+                                border: '1px solid rgba(96, 165, 250, 0.25)',
+                                color: '#93c5fd',
+                                fontWeight: 500,
+                              }}
+                            >
+                              • {c}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Real-Life Examples Card */}
+                  {learningPackage?.realLifeExamples && learningPackage.realLifeExamples.length > 0 && (
+                    <div
+                      className="v-card"
+                      style={{
+                        padding: 18,
+                        borderRadius: 14,
+                        border: '1px solid var(--v-glass-border)',
+                        background: 'var(--v-glass-bg-subtle)',
+                        display: 'grid',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#34d399', fontWeight: 600, fontSize: 14 }}>
+                        <Sparkles size={16} />
+                        <span>Real-Life Examples & Verified Sources</span>
+                      </div>
+                      <div style={{ display: 'grid', gap: 12 }}>
+                        {learningPackage.realLifeExamples.map((ex, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              padding: 12,
+                              borderRadius: 10,
+                              background: 'rgba(255, 255, 255, 0.03)',
+                              border: '1px solid var(--v-glass-border)',
+                              display: 'grid',
+                              gap: 6,
+                              fontSize: 13,
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                              <strong style={{ color: 'var(--text-primary)' }}>{ex.title}</strong>
+                              {ex.sourceUrl && (
+                                <a
+                                  href={ex.sourceUrl.startsWith('http') ? ex.sourceUrl : undefined}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    fontSize: 11,
+                                    color: 'var(--accent-color, #60a5fa)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    textDecoration: 'none',
+                                  }}
+                                >
+                                  <span>{ex.sourceTitle}</span>
+                                  {ex.sourceUrl.startsWith('http') && <ExternalLink size={11} />}
+                                </a>
+                              )}
+                            </div>
+                            <div style={{ color: 'var(--text-secondary)', lineHeight: 1.45 }}>{ex.situation}</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                              <strong>Connection: </strong>{ex.connection}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dedicated Interactive Quiz Card */}
+                  <InteractiveQuizCard
+                    questions={quizQuestions}
+                    bookTitle={book.title}
+                    assignmentTitle={(() => {
+                      const cur = assignments.find(a => a.id === selectedQuizAssignmentId);
+                      return cur ? `Day ${cur.dayNumber} (PDF pp. ${cur.startPdfPage}–${cur.endPdfPage})` : '';
+                    })()}
+                    onRegenerateQuiz={handleRegenerateQuizOnly}
+                    isRegenerating={regeneratingQuiz}
+                  />
+                </>
+              )}
             </div>
           )}
         </div>

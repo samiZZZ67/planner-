@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, BookOpen, CheckCircle2, ChevronDown, ChevronUp, Clock3, Eye, FileText, FileUp, LoaderCircle, LockKeyhole, Pencil, Save, Send, Trash2, TriangleAlert, X } from 'lucide-react';
+import { BarChart3, BookOpen, Brain, CheckCircle2, ChevronDown, ChevronUp, Clock3, Eye, FileText, FileUp, HelpCircle, LoaderCircle, LockKeyhole, Pencil, Save, Send, Trash2, TriangleAlert, X } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
 import { notifyFeedback } from '@/lib/utils/actionFeedback';
 import { BookAnalyticsModal } from './BookAnalyticsModal';
@@ -848,6 +848,16 @@ export function BookPlannerScreen() {
                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>Why this section: {assignment.rationale}</p>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <button type="button" className="v-pill-btn" onClick={() => void openAssignment(book, assignment)} style={{ padding: '8px 12px' }}>Review original reading and notes</button>
+                  <button
+                    type="button"
+                    className="v-pill-btn"
+                    onClick={() => void openBookAnalytics(book)}
+                    style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center' }}
+                    title="Open Book Analytics and Interactive Quiz"
+                  >
+                    <HelpCircle size={14} />
+                    <span>Interactive Quiz</span>
+                  </button>
                   <SendNowButton
                     assignment={assignment}
                     sending={sendingAssignmentId === assignment.id}

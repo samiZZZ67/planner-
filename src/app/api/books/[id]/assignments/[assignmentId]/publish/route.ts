@@ -30,6 +30,16 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
     }
     const previous = assignments.find(item => item.dayNumber === assignment.dayNumber - 1);
 
+    if (!assignment.learningPackage && !process.env.VITEST) {
+      try {
+        const { getOrGenerateLearningPackage } = await import('@/lib/server/books/learningContent');
+        const pkg = await getOrGenerateLearningPackage(session.userId, book, assignment, pages);
+        assignment.learningPackage = pkg;
+      } catch (lpErr: any) {
+        console.warn('[Publish] Auto learning package generation warning:', lpErr?.message);
+      }
+    }
+
     let delivery: any;
     let channel: string | undefined;
     let bot: string | undefined;

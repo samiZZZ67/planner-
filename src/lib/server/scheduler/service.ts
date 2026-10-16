@@ -100,6 +100,16 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
         console.log(`[Scheduler] 🚀 Dispatching Day ${assignment.dayNumber} of "${book.title}" to Telegram...`);
         let telegramMessageIds: number[] = [];
 
+        if (!assignment.learningPackage && !process.env.VITEST) {
+          try {
+            const { getOrGenerateLearningPackage } = await import('../books/learningContent');
+            const pkg = await getOrGenerateLearningPackage(job.userId, book, assignment, pages);
+            assignment.learningPackage = pkg;
+          } catch (lpErr: any) {
+            console.warn('[Scheduler] Auto learning package generation warning:', lpErr?.message);
+          }
+        }
+
         if (assignment.status === 'approved' && assignment.studyNotes) {
           try {
             const delivery = await publishApprovedAssignment(job.userId, book, assignment, pages, previous);

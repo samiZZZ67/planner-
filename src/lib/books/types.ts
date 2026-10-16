@@ -54,6 +54,49 @@ export interface BookAssignmentRecord {
   lastDeliveryError?: string;
   deliveredAt?: number;
   studyNotes?: BookStudyNotes;
+  learningPackage?: BookLearningPackage;
+  updatedAt: number;
+}
+
+export interface QuizQuestionItem {
+  id: string;
+  question: string;
+  options: string[];
+  correctOptionIndex: number;
+  explanation: string;
+  conceptTested?: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  sourcePdfPages: number[];
+}
+
+export interface LearningPackageRealLifeExample {
+  title: string;
+  situation: string;
+  connection: string;
+  sourceTitle: string;
+  sourceUrl: string;
+  attribution: string;
+  kind?: 'source' | 'external' | 'illustrative';
+  sourcePdfPages?: number[];
+}
+
+export interface BookLearningPackage {
+  bookId: string;
+  assignmentId: string;
+  startPdfPage: number;
+  endPdfPage: number;
+  summary: string;
+  keyConcepts: string[];
+  definitions?: Array<{ term: string; explanation: string; pdfPage: number }>;
+  realLifeExamples: LearningPackageRealLifeExample[];
+  quiz: QuizQuestionItem[];
+  status: {
+    summary: 'success' | 'failed' | 'pending';
+    examples: 'success' | 'failed' | 'pending';
+    quiz: 'success' | 'failed' | 'pending';
+    error?: string;
+  };
+  createdAt: number;
   updatedAt: number;
 }
 

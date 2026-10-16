@@ -66,13 +66,25 @@ export function generateReadingQuiz(
   pages: BookPageRecord[],
   studyNotes?: BookStudyNotes
 ): EnrichedQuizQuestion[] {
+  // If the assignment already has a validated learning package quiz, use it directly
+  if (assignment.learningPackage?.quiz?.length) {
+    return assignment.learningPackage.quiz.map(q => ({
+      question: q.question,
+      options: q.options,
+      correctOptionIndex: q.correctOptionIndex,
+      explanation: q.explanation,
+      difficulty: q.difficulty,
+      sourcePdfPages: q.sourcePdfPages,
+    }));
+  }
+
   const readablePages = pages.filter(p => p.text?.trim() && p.method !== 'empty');
   if (readablePages.length === 0) {
     return [];
   }
 
   const pageSpan = Math.max(1, assignment.endPdfPage - assignment.startPdfPage + 1);
-  const targetCount = pageSpan >= 4 ? Math.min(6, Math.max(4, Math.floor(pageSpan * 0.8))) : 2;
+  const targetCount = pageSpan >= 4 ? Math.min(10, Math.max(4, Math.floor(pageSpan * 0.8))) : 2;
   const questions: EnrichedQuizQuestion[] = [];
 
   // 1. Incorporate questions from validated study notes if available
@@ -210,7 +222,21 @@ export async function researchReadingEnrichment(options: {
   // --- Real-life examples ---
   const realLifeExamples: EnrichedRealLifeExample[] = [];
 
-  // A. From Wikipedia biography if found
+  // A. From pre-researched learning package if available
+  if (assignment.learningPackage?.realLifeExamples?.length) {
+    for (const ex of assignment.learningPackage.realLifeExamples) {
+      realLifeExamples.push({
+        title: ex.title,
+        situation: ex.situation,
+        connection: ex.connection,
+        sourceTitle: ex.sourceTitle,
+        sourceUrl: ex.sourceUrl,
+        attribution: ex.attribution,
+      });
+    }
+  }
+
+  // B. From Wikipedia biography if found
   if (wikiResult.status === 'fulfilled' && wikiResult.value) {
     const bio = wikiResult.value;
     const connectionText = primaryConcept

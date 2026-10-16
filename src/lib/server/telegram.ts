@@ -749,15 +749,18 @@ export function formatReadingAssignment(
 
   // 7. Quiz (original reading-grounded questions with difficulty, options, and explanations)
   const section7: string[] = [];
+  const appOrigin = process.env.CLIENT_URL?.split(',')[0] || process.env.NEXT_PUBLIC_API_URL || 'https://your-planner-app.vercel.app';
+  const interactiveQuizUrl = `${appOrigin}/books?quiz=${assignment.id}`;
+
   if (enrichment?.quiz?.length) {
     const quizFormatted = enrichment.quiz.map((q, idx) => {
       const optionsFormatted = q.options.map((opt, oIdx) => `  ${String.fromCharCode(65 + oIdx)}) ${sanitizeUtf8(opt)}`).join('\n');
       const correctLetter = String.fromCharCode(65 + q.correctOptionIndex);
       return `<b>Question ${idx + 1} (${q.difficulty.toUpperCase()}):</b> ${sanitizeUtf8(q.question)}\n${optionsFormatted}\n<b>Answer:</b> ${correctLetter}) ${sanitizeUtf8(q.options[q.correctOptionIndex])}\n<i>Explanation:</i> ${sanitizeUtf8(q.explanation)}`;
     }).join('\n\n');
-    section7.push(`\n🧠 <b>Reading Quiz:</b>\n${quizFormatted}`);
+    section7.push(`\n🧠 <b>Reading Quiz:</b>\n${quizFormatted}\n\n🎯 <b>Interactive Quiz:</b> <a href="${interactiveQuizUrl}">Launch Website Interactive Quiz</a>`);
   } else if (notes.questions?.length) {
-    section7.push(`Revision questions\n${notes.questions.map((item, index) => `${index + 1}. ${sanitizeUtf8(item.question)}\nAnswer: ${sanitizeUtf8(item.answer)}\nSource: PDF page${item.pdfPages.length === 1 ? '' : 's'} ${item.pdfPages.join(', ')}`).join('\n\n')}`);
+    section7.push(`Revision questions\n${notes.questions.map((item, index) => `${index + 1}. ${sanitizeUtf8(item.question)}\nAnswer: ${sanitizeUtf8(item.answer)}\nSource: PDF page${item.pdfPages.length === 1 ? '' : 's'} ${item.pdfPages.join(', ')}`).join('\n\n')}\n\n🎯 <b>Interactive Quiz:</b> <a href="${interactiveQuizUrl}">Launch Website Interactive Quiz</a>`);
   }
 
   const chunks: string[] = [
@@ -866,13 +869,16 @@ export function formatLoadPlanPages(
 
   // 7. Quiz
   const quizChunks: string[] = [];
+  const appOrigin = process.env.CLIENT_URL?.split(',')[0] || process.env.NEXT_PUBLIC_API_URL || 'https://your-planner-app.vercel.app';
+  const interactiveQuizUrl = `${appOrigin}/books?quiz=${assignment.id}`;
+
   if (enrichment?.quiz?.length) {
     const quizFormatted = enrichment.quiz.map((q, idx) => {
       const optionsFormatted = q.options.map((opt, oIdx) => `  ${String.fromCharCode(65 + oIdx)}) ${sanitizeUtf8(opt)}`).join('\n');
       const correctLetter = String.fromCharCode(65 + q.correctOptionIndex);
       return `<b>Question ${idx + 1} (${q.difficulty.toUpperCase()}):</b> ${sanitizeUtf8(q.question)}\n${optionsFormatted}\n<b>Answer:</b> ${correctLetter}) ${sanitizeUtf8(q.options[q.correctOptionIndex])}\n<i>Explanation:</i> ${sanitizeUtf8(q.explanation)}`;
     }).join('\n\n');
-    quizChunks.push(`\n🧠 <b>Reading Quiz:</b>\n${quizFormatted}`);
+    quizChunks.push(`\n🧠 <b>Reading Quiz:</b>\n${quizFormatted}\n\n🎯 <b>Interactive Quiz:</b> <a href="${interactiveQuizUrl}">Launch Website Interactive Quiz</a>`);
   }
 
   const continuity = previousAssignment?.studyNotes
@@ -1050,6 +1056,31 @@ export async function publishApprovedAssignment(
       delivery = await saveDelivery({ ...delivery, imageSent: true, telegramMessageIds: [...delivery.telegramMessageIds, messageId], updatedAt: Date.now() });
       sendingStarted = false;
     }
+
+    // Dispatch native interactive Telegram quiz polls for subscribers
+    if (activeEnrichment?.quiz?.length && !process.env.VITEST) {
+      for (let qIdx = 0; qIdx < Math.min(3, activeEnrichment.quiz.length); qIdx++) {
+        const q = activeEnrichment.quiz[qIdx];
+        try {
+          const pollRes = await sendTelegramQuizPoll({
+            chatId,
+            question: truncateUnicode(`[Day ${assignment.dayNumber} · Quiz] ${q.question}`, 300),
+            options: q.options,
+            correctOptionId: q.correctOptionIndex,
+            explanation: truncateUnicode(q.explanation, 200),
+            isAnonymous: false,
+          });
+          delivery = await saveDelivery({
+            ...delivery,
+            telegramMessageIds: [...delivery.telegramMessageIds, pollRes.messageId],
+            updatedAt: Date.now(),
+          });
+        } catch (pollErr: any) {
+          console.warn('[Telegram] Quiz poll dispatch warning:', pollErr?.message);
+        }
+      }
+    }
+
     return await saveDelivery({ ...delivery, status: 'completed', lastError: '', safeToRetry: false, retryAfterAt: null, updatedAt: Date.now() });
   } catch (error) {
     const err = error as Error & { retryAfter?: number; transient?: boolean };
@@ -1146,6 +1177,30 @@ export async function publishLoadPlanPagesToTelegram(
         console.warn('[Telegram] Could not send page preview image, text was sent successfully:', imgErr);
       } finally {
         sendingStarted = false;
+      }
+    }
+
+    // Dispatch native interactive Telegram quiz polls for subscribers
+    if (activeEnrichment?.quiz?.length && !process.env.VITEST) {
+      for (let qIdx = 0; qIdx < Math.min(3, activeEnrichment.quiz.length); qIdx++) {
+        const q = activeEnrichment.quiz[qIdx];
+        try {
+          const pollRes = await sendTelegramQuizPoll({
+            chatId,
+            question: truncateUnicode(`[Day ${assignment.dayNumber} · Quiz] ${q.question}`, 300),
+            options: q.options,
+            correctOptionId: q.correctOptionIndex,
+            explanation: truncateUnicode(q.explanation, 200),
+            isAnonymous: false,
+          });
+          delivery = await saveDelivery({
+            ...delivery,
+            telegramMessageIds: [...delivery.telegramMessageIds, pollRes.messageId],
+            updatedAt: Date.now(),
+          });
+        } catch (pollErr: any) {
+          console.warn('[Telegram] Quiz poll dispatch warning in load plan:', pollErr?.message);
+        }
       }
     }
 
