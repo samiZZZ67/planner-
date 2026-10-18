@@ -1,4 +1,4 @@
-import { claimDueBookPublishJobs, listBookPublishJobs, updateBookPublishJob } from '../bookScheduler';
+import { claimDueBookPublishJobs, listBookPublishJobs, updateBookPublishJob, upsertBookPublishJob } from '../bookScheduler';
 import { listBookAssignments, updateBookAssignment } from '../bookAssignments';
 import { getBook, listBookPages, updateBook } from '../books';
 import { envConfig, publishApprovedAssignment, publishLoadPlanPagesToTelegram, sendTelegramTextToChannel } from '../telegram';
@@ -254,6 +254,34 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
             lastError: errMsg,
           });
           result.bookJobs.failed++;
+
+          // Ensure that failure of this day does not stall the entire pipeline:
+          // Automatically prepare and queue the next day's reading assignment if available
+          try {
+            const book = await getBook(job.userId, job.bookId);
+            if (book && book.autoPublish !== false) {
+              const allAssignments = await listBookAssignments(job.userId, job.bookId);
+              const nextAssignment = allAssignments.find(item => item.dayNumber === (currentAssignment?.dayNumber || 0) + 1);
+              if (nextAssignment && nextAssignment.status !== 'completed') {
+                if (nextAssignment.status === 'approved') {
+                  await upsertBookPublishJob(book, nextAssignment).catch(() => undefined);
+                } else if (nextAssignment.status === 'draft') {
+                  const nextPages = await listBookPages(job.userId, job.bookId, nextAssignment.startPdfPage, nextAssignment.endPdfPage);
+                  if (nextPages.length > 0) {
+                    const { generateAssignmentStudyNotes } = await import('../studyNotes');
+                    const gen = await generateAssignmentStudyNotes({ book, assignment: nextAssignment, pages: nextPages }).catch(() => null);
+                    if (gen?.studyNotes) {
+                      const approvedNext = await updateBookAssignment({ ...nextAssignment, studyNotes: gen.studyNotes, status: 'approved', updatedAt: Date.now() });
+                      await upsertBookPublishJob(book, approvedNext).catch(() => undefined);
+                      console.log(`[Scheduler] ⏩ Auto-scheduled Day ${approvedNext.dayNumber} for delivery on ${approvedNext.scheduledDate}.`);
+                    }
+                  }
+                }
+              }
+            }
+          } catch (queueNextErr) {
+            console.warn('[Scheduler] Non-fatal notice preparing next day assignment after failure:', queueNextErr);
+          }
         }
       }
     }

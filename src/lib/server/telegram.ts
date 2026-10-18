@@ -45,6 +45,41 @@ const DELIVERY_PATH = path.join(DATA_ROOT, 'telegram-deliveries.json');
 const SEND_RECEIPTS_PATH = path.join(DATA_ROOT, 'telegram-send-receipts.json');
 let schemaReady: Promise<void> | null = null;
 
+export function getAppOrigin(): string {
+  const clientUrl = process.env.CLIENT_URL?.split(',')[0]?.trim();
+  if (clientUrl && clientUrl !== '*') {
+    return clientUrl.replace(/\/+$/, '');
+  }
+
+  const renderExternal = process.env.RENDER_EXTERNAL_URL?.trim();
+  if (renderExternal) {
+    return (renderExternal.startsWith('http') ? renderExternal : `https://${renderExternal}`).replace(/\/+$/, '');
+  }
+
+  const renderHost = process.env.RENDER_EXTERNAL_HOSTNAME?.trim();
+  if (renderHost) {
+    return `https://${renderHost}`.replace(/\/+$/, '');
+  }
+
+  const publicAppUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (publicAppUrl) {
+    return (publicAppUrl.startsWith('http') ? publicAppUrl : `https://${publicAppUrl}`).replace(/\/+$/, '');
+  }
+
+  const vercelUrl = process.env.VERCEL_URL?.trim();
+  if (vercelUrl) {
+    return (vercelUrl.startsWith('http') ? vercelUrl : `https://${vercelUrl}`).replace(/\/+$/, '');
+  }
+
+  const publicApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (publicApiUrl) {
+    return (publicApiUrl.startsWith('http') ? publicApiUrl : `https://${publicApiUrl}`).replace(/\/+$/, '');
+  }
+
+  return 'https://your-planner-app.vercel.app';
+}
+
+
 function readDeliveries(): TelegramDeliveryRecord[] {
   try {
     const parsed = JSON.parse(fs.readFileSync(DELIVERY_PATH, 'utf8'));
@@ -749,8 +784,8 @@ export function formatReadingAssignment(
 
   // 7. Quiz (original reading-grounded questions with difficulty, options, and explanations)
   const section7: string[] = [];
-  const appOrigin = process.env.CLIENT_URL?.split(',')[0] || process.env.NEXT_PUBLIC_API_URL || 'https://your-planner-app.vercel.app';
-  const interactiveQuizUrl = `${appOrigin}/books?quiz=${assignment.id}`;
+  const appOrigin = getAppOrigin();
+  const interactiveQuizUrl = `${appOrigin}/?tab=books&quiz=${assignment.id}`;
 
   if (enrichment?.quiz?.length) {
     const quizFormatted = enrichment.quiz.map((q, idx) => {
@@ -869,8 +904,8 @@ export function formatLoadPlanPages(
 
   // 7. Quiz
   const quizChunks: string[] = [];
-  const appOrigin = process.env.CLIENT_URL?.split(',')[0] || process.env.NEXT_PUBLIC_API_URL || 'https://your-planner-app.vercel.app';
-  const interactiveQuizUrl = `${appOrigin}/books?quiz=${assignment.id}`;
+  const appOrigin = getAppOrigin();
+  const interactiveQuizUrl = `${appOrigin}/?tab=books&quiz=${assignment.id}`;
 
   if (enrichment?.quiz?.length) {
     const quizFormatted = enrichment.quiz.map((q, idx) => {

@@ -37,6 +37,8 @@ interface BookAnalyticsModalProps {
   onBookUpdated: (book: BookRecord) => void;
   onAssignmentsUpdated: (assignments: BookAssignmentRecord[]) => void;
   onSendNow?: (assignment: BookAssignmentRecord) => Promise<void>;
+  initialTab?: 'overview' | 'pages' | 'schedule' | 'quiz';
+  initialQuizAssignmentId?: string;
 }
 
 export function BookAnalyticsModal({
@@ -47,8 +49,10 @@ export function BookAnalyticsModal({
   onBookUpdated,
   onAssignmentsUpdated,
   onSendNow,
+  initialTab,
+  initialQuizAssignmentId,
 }: BookAnalyticsModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'pages' | 'schedule' | 'quiz'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'pages' | 'schedule' | 'quiz'>(initialTab || 'overview');
   const [pages, setPages] = useState<BookPageRecord[]>([]);
   const [loadingPages, setLoadingPages] = useState(false);
   const [selectedPageNum, setSelectedPageNum] = useState<number>(book.startPage);
@@ -80,9 +84,15 @@ export function BookAnalyticsModal({
 
   // Quiz & Learning Package State
   const [selectedQuizAssignmentId, setSelectedQuizAssignmentId] = useState<string>(() => {
+    if (initialQuizAssignmentId) return initialQuizAssignmentId;
     const firstPending = assignments.find(a => a.status !== 'completed');
     return firstPending?.id || assignments[0]?.id || '';
   });
+
+  useEffect(() => {
+    if (initialTab) setActiveTab(initialTab);
+    if (initialQuizAssignmentId) setSelectedQuizAssignmentId(initialQuizAssignmentId);
+  }, [initialTab, initialQuizAssignmentId]);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestionItem[]>([]);
   const [learningPackage, setLearningPackage] = useState<BookLearningPackage | null>(null);
   const [loadingQuiz, setLoadingQuiz] = useState(false);

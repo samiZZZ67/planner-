@@ -46,6 +46,7 @@ export default function SamsSpaceApp() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string>('/icons/icon-192.png');
+  const [quizAssignmentId, setQuizAssignmentId] = useState<string | null>(null);
 
   // Draggable Launcher Button State
   const [btnPos, setBtnPos] = useState<{ x: number; y: number } | null>(null);
@@ -124,6 +125,19 @@ export default function SamsSpaceApp() {
       ? new Date().toLocaleDateString('en-CA')
       : getTraditionalDayDate(new Date(), 'Africa/Addis_Ababa');
     setCurrentDate(today);
+
+    // Deep link support: inspect ?tab=... and ?quiz=... on initial mount
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const requestedQuiz = searchParams.get('quiz');
+      const requestedTab = searchParams.get('tab');
+      if (requestedQuiz) {
+        setQuizAssignmentId(requestedQuiz);
+        setCurrentTab('books');
+      } else if (requestedTab && ['todo', 'weekly', 'monthly', 'add_task', 'note', 'category', 'books', 'analytics', 'settings'].includes(requestedTab)) {
+        setCurrentTab(requestedTab as TabType);
+      }
+    }
 
     // Register PWA service worker
     registerServiceWorker();
@@ -510,7 +524,11 @@ export default function SamsSpaceApp() {
               />
             )}
 
-            {currentTab === 'books' && <BookPlannerScreen />}
+            {currentTab === 'books' && (
+              <BookPlannerScreen
+                initialQuizAssignmentId={quizAssignmentId || undefined}
+              />
+            )}
 
             {currentTab === 'analytics' && (
               <AnalyticsScreen

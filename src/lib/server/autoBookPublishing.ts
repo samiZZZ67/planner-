@@ -105,13 +105,36 @@ async function readyBook(book: BookRecord) {
 }
 
 async function prepareDueAssignment(book: BookRecord, assignments: BookAssignmentRecord[], now: number) {
-  const due = assignments
-    .filter(item => item.status === 'draft' && item.scheduledDate <= localDate(book.timezone, new Date(now)))
-    .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.dayNumber - b.dayNumber)[0];
-  if (!due) return false;
+  const todayStr = localDate(book.timezone, new Date(now));
+
+  // 1. Ensure any approved assignment already has its publish job registered in book_publish_jobs
+  const approvedAssignments = assignments.filter(item => item.status === 'approved' && item.deliveryStatus !== 'sent' && item.deliveryStatus !== 'failed');
+  for (const app of approvedAssignments) {
+    try {
+      await upsertBookPublishJob(book, app);
+    } catch {}
+  }
+
+  // 2. Filter uncompleted assignments (excluding superseded or completed)
+  const pending = assignments.filter(item => item.status !== 'completed' && item.status !== 'superseded');
+  if (!pending.length) return false;
+
+  // 3. Find the due assignment to prepare:
+  // If an assignment from a past day failed delivery, it must NOT deadlock the pipeline or block today's assignment!
+  // First priority: an uncompleted assignment scheduled for today (e.g. Day 2)
+  const todayAssignment = pending.find(item => item.scheduledDate === todayStr && item.deliveryStatus !== 'sent' && item.deliveryStatus !== 'failed');
+
+  // Next priority: earliest pending assignment whose date is today or earlier and hasn't failed for today
+  const due = todayAssignment || pending
+    .filter(item => item.status === 'draft' && item.scheduledDate <= todayStr && item.deliveryStatus !== 'failed')
+    .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.dayNumber - b.dayNumber)[0]
+    || pending.find(item => item.status === 'draft' && item.deliveryStatus !== 'failed');
+
+  if (!due || due.status !== 'draft') return false;
 
   const dueAt = makeBookPublishJob(book, due).scheduledAt;
   if (dueAt > now) return false;
+
   const pages = await listBookPages(book.userId, book.id, due.startPdfPage, due.endPdfPage);
   const generated = await generateAssignmentStudyNotes({ book, assignment: due, pages });
   const withNotes = await updateBookAssignment({ ...due, studyNotes: generated.studyNotes, updatedAt: Date.now() });
@@ -130,8 +153,13 @@ async function prepareDueAssignment(book: BookRecord, assignments: BookAssignmen
 export async function prepareAutomaticBookPublishing(now = Date.now()) {
   const books = await listAllBooks();
   for (const original of books) {
-    if (original.autoPublish === false || original.automationStatus === 'failed') continue;
-    const originalStatus = original.automationStatus || 'queued';
+    if (original.autoPublish === false) continue;
+    const isFailed = original.automationStatus === 'failed';
+    // If a book was previously marked failed, allow auto-recovery if 30 minutes have passed or if date has changed
+    const canRecover = isFailed && (now - original.updatedAt > 30 * 60 * 1000 || localDate(original.timezone, new Date(original.updatedAt)) < localDate(original.timezone, new Date(now)));
+    if (isFailed && !canRecover) continue;
+
+    const originalStatus = (isFailed && canRecover) ? 'queued' : (original.automationStatus || 'queued');
     if (original.automationRetryAt && original.automationRetryAt > now) continue;
     if (originalStatus === 'processing' && now - original.updatedAt < 20 * 60 * 1000) continue;
 

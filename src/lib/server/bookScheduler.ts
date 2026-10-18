@@ -106,14 +106,14 @@ export async function upsertBookPublishJob(book: BookRecord, assignment: BookAss
     await sql`INSERT INTO book_publish_jobs (id, user_id, book_id, assignment_id, scheduled_at, status, data, updated_at)
       VALUES (${job.id}, ${job.userId}, ${job.bookId}, ${job.assignmentId}, ${job.scheduledAt}, ${job.status}, ${JSON.stringify(job)}::jsonb, ${job.updatedAt})
       ON CONFLICT (user_id, assignment_id) DO UPDATE SET scheduled_at = EXCLUDED.scheduled_at,
-      status = CASE WHEN book_publish_jobs.status IN ('completed','processing') THEN book_publish_jobs.status ELSE 'scheduled' END,
-      data = CASE WHEN book_publish_jobs.status IN ('completed','processing') THEN book_publish_jobs.data ELSE EXCLUDED.data END,
+      status = CASE WHEN book_publish_jobs.status IN ('completed','processing','failed') THEN book_publish_jobs.status ELSE 'scheduled' END,
+      data = CASE WHEN book_publish_jobs.status IN ('completed','processing','failed') THEN book_publish_jobs.data ELSE EXCLUDED.data END,
       updated_at = EXCLUDED.updated_at`;
   }
   const all = readJobs();
   const index = all.findIndex(item => item.userId === job.userId && item.assignmentId === job.assignmentId);
   if (index < 0) all.push(job);
-  else if (!['completed', 'processing'].includes(all[index].status)) all[index] = job;
+  else if (!['completed', 'processing', 'failed'].includes(all[index].status)) all[index] = job;
   writeJson(JOBS_PATH, all);
   return job;
 }

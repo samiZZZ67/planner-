@@ -163,4 +163,47 @@ describe('Book Delivery Schedule & Countdown Engine', () => {
     expect(next?.conceptTitle).toBe('Concept 1');
     expect(next?.status).toBe('scheduled');
   });
+
+  it('10. resolves the next upcoming delivery when an earlier day delivery failed and does not freeze on Day 1', () => {
+    const book: BookRecord = {
+      id: 'book-fail-recovery', userId: 'user-1', title: 'Deep Work', author: 'Cal Newport', metadata: '',
+      originalFilename: 'dw.pdf', storedFilename: 'dw.pdf', fileSize: 1000,
+      startPage: 1, endPage: 50, durationDays: 10, startDate: '2026-10-15', studyMinutes: 30,
+      postingTime: '08:00', timezone: tz, currentPage: 1, status: 'ready', extractionStatus: 'completed',
+      extractionMessage: '', autoPublish: true, createdAt: 1, updatedAt: 1,
+    };
+
+    // Day 1 was scheduled yesterday and failed
+    const yesterdayDate = '2026-10-14';
+    const todayDate = '2026-10-15';
+    const now = getDeliveryZonedTimestamp(todayDate, '07:30', tz);
+
+    const day1Assignment: BookAssignmentRecord = {
+      id: 'asg-day-1', userId: 'user-1', bookId: 'book-fail-recovery', dayNumber: 1, scheduledDate: yesterdayDate,
+      postingTime: '08:00', startPdfPage: 1, endPdfPage: 5,
+      concepts: [{ title: 'Deep Work Intro', concept: 'Focus', estimatedMinutes: 20 }],
+      estimatedMinutes: 20, rationale: 'Day 1', status: 'approved', deliveryStatus: 'failed',
+      lastDeliveryError: 'Bad Request: strings must be encoded in UTF-8', updatedAt: 1,
+    };
+
+    // Day 2 is scheduled today in 30 minutes
+    const day2Assignment: BookAssignmentRecord = {
+      id: 'asg-day-2', userId: 'user-1', bookId: 'book-fail-recovery', dayNumber: 2, scheduledDate: todayDate,
+      postingTime: '08:00', startPdfPage: 6, endPdfPage: 10,
+      concepts: [{ title: 'Deep Work Rule 1', concept: 'Work Deeply', estimatedMinutes: 20 }],
+      estimatedMinutes: 20, rationale: 'Day 2', status: 'approved', deliveryStatus: 'scheduled',
+      updatedAt: 1,
+    };
+
+    const next = resolveNextBookDelivery([book], {
+      'book-fail-recovery': [day1Assignment, day2Assignment],
+    }, now);
+
+    expect(next).not.toBeNull();
+    // Must resolve Day 2 rather than being deadlocked on failed Day 1
+    expect(next?.assignmentId).toBe('asg-day-2');
+    expect(next?.dayNumber).toBe(2);
+    expect(next?.scheduledDate).toBe(todayDate);
+    expect(next?.status).toBe('scheduled');
+  });
 });

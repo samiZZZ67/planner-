@@ -391,12 +391,28 @@ export function resolveNextBookDelivery(
 
   if (!candidates.length) return null;
 
-  // Prioritize active sending or failed/overdue, else earliest upcoming scheduledAt
+  // Prioritize active sending first.
+  // Next: Upcoming or due deliveries (scheduledAt >= nowMs - 60000), sorted by earliest scheduledAt ascending.
+  // Next: Past / failed deliveries (if no upcoming deliveries exist), sorted by most recent first.
   candidates.sort((a, b) => {
-    // sending comes first
+    // 1. Active sending comes first
     if (a.status === 'sending' && b.status !== 'sending') return -1;
     if (b.status === 'sending' && a.status !== 'sending') return 1;
-    return a.scheduledAt - b.scheduledAt;
+
+    // 2. Upcoming vs Past
+    const aIsUpcoming = a.scheduledAt >= nowMs - 60000;
+    const bIsUpcoming = b.scheduledAt >= nowMs - 60000;
+
+    if (aIsUpcoming && !bIsUpcoming) return -1;
+    if (!aIsUpcoming && bIsUpcoming) return 1;
+
+    // If both are upcoming, sort by earliest scheduledAt
+    if (aIsUpcoming && bIsUpcoming) {
+      return a.scheduledAt - b.scheduledAt;
+    }
+
+    // If both are past (e.g. failed or overdue), sort by most recent first
+    return b.scheduledAt - a.scheduledAt;
   });
 
   return candidates[0];

@@ -71,7 +71,11 @@ function SendNowButton({
   );
 }
 
-export function BookPlannerScreen() {
+interface BookPlannerScreenProps {
+  initialQuizAssignmentId?: string;
+}
+
+export function BookPlannerScreen({ initialQuizAssignmentId }: BookPlannerScreenProps = {}) {
   const [books, setBooks] = useState<BookRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -102,10 +106,41 @@ export function BookPlannerScreen() {
   const extractAbortRef = useRef<AbortController | null>(null);
   const planAbortRef = useRef<AbortController | null>(null);
   const [baModalBook, setBaModalBook] = useState<BookRecord | null>(null);
+  const [baModalTab, setBaModalTab] = useState<'overview' | 'pages' | 'schedule' | 'quiz'>('overview');
+  const [targetQuizAssignmentId, setTargetQuizAssignmentId] = useState<string | null>(initialQuizAssignmentId || null);
   const [reviewModalBook, setReviewModalBook] = useState<BookRecord | null>(null);
 
-  const openBookAnalytics = useCallback(async (book: BookRecord) => {
+  // Auto-launch quiz modal when accessed via deep link or Telegram quiz parameter
+  useEffect(() => {
+    const quizId = targetQuizAssignmentId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('quiz') : null);
+    if (!quizId) return;
+
+    let cancelled = false;
+    apiFetch(`/api/books/assignment-lookup?assignmentId=${encodeURIComponent(quizId)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled) return;
+        if (data.ok && data.book) {
+          setBooks(curr => {
+            const exists = curr.some(b => b.id === data.book.id);
+            return exists ? curr : [data.book, ...curr];
+          });
+          if (data.assignments) {
+            setAssignmentsByBook(curr => ({ ...curr, [data.book.id]: data.assignments }));
+          }
+          setBaModalBook(data.book);
+          setBaModalTab('quiz');
+          setTargetQuizAssignmentId(quizId);
+        }
+      })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [targetQuizAssignmentId]);
+
+  const openBookAnalytics = useCallback(async (book: BookRecord, tab: 'overview' | 'pages' | 'schedule' | 'quiz' = 'overview') => {
     setBaModalBook(book);
+    setBaModalTab(tab);
     if (!assignmentsByBook[book.id]) {
       try {
         const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments`);
@@ -928,9 +963,15 @@ export function BookPlannerScreen() {
       {baModalBook && (
         <BookAnalyticsModal
           isOpen={Boolean(baModalBook)}
-          onClose={() => setBaModalBook(null)}
+          onClose={() => {
+            setBaModalBook(null);
+            setBaModalTab('overview');
+            setTargetQuizAssignmentId(null);
+          }}
           book={baModalBook}
           assignments={assignmentsByBook[baModalBook.id] || []}
+          initialTab={baModalTab}
+          initialQuizAssignmentId={targetQuizAssignmentId || undefined}
           onBookUpdated={(updated) => {
             setBooks(current => current.map(b => b.id === updated.id ? updated : b));
             setBaModalBook(updated);

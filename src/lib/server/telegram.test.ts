@@ -183,4 +183,35 @@ describe('Telegram reading assignment formatting', () => {
     expect(loadPlanText).toContain('Blank / Illustration Page');
     expect(loadPlanText).toContain('proceeding to the next reading section');
   });
+
+  it('resolves getAppOrigin across RENDER_EXTERNAL_URL, CLIENT_URL, and fallback', async () => {
+    const { getAppOrigin } = await import('./telegram');
+    const origClient = process.env.CLIENT_URL;
+    const origRender = process.env.RENDER_EXTERNAL_URL;
+
+    try {
+      delete process.env.CLIENT_URL;
+      process.env.RENDER_EXTERNAL_URL = 'https://nightplanner.onrender.com';
+      expect(getAppOrigin()).toBe('https://nightplanner.onrender.com');
+
+      process.env.RENDER_EXTERNAL_URL = 'nightplanner.onrender.com';
+      expect(getAppOrigin()).toBe('https://nightplanner.onrender.com');
+
+      process.env.CLIENT_URL = 'https://mycustomapp.com';
+      expect(getAppOrigin()).toBe('https://mycustomapp.com');
+
+      process.env.CLIENT_URL = '*';
+      expect(getAppOrigin()).toBe('https://nightplanner.onrender.com');
+    } finally {
+      if (origClient !== undefined) process.env.CLIENT_URL = origClient; else delete process.env.CLIENT_URL;
+      if (origRender !== undefined) process.env.RENDER_EXTERNAL_URL = origRender; else delete process.env.RENDER_EXTERNAL_URL;
+    }
+  });
+
+  it('embeds non-404 interactive quiz links pointing to /?tab=books&quiz=... in reading assignments', () => {
+    const assignmentParts = formatReadingAssignment(book, approved, [page]);
+    const text = assignmentParts.join('');
+    expect(text).toContain('🎯 <b>Interactive Quiz:</b>');
+    expect(text).toContain('/?tab=books&quiz=assignment-1');
+  });
 });

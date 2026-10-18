@@ -333,5 +333,157 @@ describe('Background Scheduler & Automatic Telegram Delivery Suite', () => {
       const updatedBook = await getBook(testUser, testBookId);
       expect(updatedBook?.currentPage).toBeGreaterThanOrEqual(3);
     });
+
+    it('7. continues sending next day (Day 2) even if Day 1 delivery fails', async () => {
+      const { saveBook, saveBookPages, getBook } = await import('./books');
+      const { replaceDraftAssignments, listBookAssignments } = await import('./bookAssignments');
+      const { upsertBookPublishJob, listBookPublishJobs } = await import('./bookScheduler');
+      const telegramModule = await import('./telegram');
+
+      const failUser = `user_fail_test_${Date.now()}`;
+      const failBookId = `book_fail_${Date.now()}`;
+
+      await saveBook(
+        {
+          id: failBookId,
+          userId: failUser,
+          title: 'Resilience Test Book',
+          author: 'Resilient Author',
+          startPage: 1,
+          endPage: 20,
+          durationDays: 2,
+          currentPage: 1,
+          startDate: '2026-10-15',
+          studyMinutes: 30,
+          postingTime: '08:00',
+          timezone: 'Africa/Addis_Ababa',
+          status: 'ready',
+          extractionStatus: 'completed',
+          autoPublish: true,
+          automationStatus: 'ready',
+          storedFilename: `${failBookId}.pdf`,
+          originalFilename: 'resilience.pdf',
+          fileSize: 100,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        } as any,
+        new Uint8Array([1, 2, 3, 4])
+      );
+
+      await saveBookPages(
+        { id: failBookId, userId: failUser } as any,
+        [
+          { bookId: failBookId, pdfPage: 1, text: 'Day 1 page 1 text.', method: 'native', confidence: 1, warnings: [], requiresReview: false, reviewedByUser: false, updatedAt: 1 },
+          { bookId: failBookId, pdfPage: 2, text: 'Day 1 page 2 text.', method: 'native', confidence: 1, warnings: [], requiresReview: false, reviewedByUser: false, updatedAt: 1 },
+          { bookId: failBookId, pdfPage: 3, text: 'Day 2 page 3 text.', method: 'native', confidence: 1, warnings: [], requiresReview: false, reviewedByUser: false, updatedAt: 1 },
+          { bookId: failBookId, pdfPage: 4, text: 'Day 2 page 4 text.', method: 'native', confidence: 1, warnings: [], requiresReview: false, reviewedByUser: false, updatedAt: 1 },
+        ]
+      );
+
+      const day1ScheduledAt = zonedDateTimeToTimestamp('2026-10-15', '08:00', 'Africa/Addis_Ababa');
+      const day2ScheduledAt = zonedDateTimeToTimestamp('2026-10-16', '08:00', 'Africa/Addis_Ababa');
+
+      const assignments = await replaceDraftAssignments(failUser, failBookId, [
+        {
+          id: `asg-fail-1-${Date.now()}`,
+          userId: failUser,
+          bookId: failBookId,
+          dayNumber: 1,
+          startPdfPage: 1,
+          endPdfPage: 2,
+          scheduledDate: '2026-10-15',
+          postingTime: '08:00',
+          estimatedMinutes: 30,
+          rationale: 'Day 1 core concepts',
+          status: 'approved',
+          deliveryStatus: 'scheduled',
+          concepts: [{ title: 'Day 1 Concept', concept: 'Intro', estimatedMinutes: 15 }],
+          studyNotes: {
+            summary: 'Day 1 summary',
+            keyConcepts: ['Day 1 Concept'],
+            definitions: [],
+            example: { kind: 'illustrative', situation: 'S', conceptInAction: 'C', lesson: 'L', sourceDisclosure: 'illustrative' },
+            questions: [{ question: 'Q1?', answer: 'A1', pdfPages: [1] }, { question: 'Q2?', answer: 'A2', pdfPages: [2] }],
+            notes: 'Notes 1',
+            generatedByModel: 'test',
+            generatedAt: Date.now(),
+          },
+          updatedAt: Date.now(),
+        },
+        {
+          id: `asg-fail-2-${Date.now()}`,
+          userId: failUser,
+          bookId: failBookId,
+          dayNumber: 2,
+          startPdfPage: 3,
+          endPdfPage: 4,
+          scheduledDate: '2026-10-16',
+          postingTime: '08:00',
+          estimatedMinutes: 30,
+          rationale: 'Day 2 core concepts',
+          status: 'approved',
+          deliveryStatus: 'scheduled',
+          concepts: [{ title: 'Day 2 Concept', concept: 'Deepening', estimatedMinutes: 15 }],
+          studyNotes: {
+            summary: 'Day 2 summary',
+            keyConcepts: ['Day 2 Concept'],
+            definitions: [],
+            example: { kind: 'illustrative', situation: 'S2', conceptInAction: 'C2', lesson: 'L2', sourceDisclosure: 'illustrative' },
+            questions: [{ question: 'Q3?', answer: 'A3', pdfPages: [3] }, { question: 'Q4?', answer: 'A4', pdfPages: [4] }],
+            notes: 'Notes 2',
+            generatedByModel: 'test',
+            generatedAt: Date.now(),
+          },
+          updatedAt: Date.now(),
+        },
+      ]);
+
+      const testBook = (await getBook(failUser, failBookId))!;
+      await upsertBookPublishJob(testBook, assignments[0]);
+      await upsertBookPublishJob(testBook, assignments[1]);
+
+      // 1. Simulate Day 1 failing (e.g. simulated network/Telegram error)
+      const origPublish = telegramModule.publishApprovedAssignment;
+      vi.spyOn(telegramModule, 'publishApprovedAssignment').mockRejectedValueOnce(
+        new Error('Telegram simulated network error on Day 1')
+      );
+      vi.spyOn(telegramModule, 'publishLoadPlanPagesToTelegram').mockRejectedValueOnce(
+        new Error('Fallback also failed on Day 1')
+      );
+
+      // Run delivery cycle for Day 1
+      const cycle1 = await runScheduledDeliveryCycle(day1ScheduledAt);
+      expect(cycle1.bookJobs.failed).toBeGreaterThanOrEqual(1);
+
+      // Verify Day 1 is marked failed in assignment deliveryStatus
+      const assignmentsAfterDay1 = await listBookAssignments(failUser, failBookId);
+      const day1Asg = assignmentsAfterDay1.find(a => a.dayNumber === 1);
+      expect(day1Asg?.deliveryStatus).toBe('failed');
+      expect(day1Asg?.status).toBe('approved'); // not completed
+
+      // Verify Day 1 job is failed
+      const jobsAfterDay1 = await listBookPublishJobs(failUser);
+      const day1Job = jobsAfterDay1.find(j => j.assignmentId === assignments[0].id);
+      expect(day1Job?.status).toBe('failed');
+
+      // 2. Now run delivery cycle on Day 2!
+      // Day 2 must succeed and must NOT be blocked by Day 1's failure
+      vi.spyOn(telegramModule, 'publishApprovedAssignment').mockResolvedValueOnce({
+        telegramMessageIds: [99901, 99902],
+      } as any);
+
+      const cycle2 = await runScheduledDeliveryCycle(day2ScheduledAt);
+      expect(cycle2.bookJobs.completed).toBeGreaterThanOrEqual(1);
+
+      // Verify Day 2 was delivered successfully
+      const assignmentsAfterDay2 = await listBookAssignments(failUser, failBookId);
+      const day2Asg = assignmentsAfterDay2.find(a => a.dayNumber === 2);
+      expect(day2Asg?.status).toBe('completed');
+      expect(day2Asg?.deliveryStatus).toBe('sent');
+
+      // Verify book current page was advanced to page 5
+      const finalBook = await getBook(failUser, failBookId);
+      expect(finalBook?.currentPage).toBeGreaterThanOrEqual(5);
+    });
   });
 });
