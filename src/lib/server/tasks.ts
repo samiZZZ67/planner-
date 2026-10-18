@@ -1,6 +1,8 @@
 import { getDb, ensureSchema } from './neon';
 import { getLocalTasks, getLocalSections, saveLocalTask, deleteLocalTask } from './localDb';
 import type { Task, Section, PriorityLevel, TaskStatus } from '@/types';
+import { getTraditionalDayDate, parseEthiopianTimeInput } from '../date/ethiopianTime';
+import { ethiopianToGregorian, ETHIOPIAN_MONTHS } from '../date/ethiopianCalendar';
 
 export interface CreateTaskInput {
   title: string;
@@ -123,17 +125,50 @@ export async function createTaskInDb(input: CreateTaskInput): Promise<TaskOperat
       return { ok: false, error: 'Task title is required and cannot be empty.' };
     }
 
-    // 2. Validate date
+    // 2. Validate and normalize date (supports Ethiopian calendar dates & 6:00 AM traditional boundary)
     let date = (input.date || '').trim();
     if (date.toLowerCase() === 'today' || !date) {
-      date = new Date().toISOString().split('T')[0];
+      date = getTraditionalDayDate(new Date(), 'Africa/Addis_Ababa');
     } else if (date.toLowerCase() === 'tomorrow') {
-      const d = new Date();
-      d.setDate(d.getDate() + 1);
-      date = d.toISOString().split('T')[0];
+      const todayTrad = getTraditionalDayDate(new Date(), 'Africa/Addis_Ababa');
+      const [y, m, d] = todayTrad.split('-').map(Number);
+      const nextD = new Date(Date.UTC(y, m - 1, d + 1));
+      date = nextD.toISOString().split('T')[0];
+    } else {
+      const ethNamedMatch = /^([A-Za-z\u1200-\u137F]+)\s+(\d{1,2})(?:,|\s+)\s*(\d{4})/i.exec(date);
+      if (ethNamedMatch) {
+        const mStr = ethNamedMatch[1].toLowerCase();
+        const dNum = Number(ethNamedMatch[2]);
+        const yNum = Number(ethNamedMatch[3]);
+        const monthMeta = ETHIOPIAN_MONTHS.find(
+          m => m.nameEn.toLowerCase() === mStr || m.nameAm === ethNamedMatch[1]
+        );
+        if (monthMeta) {
+          const converted = ethiopianToGregorian(yNum, monthMeta.id, dNum);
+          date = converted.isoDate;
+        }
+      }
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return { ok: false, error: `Invalid date format "${input.date}". Date must be in YYYY-MM-DD format.` };
+    }
+
+    // 2b. Validate and normalize time (supports traditional Ethiopian clock inputs)
+    let startTime = input.startTime ? input.startTime.trim() : undefined;
+    let endTime = input.endTime ? input.endTime.trim() : undefined;
+
+    if (startTime) {
+      const parsedEthStart = parseEthiopianTimeInput(startTime);
+      if (parsedEthStart) {
+        startTime = parsedEthStart.time24;
+      }
+    }
+
+    if (endTime) {
+      const parsedEthEnd = parseEthiopianTimeInput(endTime);
+      if (parsedEthEnd) {
+        endTime = parsedEthEnd.time24;
+      }
     }
 
     // 3. Validate priority
@@ -184,9 +219,9 @@ export async function createTaskInDb(input: CreateTaskInput): Promise<TaskOperat
     // 5. Calculate / parse duration
     let scheduledMinutes = Number(input.scheduledMinutes);
     if (!scheduledMinutes || isNaN(scheduledMinutes) || scheduledMinutes <= 0) {
-      if (input.startTime && input.endTime) {
-        const [sh, sm] = input.startTime.split(':').map(Number);
-        const [eh, em] = input.endTime.split(':').map(Number);
+      if (startTime && endTime) {
+        const [sh, sm] = startTime.split(':').map(Number);
+        const [eh, em] = endTime.split(':').map(Number);
         let diff = (eh * 60 + em) - (sh * 60 + sm);
         if (diff <= 0) diff += 24 * 60; // Crosses midnight
         scheduledMinutes = diff;
@@ -238,8 +273,8 @@ export async function createTaskInDb(input: CreateTaskInput): Promise<TaskOperat
       deleted: false,
       isSample: false,
       synced: 1, // Authoritatively saved to database
-      startTime: input.startTime || undefined,
-      endTime: input.endTime || undefined,
+      startTime: startTime || undefined,
+      endTime: endTime || undefined,
       status: 'not_started',
       deadline: (input.deadline && input.deadline.toLowerCase() !== 'none') ? input.deadline : undefined,
     };

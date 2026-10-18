@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import type { Task, Section, TimeLog } from '@/types';
 import { AIPlanModal } from '@/components/Modals/AIPlanModal';
+import { formatEthiopianDate, formatEthiopianDateAmharic } from '@/lib/date/ethiopianCalendar';
+import { getEthiopianClock, parseEthiopianTimeInput } from '@/lib/date/ethiopianTime';
 
 interface TodoListScreenProps {
   currentDate: string;
@@ -349,8 +351,12 @@ export function TodoListScreen({
           <div className="font-bloody" style={{ fontSize: isPhone ? 18 : 22, fontWeight: 700, letterSpacing: '0.05em' }}>
             {dayName}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            {currentDate}
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span>{currentDate}</span>
+            <span style={{ opacity: 0.4 }}>•</span>
+            <span style={{ color: 'var(--accent-color)', fontWeight: 600 }}>
+              🇪🇹 {formatEthiopianDate(currentDate)}
+            </span>
           </div>
         </div>
         <button
@@ -832,7 +838,7 @@ export function TodoListScreen({
                     <Clock size={13} color={task.startTime ? '#38bdf8' : 'var(--text-muted)'} />
                     <span>
                       {task.startTime
-                        ? `${formatTime12(task.startTime)}${task.endTime ? ` – ${formatTime12(task.endTime)}` : ''}`
+                        ? `${formatTime12(task.startTime)}${task.endTime ? ` – ${formatTime12(task.endTime)}` : ''} · 🇪🇹 ${getEthiopianClock(task.startTime).periodNameAm} ${getEthiopianClock(task.startTime).ethiopianClock}`
                         : `${task.scheduledMinutes || task.estimatedMinutes || 30}m focus slot`}
                     </span>
                     {task.startTime && task.scheduledMinutes && (
@@ -914,6 +920,11 @@ export function TodoListScreen({
                       className="v-input"
                       style={{ width: 110, fontSize: 12, minHeight: 32, padding: '4px 8px' }}
                     />
+                    {editTaskStartTime && (
+                      <span style={{ fontSize: 11, color: 'var(--accent-color)', fontWeight: 600 }}>
+                        🇪🇹 {getEthiopianClock(editTaskStartTime).ethiopianTimeStr}
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={event => { void withActionFeedback('Saving task time', () => handleSaveTaskTime(task.id), event.currentTarget); }}

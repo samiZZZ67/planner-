@@ -12,6 +12,8 @@ import {
   Palette, Bell, BellOff, AlertTriangle, FileText, ChevronDown, ChevronUp, Eye, Edit3
 } from 'lucide-react';
 import type { Task, TimeLog, Day, DayReview } from '@/types';
+import { formatEthiopianDate, formatEthiopianDateAmharic } from '@/lib/date/ethiopianCalendar';
+import { getEthiopianClock } from '@/lib/date/ethiopianTime';
 
 interface TodoScreenProps {
   currentDate: string;
@@ -690,7 +692,11 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               </span>
             )}
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, display: 'flex', gap: 12 }}>
+          <div style={{ fontSize: 13, color: 'var(--accent-color)', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>🇪🇹 {formatEthiopianDate(currentDate)}</span>
+            <span style={{ opacity: 0.5 }}>({formatEthiopianDateAmharic(currentDate)})</span>
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, display: 'flex', gap: 12 }}>
             <span>{completedCount} of {tasks.length} tasks completed</span>
             <span>•</span>
             <span>{totalDayHours}h total hours taken</span>

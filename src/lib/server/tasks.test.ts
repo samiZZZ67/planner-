@@ -262,5 +262,28 @@ describe('Authoritative Task Service & Action Execution', () => {
     // Cleanup Tuesday task
     await deleteTaskInDb(tueTask.id, tuesdayDate);
   });
+
+  it('10. should interpret Ethiopian calendar date and Ethiopian clock times correctly', async () => {
+    const res = await createTaskInDb({
+      title: 'Ethiopian Deep Work Session',
+      category: 'Deep Work',
+      date: 'Tikimt 8, 2019',
+      startTime: 'ጠዋት 2:00',
+      endTime: 'ጠዋት 4:00',
+      priority: 'High',
+    });
+
+    expect(res.ok).toBe(true);
+    expect(res.task).toBeDefined();
+    expect(res.task?.date).toBe('2026-10-18');
+    expect(res.task?.startTime).toBe('08:00');
+    expect(res.task?.endTime).toBe('10:00');
+    expect(res.task?.scheduledMinutes).toBe(120);
+
+    // Cleanup
+    if (res.task) {
+      await deleteTaskInDb(res.task.id, '2026-10-18');
+    }
+  });
 });
 

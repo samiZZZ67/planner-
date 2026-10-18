@@ -9,6 +9,8 @@ import {
   Target, FileText, Layers, Flag, CheckSquare, X
 } from 'lucide-react';
 import type { Task, Section, PriorityLevel, TaskStatus } from '@/types';
+import { formatEthiopianDate, formatEthiopianDateAmharic } from '@/lib/date/ethiopianCalendar';
+import { getEthiopianClock, parseEthiopianTimeInput } from '@/lib/date/ethiopianTime';
 
 interface AddTaskScreenProps {
   currentDate: string;
@@ -271,8 +273,12 @@ export function AddTaskScreen({ currentDate, onChangeDate, isPhone, onTaskAdded 
           <div className="font-bloody" style={{ fontSize: isPhone ? 18 : 22, fontWeight: 700, letterSpacing: '0.05em' }}>
             {dayName}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            {currentDate}
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span>{currentDate}</span>
+            <span style={{ opacity: 0.4 }}>•</span>
+            <span style={{ color: 'var(--accent-color)', fontWeight: 600 }}>
+              🇪🇹 {formatEthiopianDate(currentDate)}
+            </span>
           </div>
         </div>
         <button
@@ -453,6 +459,11 @@ export function AddTaskScreen({ currentDate, onChangeDate, isPhone, onTaskAdded 
                     className="v-input"
                     style={{ fontSize: 14 }}
                   />
+                  {startTime && (
+                    <div style={{ fontSize: 11, color: 'var(--accent-color)', fontWeight: 600, marginTop: 4 }}>
+                      🇪🇹 {getEthiopianClock(startTime).ethiopianTimeStr}
+                    </div>
+                  )}
                 </div>
                 <div style={{ flex: 1, minWidth: 120 }}>
                   <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: 6 }}>
@@ -465,6 +476,11 @@ export function AddTaskScreen({ currentDate, onChangeDate, isPhone, onTaskAdded 
                     className="v-input"
                     style={{ fontSize: 14 }}
                   />
+                  {endTime && (
+                    <div style={{ fontSize: 11, color: 'var(--accent-color)', fontWeight: 600, marginTop: 4 }}>
+                      🇪🇹 {getEthiopianClock(endTime).ethiopianTimeStr}
+                    </div>
+                  )}
                 </div>
                 {scheduledMinutes > 0 && (
                   <div style={{

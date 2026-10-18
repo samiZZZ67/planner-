@@ -26,6 +26,7 @@ import { AIChatPanel } from '@/components/Chat/AIChatPanel';
 import { FreeLLMAssistant } from '@/components/FreeLLM/FreeLLMAssistant';
 import { apiFetch } from '@/lib/api/apiClient';
 import { ActionFeedbackHost } from '@/components/Shared/ActionFeedbackHost';
+import { getTraditionalDayDate } from '@/lib/date/ethiopianTime';
 
 export default function SamsSpaceApp() {
   const { isPhone, isPC } = useDeviceType();
@@ -117,8 +118,11 @@ export default function SamsSpaceApp() {
     };
     window.addEventListener('resize', onResize);
 
-    // Default planning date to today in local timezone
-    const today = new Date().toLocaleDateString('en-CA');
+    // Default planning date to active traditional Ethiopian day (6:00 AM Addis Ababa boundary) or Gregorian
+    const savedMode = typeof window !== 'undefined' ? localStorage.getItem('np_calendar_mode') : null;
+    const today = savedMode === 'gregorian'
+      ? new Date().toLocaleDateString('en-CA')
+      : getTraditionalDayDate(new Date(), 'Africa/Addis_Ababa');
     setCurrentDate(today);
 
     // Register PWA service worker

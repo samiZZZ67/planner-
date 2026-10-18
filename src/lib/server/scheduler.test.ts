@@ -17,6 +17,7 @@ describe('Background Scheduler & Automatic Telegram Delivery Suite', () => {
   beforeEach(() => {
     stopScheduler();
     vi.restoreAllMocks();
+    vi.spyOn(telegramModule, 'getTelegramUpdates').mockResolvedValue([]);
   });
 
   afterEach(() => {

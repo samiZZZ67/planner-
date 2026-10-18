@@ -6,6 +6,7 @@ import { syncEngine } from '@/lib/sync/syncEngine';
 import { withActionFeedback } from '@/lib/utils/actionFeedback';
 import { compressImage } from '@/lib/utils/image';
 import { STRATEGY_COLORS } from '@/lib/utils/colors';
+import { formatEthiopianDate } from '@/lib/date/ethiopianCalendar';
 import {
   X,
   Star,
@@ -381,15 +382,20 @@ export function TaskFormModal({
             background: 'var(--v-glass-bg)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <h2 id="task-form-title" className="font-bloody" style={{ fontSize: 20, margin: 0, color: 'var(--text-primary)' }}>
-              {existingTask ? 'Edit Task' : 'New Clear Plan'}
-            </h2>
-            {draftRestored && !existingTask && (
-              <span className="g-badge" style={{ borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.08)', color: 'rgba(234,179,8,0.85)', fontSize: 10 }}>
-                Draft Restored
-              </span>
-            )}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <h2 id="task-form-title" className="font-bloody" style={{ fontSize: 20, margin: 0, color: 'var(--text-primary)' }}>
+                {existingTask ? 'Edit Task' : 'New Clear Plan'}
+              </h2>
+              {draftRestored && !existingTask && (
+                <span className="g-badge" style={{ borderColor: 'rgba(234,179,8,0.3)', background: 'rgba(234,179,8,0.08)', color: 'rgba(234,179,8,0.85)', fontSize: 10 }}>
+                  Draft Restored
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--accent-color)', fontWeight: 600, marginTop: 2 }}>
+              📅 {currentDate} · 🇪🇹 {formatEthiopianDate(currentDate)}
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

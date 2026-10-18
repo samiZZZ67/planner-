@@ -15,6 +15,8 @@ import {
   sendPomodoroNotification,
   type NotificationStatus
 } from '@/lib/notifications/notificationManager';
+import { formatEthiopianDate, formatEthiopianDateAmharic } from '@/lib/date/ethiopianCalendar';
+import { getEthiopianClock } from '@/lib/date/ethiopianTime';
 
 interface SettingsScreenProps {
   theme: 'dark' | 'light';
@@ -35,6 +37,25 @@ export function SettingsScreen({
   const [importError, setImportError] = useState('');
   const [notifStatus, setNotifStatus] = useState<NotificationStatus>(getNotificationStatus());
   const [isBriefModalOpen, setIsBriefModalOpen] = useState(false);
+  const [calendarMode, setCalendarMode] = useState<'ethiopian' | 'gregorian'>('ethiopian');
+  const [nowDate, setNowDate] = useState(() => new Date());
+
+  useEffect(() => {
+    const saved = (localStorage.getItem('np_calendar_mode') as 'ethiopian' | 'gregorian') || 'ethiopian';
+    setCalendarMode(saved);
+
+    const interval = setInterval(() => setNowDate(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const liveClock = getEthiopianClock(nowDate, 'Africa/Addis_Ababa');
+  const todayGreg = nowDate.toLocaleDateString('en-US', {
+    timeZone: 'Africa/Addis_Ababa',
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 
   const showMsg = (msg: string) => {
     setMessage(msg);
@@ -293,7 +314,93 @@ export function SettingsScreen({
         </div>
       </div>
 
-      {/* ── 5. ACCOUNT & CLOUD DATABASE SYNC ── */}
+      {/* ── 5. ETHIOPIAN CALENDAR & TRADITIONAL HABESHA CLOCK ── */}
+      <div
+        className="v-card"
+        style={{
+          padding: isPhone ? '18px 16px' : '22px 28px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
+            ETHIOPIAN CALENDAR & HABESHA CLOCK SYSTEM
+          </div>
+          <span style={{ fontSize: 11, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#38bdf8', display: 'inline-block' }} />
+            Africa/Addis_Ababa (UTC+3)
+          </span>
+        </div>
+
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          NightPlanner supports the traditional Ethiopian clock (12-hour cycle starting at 6:00 AM dawn as 12:00 am) and full Ethiopian calendar (all 13 months including Pagume, leap years, and New Year transitions).
+        </p>
+
+        {/* Live dual clock pill */}
+        <div
+          style={{
+            padding: '12px 16px',
+            background: 'var(--v-glass-bg-subtle)',
+            borderRadius: 12,
+            border: '1px solid var(--v-glass-border)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}
+        >
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+            Live Addis Ababa Clock & Dual Calendar:
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+            🕒 {liveClock.internationalTime} ({liveClock.internationalTime12h}) · <span style={{ color: 'var(--accent-color)' }}>🇪🇹 {liveClock.ethiopianTimeStr}</span>
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            📅 {todayGreg} · <span style={{ color: 'var(--accent-color)', fontWeight: 600 }}>🇪🇹 {liveClock.ethiopianDateStr} ({liveClock.ethiopianDateAmStr})</span>
+          </div>
+        </div>
+
+        {/* Boundary Selection */}
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>
+            Daily Task Grouping & Boundary Mode:
+          </label>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setCalendarMode('ethiopian');
+                localStorage.setItem('np_calendar_mode', 'ethiopian');
+                showMsg('Ethiopian mode active: daily boundary is 6:00 AM dawn.');
+              }}
+              className={`v-pill-btn${calendarMode === 'ethiopian' ? ' v-pill-btn-primary' : ''}`}
+              style={{ padding: '8px 16px', fontSize: 13 }}
+            >
+              <span>🇪🇹 Ethiopian Day Boundary (6:00 AM Dawn)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCalendarMode('gregorian');
+                localStorage.setItem('np_calendar_mode', 'gregorian');
+                showMsg('Gregorian mode active: daily boundary is 12:00 AM midnight.');
+              }}
+              className={`v-pill-btn${calendarMode === 'gregorian' ? ' v-pill-btn-primary' : ''}`}
+              style={{ padding: '8px 16px', fontSize: 13 }}
+            >
+              <span>Standard Gregorian Midnight (12:00 AM)</span>
+            </button>
+          </div>
+          <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>
+            {calendarMode === 'ethiopian'
+              ? 'Tasks scheduled between 12:00 AM and 5:59 AM belong to the traditional Ethiopian day that started at 6:00 AM yesterday. At 6:00 AM, the new day starts.'
+              : 'Tasks are grouped by standard midnight-to-midnight international calendar boundaries.'}
+          </p>
+        </div>
+      </div>
+
+      {/* ── 6. ACCOUNT & CLOUD DATABASE SYNC ── */}
       <div
         className="v-card"
         style={{
