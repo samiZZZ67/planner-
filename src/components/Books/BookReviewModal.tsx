@@ -45,6 +45,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
   const [loadingPreview, setLoadingPreview] = useState<boolean>(false);
   const [savingText, setSavingText] = useState<boolean>(false);
   const [reviewingPage, setReviewingPage] = useState<boolean>(false);
+  const [approvingAll, setApprovingAll] = useState<boolean>(false);
   const [extractingBatch, setExtractingBatch] = useState<boolean>(false);
   const [filter, setFilter] = useState<'all' | 'needs_review' | 'ocr' | 'empty'>('all');
   const [jumpInput, setJumpInput] = useState<string>('');
@@ -347,6 +348,37 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
     }
   };
 
+  // Approve all extracted pages for the book
+  const approveAllContent = async () => {
+    if (!currentBook || approvingAll) return;
+    setApprovingAll(true);
+    setError('');
+    try {
+      const res = await apiFetch(`/api/books/${encodeURIComponent(currentBook.id)}/pages/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approveAll: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to approve extracted pages.');
+
+      if (data.stats) setStats(data.stats);
+      if (data.book) {
+        setCurrentBook(data.book);
+        onBookUpdated?.(data.book);
+      }
+      setSummaries(prev => prev.map(p => ({ ...p, reviewedByUser: true, requiresReview: false })));
+      if (currentPage) {
+        setCurrentPage({ ...currentPage, reviewedByUser: true, requiresReview: false });
+      }
+      showNotice('Extracted content approved! You can now load or generate your reading plan.');
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to approve extracted pages.');
+    } finally {
+      setApprovingAll(false);
+    }
+  };
+
   const cancelBatchExtraction = () => {
     if (extractionAbortRef.current) {
       extractionAbortRef.current.abort();
@@ -592,6 +624,29 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 )}
               </div>
             )}
+
+            {/* Approve Extracted Content button */}
+            <button
+              type="button"
+              className="v-pill-btn v-pill-btn-accent"
+              disabled={approvingAll || extractingBatch}
+              onClick={() => void approveAllContent()}
+              style={{
+                padding: '6px 14px',
+                fontSize: 12,
+                fontWeight: 600,
+                display: 'inline-flex',
+                gap: 6,
+                alignItems: 'center',
+                background: currentBook?.extractionStatus === 'completed' ? 'rgba(34, 197, 94, 0.2)' : undefined,
+                borderColor: currentBook?.extractionStatus === 'completed' ? '#4ade80' : undefined,
+                color: currentBook?.extractionStatus === 'completed' ? '#86efac' : undefined,
+              }}
+              title="Approve all extracted pages to enable reading plan generation and loading"
+            >
+              {approvingAll ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+              <span>{currentBook?.extractionStatus === 'completed' ? 'Plan Approved ✓' : 'Approve Extracted Plan'}</span>
+            </button>
 
             <button
               type="button"
@@ -1261,7 +1316,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                   <button
                     type="button"
                     className="v-pill-btn"
-                    disabled={reviewingPage || loadingPage || !editedText.trim()}
+                    disabled={reviewingPage || loadingPage}
                     onClick={() => void markReviewed()}
                     style={{
                       padding: '7px 14px',
@@ -1269,14 +1324,36 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                       display: 'inline-flex',
                       gap: 6,
                       alignItems: 'center',
-                      cursor: reviewingPage || !editedText.trim() ? 'not-allowed' : 'pointer',
+                      cursor: reviewingPage ? 'wait' : 'pointer',
                       border: currentPage?.reviewedByUser ? '1px solid #4ade80' : undefined,
                       color: currentPage?.reviewedByUser ? '#4ade80' : undefined,
                     }}
-                    title={!editedText.trim() ? 'Page text cannot be empty to approve' : 'Approve this page against the visual PDF'}
+                    title={!editedText.trim() ? 'Approve this blank or skipped page' : 'Approve this page against the visual PDF'}
                   >
                     {reviewingPage ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                    {currentPage?.reviewedByUser ? 'Reviewed ✓' : 'Mark as Visually Reviewed'}
+                    {currentPage?.reviewedByUser ? 'Reviewed ✓' : (!editedText.trim() ? 'Approve Blank Page' : 'Mark as Visually Reviewed')}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="v-pill-btn v-pill-btn-accent"
+                    disabled={approvingAll || loadingPage}
+                    onClick={() => void approveAllContent()}
+                    style={{
+                      padding: '7px 14px',
+                      fontSize: 13,
+                      display: 'inline-flex',
+                      gap: 6,
+                      alignItems: 'center',
+                      cursor: approvingAll ? 'wait' : 'pointer',
+                      background: currentBook?.extractionStatus === 'completed' ? 'rgba(34, 197, 94, 0.2)' : undefined,
+                      borderColor: currentBook?.extractionStatus === 'completed' ? '#4ade80' : undefined,
+                      color: currentBook?.extractionStatus === 'completed' ? '#86efac' : undefined,
+                    }}
+                    title="Approve all extracted pages to load or generate the study plan"
+                  >
+                    {approvingAll ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                    {currentBook?.extractionStatus === 'completed' ? 'Plan Approved ✓' : 'Approve Plan & Finish'}
                   </button>
                 </div>
 

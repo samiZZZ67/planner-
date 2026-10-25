@@ -845,36 +845,76 @@ export function BookPlannerScreen({ initialQuizAssignmentId }: BookPlannerScreen
                   <FileText size={14} /> Review Extracted Text
                 </button>
               )}
+              {book.extractionStatus === 'needs_review' && (
+                <button
+                  type="button"
+                  className="v-pill-btn"
+                  onClick={async () => {
+                    try {
+                      const res = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/pages/review`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ approveAll: true }),
+                      });
+                      const data = await res.json();
+                      if (data.book) {
+                        setBooks(prev => prev.map(b => b.id === book.id ? data.book : b));
+                        notifyFeedback('success', 'Extracted content approved! You can now generate or load your plan.');
+                      }
+                    } catch (err: any) {
+                      setError(err?.message || 'Failed to approve pages.');
+                    }
+                  }}
+                  style={{ padding: '8px 14px', display: 'inline-flex', gap: 6, alignItems: 'center', fontWeight: 600, color: '#86efac', borderColor: '#4ade80' }}
+                  title="Approve all extracted pages and enable reading plan generation / loading"
+                >
+                  <CheckCircle2 size={14} /> Approve Extracted Content
+                </button>
+              )}
               <button type="button" className="v-pill-btn" onClick={() => void openBookAnalytics(book)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                 <Eye size={14} /> Inspect Extracted Pages in BA
               </button>
             </div>
-            {book.extractionStatus === 'completed' && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <button type="button" className="v-pill-btn" disabled={generatingPlanBookId === book.id} onClick={() => void generatePlan(book)} style={{ padding: '8px 12px', cursor: generatingPlanBookId === book.id ? 'wait' : 'pointer' }}>
-                {generatingPlanBookId === book.id ? 'Generating plan…' : 'Generate concept-based plan'}
-              </button>
-              {generatingPlanBookId === book.id && (
+            {(book.extractionStatus === 'completed' || book.extractionStatus === 'needs_review' || (assignmentsByBook[book.id] && assignmentsByBook[book.id].length > 0)) && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <button
                   type="button"
                   className="v-pill-btn"
-                  onClick={cancelPlanGeneration}
-                  style={{
-                    padding: '8px 12px',
-                    background: 'rgba(239, 68, 68, 0.2)',
-                    borderColor: 'rgba(239, 68, 68, 0.45)',
-                    color: '#fca5a5',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
+                  disabled={generatingPlanBookId === book.id}
+                  onClick={() => void generatePlan(book)}
+                  style={{ padding: '8px 12px', cursor: generatingPlanBookId === book.id ? 'wait' : 'pointer' }}
                 >
-                  <X size={14} /> Cancel Plan Generation
+                  {generatingPlanBookId === book.id ? 'Generating plan…' : 'Generate concept-based plan'}
                 </button>
-              )}
-              <button type="button" className="v-pill-btn" disabled={loadingAssignmentsBookId === book.id} onClick={() => void loadAssignments(book)} style={{ padding: '8px 12px', cursor: loadingAssignmentsBookId === book.id ? 'wait' : 'pointer' }}>
-                {loadingAssignmentsBookId === book.id ? 'Loading plan…' : 'Load saved plan'}
-              </button>
-            </div>}
+                {generatingPlanBookId === book.id && (
+                  <button
+                    type="button"
+                    className="v-pill-btn"
+                    onClick={cancelPlanGeneration}
+                    style={{
+                      padding: '8px 12px',
+                      background: 'rgba(239, 68, 68, 0.2)',
+                      borderColor: 'rgba(239, 68, 68, 0.45)',
+                      color: '#fca5a5',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <X size={14} /> Cancel Plan Generation
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="v-pill-btn"
+                  disabled={loadingAssignmentsBookId === book.id}
+                  onClick={() => void loadAssignments(book)}
+                  style={{ padding: '8px 12px', cursor: loadingAssignmentsBookId === book.id ? 'wait' : 'pointer' }}
+                >
+                  {loadingAssignmentsBookId === book.id ? 'Loading plan…' : 'Load saved plan'}
+                </button>
+              </div>
+            )}
             {assignmentsByBook[book.id]?.map(assignment => (
               <section key={assignment.id} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
                 <strong>Day {assignment.dayNumber}{assignment.sectionNumber ? ` · Part ${assignment.sectionNumber}` : ''} · {assignment.scheduledDate} · PDF pages {assignment.startPdfPage}–{assignment.endPdfPage}</strong>

@@ -15,6 +15,10 @@ export function isSchedulerCycleRunning(): boolean {
   return isCycleRunning;
 }
 
+export function _resetSchedulerCycleForTest(): void {
+  isCycleRunning = false;
+}
+
 /**
  * Authoritative single execution cycle that queries and delivers all due
  * book reading sections, scheduled plans, and custom Telegram messages.

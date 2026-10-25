@@ -596,4 +596,200 @@ describe('Long PDF Extraction, Batching, Persistence, and Review Suite', () => {
     expect(dataPages.pages).toHaveLength(15);
     expect(dataPages.pages[14].text).toContain('batch test page 15');
   }, 30_000);
+
+  it('detects and skips blank pages without treating them as threats, notifies skipped page numbers, and allows approval', async () => {
+    temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'np-blank-pages-'));
+    previousBookDataDir = process.env.BOOK_DATA_DIR;
+    process.env.BOOK_DATA_DIR = temporaryDirectory;
+    vi.resetModules();
+
+    const store = await import('../books');
+    const { extractPdfRange } = await import('./pdfExtraction');
+
+    // Pages 1, 3, 5 have meaningful text. Pages 2 and 4 are completely blank.
+    const pageTexts = [
+      'Meaningful chapter text on page 1 with substantial concepts.',
+      '   ', // Blank / whitespace-only page
+      'Meaningful chapter text on page 3 continuing the discussion.',
+      '',     // Completely empty page
+      'Meaningful summary text on page 5 concluding the chapter.',
+    ];
+    const pdfBuffer = generateMultiPagePdf(pageTexts);
+
+    const now = Date.now();
+    const book: BookRecord = {
+      id: 'blank-test-book',
+      userId: 'test-user-blank',
+      title: 'Blank Page Test Book',
+      author: 'Test Author',
+      metadata: '',
+      originalFilename: 'blank.pdf',
+      storedFilename: 'blank.pdf',
+      fileSize: pdfBuffer.length,
+      startPage: 1,
+      endPage: 5,
+      durationDays: 5,
+      startDate: '2026-01-01',
+      studyMinutes: 30,
+      postingTime: '08:00',
+      timezone: 'UTC',
+      currentPage: 1,
+      status: 'draft',
+      extractionStatus: 'pending',
+      extractionMessage: '',
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.saveBook(book, new Uint8Array(pdfBuffer));
+    const pdfPath = path.join(temporaryDirectory, 'books', 'blank.pdf');
+
+    const result = await extractPdfRange({
+      bookId: book.id,
+      filePath: pdfPath,
+      startPage: 1,
+      endPage: 5,
+    });
+
+    // 1. Skips blank pages and notifies which page numbers were skipped
+    expect(result.skippedPages).toEqual([2, 4]);
+    expect(result.pages).toHaveLength(5);
+
+    // 2. Pages 2 and 4 are marked as empty and do NOT require review as threats
+    expect(result.pages[1].pdfPage).toBe(2);
+    expect(result.pages[1].method).toBe('empty');
+    expect(result.pages[1].requiresReview).toBe(false);
+    expect(result.pages[1].warnings[0]).toContain('skipped');
+
+    expect(result.pages[3].pdfPage).toBe(4);
+    expect(result.pages[3].method).toBe('empty');
+    expect(result.pages[3].requiresReview).toBe(false);
+
+    // 3. Meaningful pages 1, 3, 5 extracted cleanly
+    expect(result.pages[0].method).toBe('native');
+    expect(result.pages[0].text).toContain('page 1');
+    expect(result.pages[2].method).toBe('native');
+    expect(result.pages[4].method).toBe('native');
+
+    // 4. Persistence and stats
+    await store.saveBookPages(book, result.pages);
+    const stats = await store.getBookPagesStats('test-user-blank', book.id, 1, 5);
+    expect(stats.isComplete).toBe(true);
+    expect(stats.totalExtracted).toBe(5);
+    expect(stats.emptyCount).toBe(2);
+    expect(stats.needsReviewCount).toBe(0); // Blank pages are skipped, NOT blocking threats!
+    expect(stats.unreviewedCount).toBe(0);
+
+    // 5. Approving a blank page directly does NOT throw an error
+    const approvedBlank = await store.markBookPageReviewed('test-user-blank', book.id, 2);
+    expect(approvedBlank.reviewedByUser).toBe(true);
+    expect(approvedBlank.requiresReview).toBe(false);
+
+    // 6. Bulk approveAllBookPages works smoothly
+    const approveAllResult = await store.approveAllBookPages('test-user-blank', book.id, 1, 5);
+    expect(approveAllResult.book?.extractionStatus).toBe('completed');
+    expect(approveAllResult.stats.unreviewedCount).toBe(0);
+  });
+
+  it('allows approving extracted content via review route and loading saved plan even with skipped pages', async () => {
+    temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'np-approve-route-'));
+    previousBookDataDir = process.env.BOOK_DATA_DIR;
+    process.env.BOOK_DATA_DIR = temporaryDirectory;
+    vi.resetModules();
+
+    vi.doMock('@/lib/server/auth', () => ({
+      getSessionUser: async () => ({ userId: 'approver-1', email: 'approver@example.com' }),
+    }));
+
+    const store = await import('../books');
+    const { POST: reviewPost } = await import('../../../app/api/books/[id]/pages/review/route');
+    const { generateConceptReadingPlan } = await import('../readingPlan');
+
+    const now = Date.now();
+    const book: BookRecord = {
+      id: 'book-review-approve',
+      userId: 'approver-1',
+      title: 'Review Approve Book',
+      author: 'Author',
+      metadata: '',
+      originalFilename: 'r.pdf',
+      storedFilename: 'r.pdf',
+      fileSize: 100,
+      startPage: 1,
+      endPage: 3,
+      durationDays: 3,
+      startDate: '2026-01-01',
+      studyMinutes: 30,
+      postingTime: '08:00',
+      timezone: 'UTC',
+      currentPage: 1,
+      status: 'draft',
+      extractionStatus: 'needs_review',
+      extractionMessage: '1 page needs review',
+      createdAt: now,
+      updatedAt: now,
+    };
+    await store.saveBook(book, new Uint8Array([37, 80, 68, 70]));
+
+    const pages: BookPageRecord[] = [
+      {
+        bookId: book.id,
+        pdfPage: 1,
+        text: 'Core principles of architectural thinking: Chapter 1 provides fundamental design rules.',
+        method: 'ocr',
+        confidence: 72,
+        warnings: ['OCR text is an estimate.'],
+        requiresReview: true,
+        reviewedByUser: false,
+        updatedAt: now,
+      },
+      {
+        bookId: book.id,
+        pdfPage: 2,
+        text: '', // Blank page (skipped)
+        method: 'empty',
+        confidence: null,
+        warnings: ['Page 2 is blank or has no readable text (skipped).'],
+        requiresReview: false,
+        reviewedByUser: false,
+        updatedAt: now,
+      },
+      {
+        bookId: book.id,
+        pdfPage: 3,
+        text: 'Chapter 2: Component cohesion and coupling principles explained with concrete examples.',
+        method: 'native',
+        confidence: null,
+        warnings: [],
+        requiresReview: false,
+        reviewedByUser: false,
+        updatedAt: now,
+      },
+    ];
+    await store.saveBookPages(book, pages);
+
+    // Initial state: 1 unreviewed OCR page
+    let stats = await store.getBookPagesStats('approver-1', book.id, 1, 3);
+    expect(stats.unreviewedCount).toBe(1);
+
+    // Post to review route with approveAll: true
+    const req = new Request('http://localhost/api/books/book-review-approve/pages/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approveAll: true }),
+    });
+    const res = await reviewPost(req, { params: Promise.resolve({ id: 'book-review-approve' }) } as any);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+
+    // Verify book extractionStatus is now completed and ready for plan loading
+    expect(data.book.extractionStatus).toBe('completed');
+    expect(data.pendingReviewCount).toBe(0);
+
+    // Verify reading plan can be generated incorporating the blank page into adjacent sections
+    const plan = await generateConceptReadingPlan({ book: data.book, pages });
+    expect(plan.assignments.length).toBeGreaterThanOrEqual(1);
+    expect(plan.assignments[0].startPdfPage).toBe(1);
+    // Blank page incorporated cleanly without error
+    expect(plan.issues.some(iss => iss.includes('minimal text'))).toBe(true);
+  });
 });

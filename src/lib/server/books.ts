@@ -378,17 +378,47 @@ export async function markBookPageReviewed(userId: string, bookId: string, pdfPa
   const pages = await listBookPages(userId, bookId, pdfPage, pdfPage);
   const page = pages[0];
   if (!page) throw new Error('Extracted page not found.');
-  if (page.method === 'empty' || !page.text.trim()) throw new Error('This page has no readable extracted text; it cannot be approved.');
-  const reviewed = { ...page, reviewedByUser: true, updatedAt: Date.now() };
+  const reviewed = { ...page, reviewedByUser: true, requiresReview: false, updatedAt: Date.now() };
   const sql = getDb();
   if (sql) {
     await ensureBookSchema(sql);
-    await sql`UPDATE book_pages SET reviewed_by_user = TRUE, updated_at = ${reviewed.updatedAt} WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page = ${pdfPage}`;
+    await sql`UPDATE book_pages SET reviewed_by_user = TRUE, requires_review = FALSE, updated_at = ${reviewed.updatedAt} WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page = ${pdfPage}`;
   }
   const diskPages = readDiskBookPages(bookId);
   const updatedDiskPages = diskPages.map(item => item.pdfPage === pdfPage ? reviewed : item);
   writeDiskBookPages(bookId, updatedDiskPages);
   return reviewed;
+}
+
+export async function approveAllBookPages(userId: string, bookId: string, startPage: number, endPage: number) {
+  const now = Date.now();
+  const sql = getDb();
+  if (sql) {
+    await ensureBookSchema(sql);
+    await sql`UPDATE book_pages SET reviewed_by_user = TRUE, requires_review = FALSE, updated_at = ${now} WHERE book_id = ${bookId} AND user_id = ${userId} AND pdf_page BETWEEN ${startPage} AND ${endPage}`;
+  }
+  const diskPages = readDiskBookPages(bookId);
+  const updatedDiskPages = diskPages.map(item => {
+    if (item.pdfPage >= startPage && item.pdfPage <= endPage) {
+      return { ...item, reviewedByUser: true, requiresReview: false, updatedAt: now };
+    }
+    return item;
+  });
+  writeDiskBookPages(bookId, updatedDiskPages);
+
+  const book = await getBook(userId, bookId);
+  if (book) {
+    const updatedBook = await updateBook({
+      ...book,
+      extractionStatus: 'completed',
+      extractionMessage: 'All extracted pages have been reviewed and approved. Ready for planning and study.',
+      updatedAt: now,
+    });
+    const stats = await getBookPagesStats(userId, bookId, startPage, endPage);
+    return { book: updatedBook, stats };
+  }
+  const stats = await getBookPagesStats(userId, bookId, startPage, endPage);
+  return { book: null, stats };
 }
 
 export async function updateBookPageText(userId: string, bookId: string, pdfPage: number, text: string): Promise<BookPageRecord> {

@@ -9,19 +9,26 @@ import {
   listScheduledMessages,
   deleteScheduledMessage,
   updateScheduledMessage,
+  _resetSchedulerCycleForTest,
 } from './scheduler';
 import { zonedDateTimeToTimestamp } from './bookScheduler';
 import * as telegramModule from './telegram';
+import * as autoPublishModule from './autoBookPublishing';
+import * as briefsModule from './scheduler/briefs';
 
 describe('Background Scheduler & Automatic Telegram Delivery Suite', () => {
   beforeEach(() => {
     stopScheduler();
+    _resetSchedulerCycleForTest();
     vi.restoreAllMocks();
     vi.spyOn(telegramModule, 'getTelegramUpdates').mockResolvedValue([]);
+    vi.spyOn(autoPublishModule, 'prepareAutomaticBookPublishing').mockResolvedValue({ status: 'idle' } as any);
+    vi.spyOn(briefsModule, 'processDueBriefs').mockResolvedValue({ processed: 0, completed: 0, skipped: 0, failed: 0 });
   });
 
   afterEach(() => {
     stopScheduler();
+    _resetSchedulerCycleForTest();
     vi.restoreAllMocks();
   });
 

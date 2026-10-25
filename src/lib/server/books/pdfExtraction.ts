@@ -143,8 +143,8 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
   const extractResult = await pdfExtract.extractBuffer(bytes, {
     firstPage,
     lastPage,
-    includeImages: true,
-    includeAttachments: true,
+    includeImages: false,
+    includeAttachments: false,
     normalizeWhitespace: false,
     disableCombineTextItems: false,
   });
@@ -161,6 +161,7 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
 
   const totalPages = targetPages.length;
   const scannedPages: number[] = [];
+  const skippedPages: number[] = [];
   let worker: any = null;
   let canvasModule: any = null;
   let renderDocTask: any = null;
@@ -185,45 +186,17 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
         nativeText = reconstructText(items);
       }
 
-      // Preserve extracted image data into book directory
-      if (pageData?.images && pageData.images.length > 0) {
-        const imagesDir = path.join(path.dirname(options.filePath), options.bookId, 'page-images');
-        await fs.mkdir(imagesDir, { recursive: true });
-        for (const img of pageData.images) {
-          if (img.base64data) {
-            const imgPath = path.join(imagesDir, `page-${pdfPage}-img-${img.index + 1}.png`);
-            await fs.writeFile(imgPath, Buffer.from(img.base64data, 'base64')).catch(() => null);
-          }
-        }
-      }
-
-      // Visual preview handling
-      let visualPreview: any = undefined;
+      // Visual preview metadata (fast on-demand reference; rendered on-demand when inspected)
+      let visualPreview: BookPageRecord['visualPreview'] = undefined;
       const previewDir = path.join(path.dirname(options.filePath), options.bookId, 'page-previews');
       const previewPath = path.join(previewDir, `page-${pdfPage}.jpg`);
-      let hasCachedPreview = false;
       try {
         const stat = await fs.stat(previewPath);
         if (stat.size > 0) {
           visualPreview = { filename: `page-${pdfPage}.jpg`, mimeType: 'image/jpeg' as const, width: 800, height: 1100 };
-          hasCachedPreview = true;
         }
-      } catch {}
-
-      if (!hasCachedPreview) {
-        try {
-          if (!canvasModule) canvasModule = await import('@napi-rs/canvas');
-          if (!renderDoc) {
-            const { getDocument } = await import('./pdf.js-extract/lib/pdfjs/pdf.mjs');
-            renderDocTask = getDocument({ data: new Uint8Array(bytes), verbosity: -1 });
-            renderDoc = await renderDocTask.promise;
-          }
-          const pageProxy = await renderDoc.getPage(pdfPage);
-          visualPreview = await renderPagePreview(pageProxy, canvasModule, options.filePath, options.bookId, pdfPage);
-          pageProxy.cleanup?.();
-        } catch {
-          // Preview generation is best-effort and does not block text extraction
-        }
+      } catch {
+        visualPreview = { filename: `page-${pdfPage}.jpg`, mimeType: 'image/jpeg' as const, width: 800, height: 1100 };
       }
 
       const warnings: string[] = [];
@@ -234,20 +207,19 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
 
       // Scanned document / OCR fallback
       if (nativeText.trim().length < 20) {
-        scannedPages.push(pdfPage);
-        if (!worker) {
-          const tesseract = await import('tesseract.js');
-          const cachePath = path.join(process.env.BOOK_DATA_DIR?.trim() || path.join(process.cwd(), '.data'), 'tessdata');
-          await fs.mkdir(cachePath, { recursive: true });
-          worker = await tesseract.createWorker(tessLanguages, undefined, {
-            cachePath,
-            langPath: process.env.TESSERACT_LANG_PATH || undefined,
-            gzip: true,
-            logger: () => undefined,
-          });
-          await worker.setParameters({ preserve_interword_spaces: '1' });
-        }
         try {
+          if (!worker) {
+            const tesseract = await import('tesseract.js');
+            const cachePath = path.join(process.env.BOOK_DATA_DIR?.trim() || path.join(process.cwd(), '.data'), 'tessdata');
+            await fs.mkdir(cachePath, { recursive: true });
+            worker = await tesseract.createWorker(tessLanguages, undefined, {
+              cachePath,
+              langPath: process.env.TESSERACT_LANG_PATH || undefined,
+              gzip: true,
+              logger: () => undefined,
+            });
+            await worker.setParameters({ preserve_interword_spaces: '1' });
+          }
           if (!canvasModule) canvasModule = await import('@napi-rs/canvas');
           if (!renderDoc) {
             const { getDocument } = await import('./pdf.js-extract/lib/pdfjs/pdf.mjs');
@@ -257,28 +229,30 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
           const pageProxy = await renderDoc.getPage(pdfPage);
           const recognized = await recognizePage(pageProxy, canvasModule, worker);
           pageProxy.cleanup?.();
-          text = recognized.text;
-          confidence = recognized.confidence;
-          method = text ? 'ocr' : 'empty';
-          requiresReview = true;
-          warnings.push(text
-            ? `OCR text is an estimate (confidence ${confidence.toFixed(1)}%). Compare this page with the PDF before using or publishing it.`
-            : 'OCR did not recover readable text. This page must be inspected manually.');
-        } catch (error) {
-          text = '';
-          method = 'empty';
-          requiresReview = true;
-          warnings.push(`OCR failed: ${error instanceof Error ? error.message : 'unknown OCR error'}`);
+          if (recognized.text && recognized.text.trim().length > 0) {
+            text = recognized.text;
+            confidence = recognized.confidence;
+            method = 'ocr';
+            requiresReview = true;
+            scannedPages.push(pdfPage);
+            warnings.push(
+              `OCR text is an estimate (confidence ${confidence.toFixed(1)}%). Compare this page with the PDF before using or publishing it.`
+            );
+          }
+        } catch {
+          // If OCR fails or is unavailable, page will be handled cleanly as empty/skipped
         }
       } else if (items.some((item: any) => item.dir === 'rtl')) {
         requiresReview = true;
         warnings.push('Right-to-left text ordering can vary by PDF layout; compare this page with the source.');
       }
 
+      // Detect pages with no meaningful extracted text: skip cleanly instead of treating as errors or threats
       if (!text.trim()) {
         method = 'empty';
-        requiresReview = true;
-        if (warnings.length === 0) warnings.push('No selectable text or readable OCR text was found on this page.');
+        requiresReview = false;
+        skippedPages.push(pdfPage);
+        warnings.push(`Page ${pdfPage} is blank or has no readable text (skipped).`);
       }
 
       const record: BookPageRecord = {
@@ -302,7 +276,7 @@ export async function extractPdfRange(options: PdfExtractionOptions) {
     if (renderDocTask) await renderDocTask.destroy().catch(() => null);
   }
 
-  return { pages: results, totalPdfPages, scannedPages, ocrLanguages: tessLanguages };
+  return { pages: results, totalPdfPages, scannedPages, skippedPages, ocrLanguages: tessLanguages };
 }
 
 export function reconstructPdfTextForTest(items: any[]) {

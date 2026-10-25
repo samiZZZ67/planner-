@@ -113,11 +113,16 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
       ? (newStats.needsReviewCount > 0 ? 'needs_review' : 'completed')
       : 'processing';
 
+    const skippedPages = result.skippedPages || [];
+    const skippedNotice = skippedPages.length > 0
+      ? ` (Skipped ${skippedPages.length} blank/empty page(s): p. ${skippedPages.slice(0, 5).join(', ')}${skippedPages.length > 5 ? '...' : ''})`
+      : '';
+
     const message = isComplete
       ? (newStats.needsReviewCount > 0
-          ? `Extracted all ${newStats.totalExpected} selected pages. ${newStats.needsReviewCount} page(s) contain OCR or extraction warnings and need review.`
-          : `Extracted selectable text from all ${newStats.totalExpected} selected pages. Review the pages before generating or publishing study material.`)
-      : `Extracted ${newStats.totalExtracted} of ${newStats.totalExpected} pages (${newStats.missingPageNumbers.length} pages remaining).`;
+          ? `Extracted all ${newStats.totalExpected} selected pages. ${newStats.needsReviewCount} page(s) contain OCR or extraction warnings and need review.${skippedNotice}`
+          : `Extracted selectable text from all ${newStats.totalExpected} selected pages. Ready to generate or load plan.${skippedNotice}`)
+      : `Extracted ${newStats.totalExtracted} of ${newStats.totalExpected} pages (${newStats.missingPageNumbers.length} pages remaining).${skippedNotice}`;
 
     const updated = await updateBook({
       ...started,
@@ -138,6 +143,7 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
       nextBatchStart: newStats.missingPageNumbers[0] || null,
       needsReviewCount: newStats.needsReviewCount,
       ocrPageNumbers: result.scannedPages,
+      skippedPageNumbers: result.skippedPages,
       ocrLanguages: result.ocrLanguages,
       reviewPageNumbers: result.pages.filter(p => p.requiresReview).map(p => p.pdfPage),
     });
