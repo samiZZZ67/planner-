@@ -1399,7 +1399,14 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                     yAxisId="tasks"
                     stroke="#16161a"
                     strokeWidth={2}
-                    dot={{ r: 4, fill: '#ff5a2e', stroke: '#0b0b0d', strokeWidth: 1.5 }}
+                    dot={({ cx = 0, cy = 0 }) => (
+                      <path
+                        d={`M ${cx} ${cy - 4} L ${cx + 4} ${cy} L ${cx} ${cy + 4} L ${cx - 4} ${cy} Z`}
+                        fill="#ff5a2e"
+                        stroke="#0b0b0d"
+                        strokeWidth={1.5}
+                      />
+                    )}
                     activeDot={{ r: 5, fill: '#ff5a2e', stroke: '#e7e7ea', strokeWidth: 2 }}
                   />
                 </ComposedChart>

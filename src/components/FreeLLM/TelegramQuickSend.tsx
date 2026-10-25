@@ -226,14 +226,14 @@ export function TelegramQuickSend({
             ? { left: anchor.x + 29, top: anchor.y + 28 }
             : { right: isPhone ? 98 : 110, bottom: isPhone ? 106 : 50 }),
           zIndex: 90,
-          width: 22,
-          height: 22,
+          width: 48,
+          height: 48,
           borderRadius: '50%',
           border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(15, 23, 42, 0.18)'}`,
           background: isDark ? 'rgba(24, 24, 32, 0.85)' : 'rgba(255, 255, 255, 0.85)',
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
-          color: isDark ? 'var(--accent-color)' : '#0284c7',
+          color: 'var(--telegram)',
           boxShadow: isDark ? '0 4px 12px rgba(0,0,0,.45), 0 0 8px var(--accent-glow)' : '0 2px 8px rgba(0,0,0,.12), 0 0 6px var(--accent-glow)',
           fontSize: 11,
           fontWeight: 800,
@@ -243,7 +243,7 @@ export function TelegramQuickSend({
           placeItems: 'center',
           touchAction: 'none',
         }}
-      >T</button>}
+      ><Send size={18} aria-hidden="true" /></button>}
 
       <BriefSchedulingModal
         isOpen={isBriefModalOpen}

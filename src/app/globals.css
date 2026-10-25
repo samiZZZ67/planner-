@@ -769,10 +769,12 @@ button:disabled {
   --bg-fog: #c9c9cc;
   --surface: rgba(255, 255, 255, 0.07);
   --surface-border: rgba(255, 255, 255, 0.16);
+  --surface-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.025'/%3E%3C/svg%3E");
   --ink: #16161a;
   --muted: #6c6c72;
   --divider: rgba(22, 22, 26, 0.14);
   --accent: #ff5a2e;
+  --telegram: #2aabee;
   --bar: #e7e7ea;
   --line-stroke: #16161a;
   --pill-bg: rgba(10, 10, 11, 0.85);
@@ -837,6 +839,7 @@ body {
   color: var(--text-primary);
   background-color: var(--surface) !important;
   background-image:
+    var(--surface-grain),
     radial-gradient(ellipse at 18% 0%, rgba(201,201,204,.12), transparent 44%),
     radial-gradient(ellipse at 100% 100%, rgba(255,90,46,.035), transparent 42%),
     linear-gradient(145deg, rgba(255,255,255,.045), rgba(255,255,255,.012)) !important;
@@ -882,11 +885,11 @@ h1, h2, h3, h4 {
 .v-pill-btn-accent,
 [data-theme="light"] .v-pill-btn-accent {
   color: var(--accent);
-  background: rgba(255,90,46,.08);
+  background: transparent;
   border-color: rgba(255,90,46,.35);
 }
 .v-pill-btn-accent:hover,
-[data-theme="light"] .v-pill-btn-accent:hover { color: var(--accent); background: rgba(255,90,46,.14); }
+[data-theme="light"] .v-pill-btn-accent:hover { color: var(--accent); background: transparent; }
 
 .v-input,
 .g-input,
@@ -933,6 +936,131 @@ input, textarea, select {
 }
 
 ::selection { color: var(--ink); background: rgba(255,90,46,.38); }
+
+/* The appearance switch changes the whole token set, not just the page shell. */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-void: #ececef;
+  --bg-fog: #fafafd;
+  --surface: rgba(255,255,255,.72);
+  --surface-border: rgba(22,22,26,.14);
+  --ink: #16161a;
+  --muted: #6c6c72;
+  --divider: rgba(22,22,26,.14);
+  --pill-bg: rgba(255,255,255,.88);
+  --v-app-bg: var(--bg-void);
+  --v-glass-bg: rgba(255,255,255,.64);
+  --v-glass-bg-card: var(--surface);
+  --v-glass-bg-subtle: rgba(22,22,26,.045);
+  --v-glass-bg-hover: rgba(22,22,26,.075);
+  --v-glass-border: var(--surface-border);
+  --v-glass-border-subtle: rgba(22,22,26,.10);
+  --v-glass-border-bright: rgba(22,22,26,.22);
+  --v-shadow-spatial: 0 24px 70px rgba(22,22,26,.12), inset 0 1px 0 rgba(255,255,255,.9);
+  --v-shadow-card: 0 18px 48px rgba(22,22,26,.08), inset 0 1px 0 rgba(255,255,255,.9);
+  --v-shadow-btn: 0 8px 20px rgba(22,22,26,.08), inset 0 1px 0 rgba(255,255,255,.9);
+  --text-primary: #16161a;
+  --text-secondary: #414148;
+  --text-muted: #6c6c72;
+  --text-dim: #888890;
+  --accent-color: var(--accent);
+  --accent-glow: rgba(255,90,46,.14);
+  --glass-bg: var(--v-glass-bg);
+  --glass-bg-card: var(--v-glass-bg-card);
+  --glass-bg-light: var(--v-glass-bg-subtle);
+  --glass-bg-subtle: var(--v-glass-bg-subtle);
+  --glass-border: var(--v-glass-border);
+  --shadow-glass: var(--v-shadow-card);
+}
+
+[data-theme="light"] body {
+  background-image:
+    radial-gradient(ellipse at 50% -18%, rgba(201,201,204,.75), transparent 52%),
+    radial-gradient(ellipse at 94% 72%, rgba(255,90,46,.055), transparent 34%);
+}
+[data-theme="light"] .vision-room-bg {
+  background-image: radial-gradient(ellipse at 50% 0%, rgba(201,201,204,.55), transparent 55%) !important;
+}
+[data-theme="light"] .v-window,
+[data-theme="light"] .v-card,
+[data-theme="light"] .g-card,
+[data-theme="light"] .v-modal-dialog {
+  background-color: var(--surface) !important;
+  background-image:
+    var(--surface-grain),
+    radial-gradient(ellipse at 18% 0%, rgba(255,255,255,.88), transparent 44%),
+    radial-gradient(ellipse at 100% 100%, rgba(255,90,46,.025), transparent 42%),
+    linear-gradient(145deg, rgba(255,255,255,.42), rgba(255,255,255,.1)) !important;
+}
+[data-theme="light"] .v-pill-btn,
+[data-theme="light"] .g-btn {
+  color: var(--text-primary);
+  background: rgba(255,255,255,.56);
+  border-color: rgba(22,22,26,.16);
+}
+[data-theme="light"] .v-pill-btn:hover,
+[data-theme="light"] .g-btn:hover { background: rgba(255,255,255,.86); }
+[data-theme="light"] .v-input,
+[data-theme="light"] .g-input,
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  color: var(--text-primary) !important;
+  background-color: rgba(255,255,255,.78) !important;
+  border-color: rgba(22,22,26,.18);
+}
+[data-theme="light"] .v-input::placeholder,
+[data-theme="light"] .g-input::placeholder,
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder { color: #77777f; }
+[data-theme="light"] .g-task-row { background: rgba(255,255,255,.62); border-color: rgba(22,22,26,.11); }
+[data-theme="light"] .v-tabs { border-color: rgba(22,22,26,.12); }
+[data-theme="light"] .v-tab-btn { color: #6c6c72; }
+[data-theme="light"] .v-tab-btn.active { color: #16161a; }
+[data-theme="light"] .v-dock { background: rgba(255,255,255,.64); }
+[data-theme="light"] .v-modal-backdrop { background: rgba(22,22,26,.28); }
+[data-theme="light"] [style*="color: #ffffff"],
+[data-theme="light"] [style*="color: '#ffffff'"],
+[data-theme="light"] [style*="color: #fff"],
+[data-theme="light"] [style*="color: '#fff'"],
+[data-theme="light"] [style*="color: rgb(255, 255, 255)"],
+[data-theme="light"] .text-white { color: #16161a !important; }
+[data-theme="light"] [style*="background: '#000"],
+[data-theme="light"] [style*="background: '#0"],
+[data-theme="light"] [style*="background: '#1"],
+[data-theme="light"] [style*="background: rgb(0, 0, 0)"],
+[data-theme="light"] [style*="background: #000"] { background-color: rgba(255,255,255,.84) !important; }
+
+/* Reading and generated media stay visual; the UI exposes no playback controls. */
+video[controls] { display: none !important; }
+button[title*="voice playback" i],
+button[title*="voice reading" i],
+button[title*="read aloud" i],
+button[title*="speak message with voice" i],
+button[title*="speak using system browser voice" i],
+button[title*="test voice" i],
+button[title*="stop speech" i],
+button[title*="switch to system browser voice" i],
+button[title*="speech playback" i],
+button[aria-label*="audio playback" i],
+button[aria-label*="control audio" i],
+button[aria-label*="voice playback" i],
+button[aria-label*="control voice preview" i],
+button[aria-label*="read aloud" i],
+button[aria-label*="neural voice" i] { display: none !important; }
+
+/* Keep circular quick actions icon-only and give Telegram its single blue marker. */
+.freellm-telegram-trigger {
+  width: 48px !important;
+  height: 48px !important;
+  color: var(--telegram) !important;
+  background: rgba(255,255,255,.10) !important;
+  border: 1px solid var(--surface-border) !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  font-size: 0 !important;
+}
+[data-theme="light"] .freellm-telegram-trigger { background: rgba(255,255,255,.72) !important; }
 
 @media (max-width: 640px) {
   .v-window, .v-card, .g-card { border-radius: 24px !important; }

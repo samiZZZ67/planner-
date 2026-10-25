@@ -3060,6 +3060,7 @@ export function FreeLLMAssistant({
                         <>
                           <button
                             type="button"
+                            aria-label="Control voice preview playback"
                             onClick={speechState.status === 'playing' ? pauseSpeechPlayback : resumeSpeechPlayback}
                             style={{
                               background: 'rgba(168, 85, 247, 0.2)',
@@ -3079,6 +3080,7 @@ export function FreeLLMAssistant({
                           </button>
                           <button
                             type="button"
+                            aria-label="Stop voice preview playback"
                             onClick={stopSpeechPlayback}
                             style={{
                               background: 'transparent',
@@ -3097,6 +3099,7 @@ export function FreeLLMAssistant({
                       ) : (
                         <button
                           type="button"
+                          aria-label="Test voice playback"
                           onClick={() => void playSpeech('Hello! This is a preview of your NightPlanner neural voice assistant.', 'voice-settings-test')}
                           disabled={speechState.status === 'loading'}
                           style={{
@@ -4234,7 +4237,6 @@ export function FreeLLMAssistant({
                   >
                     <video
                       src={msg.generatedMedia.url}
-                      controls
                       playsInline
                       style={{
                         width: '100%',

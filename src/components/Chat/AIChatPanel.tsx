@@ -2415,6 +2415,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                   {isSpeakingMessageId === 'sams-ai-voice-test' || isPausedMessageId === 'sams-ai-voice-test' ? (
                     <button
                       type="button"
+                      aria-label="Control audio playback"
                       onClick={() => {
                         if (chatAudioRef.current) {
                           if (chatAudioRef.current.paused) {
@@ -2447,6 +2448,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                   <button
                     type="button"
                     onClick={testVoiceAudio}
+                    aria-label="Test audio playback"
                     disabled={speechLoadingId === 'sams-ai-voice-test' || isTestingVoice}
                     style={{
                       background: isTestingVoice ? 'rgba(168, 85, 247, 0.3)' : 'linear-gradient(135deg, #a855f7, #6366f1)',
@@ -3006,6 +3008,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                           <button
                             type="button"
                             onClick={() => handleSpeakMessage(msg)}
+                            aria-label="Retry neural voice playback"
                             title="Stop voice playback"
                             style={{
                               background: 'rgba(239, 68, 68, 0.15)',
@@ -3260,6 +3263,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                             <button
                               type="button"
                               onClick={() => handleSpeakMessage(msg, true)}
+                              aria-label="Use browser voice playback"
                               style={{
                                 background: 'rgba(255, 255, 255, 0.1)',
                                 border: '1px solid rgba(255, 255, 255, 0.2)',
