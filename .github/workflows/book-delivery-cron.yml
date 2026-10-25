@@ -1,0 +1,222 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NightPlanner — Automated Book Reading Delivery & Telegram Brief Scheduler
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# PURPOSE
+#   Reliably trigger the NightPlanner scheduled delivery system so that daily
+#   book-reading sections and morning/evening Telegram briefs are sent on time,
+#   even when the Render free-tier container is sleeping.
+#
+# HOW IT WORKS
+#   1. A lightweight GET to /api/health wakes the Render service from sleep.
+#   2. A POST to /api/cron/books with a Bearer token triggers the authoritative
+#      `runScheduledDeliveryCycle()`, which atomically processes:
+#        • Overdue book publishing jobs  → Telegram delivery
+#        • Scheduled custom messages     → Telegram delivery
+#        • Morning & evening briefs      → Telegram delivery
+#        • Background Telegram updates   → Poll/quiz processing
+#   3. The same cycle is idempotent: the application's `isCycleRunning` mutex,
+#      row-level PostgreSQL claiming, and per-assignment delivery records all
+#      prevent duplicates — even if the internal node-cron fires concurrently.
+#
+# REQUIRED GITHUB CONFIGURATION
+#   Secrets  (Settings → Secrets and variables → Actions → Secrets):
+#     BOOKS_CRON_SECRET  — Same value as the Render env var BOOKS_CRON_SECRET.
+#
+#   Variables (Settings → Secrets and variables → Actions → Variables):
+#     MOON_APP_URL       — The full Render app URL, e.g. https://your-app.onrender.com
+#                          (no trailing slash).
+#
+# REQUIRED RENDER CONFIGURATION
+#   Environment Variables:
+#     BOOKS_CRON_SECRET  — A secure random string (≥ 32 chars). Must match
+#                          the GitHub Secret above.
+#     DATABASE_URL       — Neon PostgreSQL connection string (already set).
+#     TELEGRAM_BOT_TOKEN — Telegram Bot API token (already set).
+#     TELEGRAM_CHAT_ID   — Target Telegram channel (already set).
+#
+# SCHEDULE NOTES
+#   • GitHub Actions cron uses UTC. Africa/Addis_Ababa = UTC+3.
+#   • The app itself computes all delivery timestamps in UTC internally and
+#     compares against `Date.now()`, so UTC triggers are correct.
+#   • Runs every 15 minutes to stay within GitHub's free-tier budget (~2,880
+#     runs/month) while catching overdue jobs promptly.
+#   • GitHub may delay scheduled runs by 3–15 minutes under heavy load.
+#     The 15-minute interval provides overlapping coverage.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: "📚 Book Delivery & Brief Scheduler"
+
+on:
+  schedule:
+    # ── Every 15 minutes, 24/7 ──────────────────────────────────────────────
+    # This ensures that even with GitHub's occasional schedule delays (up to
+    # ~15 min), no delivery window is missed for more than ~30 minutes.
+    - cron: "*/15 * * * *"
+
+  workflow_dispatch:
+    # Manual trigger from GitHub UI or API — useful for testing and on-demand
+    # delivery of overdue jobs.
+    inputs:
+      dry_run:
+        description: "Dry run: only wake the service and check health, skip delivery trigger"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+jobs:
+  trigger-delivery:
+    name: "🚀 Trigger Scheduled Delivery Cycle"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # ────────────────────────────────────────────────────────────────────────
+      # 0. Validate configuration
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "🔑 Validate required configuration"
+        run: |
+          errors=0
+
+          if [ -z "${{ vars.MOON_APP_URL }}" ]; then
+            echo "::error::Repository variable MOON_APP_URL is not set. Go to Settings → Secrets and variables → Actions → Variables and add it (e.g. https://your-app.onrender.com)."
+            errors=$((errors + 1))
+          fi
+
+          if [ -z "${{ secrets.BOOKS_CRON_SECRET }}" ]; then
+            echo "::error::Repository secret BOOKS_CRON_SECRET is not set. Go to Settings → Secrets and variables → Actions → Secrets and add it."
+            errors=$((errors + 1))
+          fi
+
+          if [ $errors -gt 0 ]; then
+            echo "::error::$errors required configuration value(s) missing. See errors above."
+            exit 1
+          fi
+
+          # Sanitize URL: strip trailing slashes
+          APP_URL="${{ vars.MOON_APP_URL }}"
+          APP_URL="${APP_URL%/}"
+          echo "APP_URL=${APP_URL}" >> "$GITHUB_ENV"
+          echo "✅ Configuration validated."
+          echo "   App URL: ${APP_URL}"
+          echo "   Trigger: ${{ github.event_name }}"
+          echo "   UTC time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "   EAT time: $(TZ='Africa/Addis_Ababa' date '+%Y-%m-%d %H:%M:%S EAT')"
+
+      # ────────────────────────────────────────────────────────────────────────
+      # 1. Wake the Render service from cold sleep
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "☀️ Wake Render service (health check)"
+        id: health
+        run: |
+          echo "Pinging ${APP_URL}/api/health to wake the service..."
+
+          HTTP_CODE=$(curl -s -o /tmp/health_response.json -w "%{http_code}" \
+            --max-time 120 \
+            --retry 2 \
+            --retry-delay 10 \
+            --retry-max-time 180 \
+            "${APP_URL}/api/health" 2>/dev/null) || HTTP_CODE="000"
+
+          echo "Health check HTTP status: ${HTTP_CODE}"
+
+          if [ -f /tmp/health_response.json ]; then
+            echo "Response body:"
+            cat /tmp/health_response.json | head -c 2000
+            echo ""
+          fi
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Service is awake and healthy."
+            echo "healthy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Health check returned HTTP ${HTTP_CODE}. The service may be starting up. Will still attempt delivery trigger."
+            echo "healthy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Give Render an extra moment to fully initialize the scheduler
+          # after cold start (the app runs a 3-second startup sweep).
+          echo "Waiting 8 seconds for scheduler initialization..."
+          sleep 8
+
+      # ────────────────────────────────────────────────────────────────────────
+      # 2. Trigger the delivery cycle
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "📬 Trigger delivery cycle (POST /api/cron/books)"
+        id: deliver
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          echo "Triggering delivery cycle at ${APP_URL}/api/cron/books..."
+          echo "UTC: $(date -u '+%Y-%m-%d %H:%M:%S')"
+          echo "EAT: $(TZ='Africa/Addis_Ababa' date '+%Y-%m-%d %H:%M:%S')"
+          echo ""
+
+          HTTP_CODE=$(curl -s -o /tmp/cron_response.json -w "%{http_code}" \
+            --max-time 300 \
+            --retry 1 \
+            --retry-delay 15 \
+            --retry-max-time 330 \
+            -X POST \
+            -H "Authorization: Bearer ${{ secrets.BOOKS_CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            "${APP_URL}/api/cron/books" 2>/dev/null) || HTTP_CODE="000"
+
+          echo "Delivery trigger HTTP status: ${HTTP_CODE}"
+          echo ""
+
+          if [ -f /tmp/cron_response.json ]; then
+            RESPONSE=$(cat /tmp/cron_response.json)
+            echo "Response:"
+            echo "$RESPONSE" | head -c 4000
+            echo ""
+          else
+            RESPONSE="{}"
+          fi
+
+          # Parse key metrics from the JSON response
+          BOOK_CLAIMED=$(echo "$RESPONSE" | jq -r '.bookJobs.claimed // 0' 2>/dev/null || echo "?")
+          BOOK_COMPLETED=$(echo "$RESPONSE" | jq -r '.bookJobs.completed // 0' 2>/dev/null || echo "?")
+          BOOK_FAILED=$(echo "$RESPONSE" | jq -r '.bookJobs.failed // 0' 2>/dev/null || echo "?")
+          MSG_CLAIMED=$(echo "$RESPONSE" | jq -r '.scheduledMessages.claimed // 0' 2>/dev/null || echo "?")
+          MSG_COMPLETED=$(echo "$RESPONSE" | jq -r '.scheduledMessages.completed // 0' 2>/dev/null || echo "?")
+          BRIEFS_COMPLETED=$(echo "$RESPONSE" | jq -r '.briefs.completed // 0' 2>/dev/null || echo "?")
+          BRIEFS_FAILED=$(echo "$RESPONSE" | jq -r '.briefs.failed // 0' 2>/dev/null || echo "?")
+          DURATION=$(echo "$RESPONSE" | jq -r '.durationMs // 0' 2>/dev/null || echo "?")
+          AUTO_STATUS=$(echo "$RESPONSE" | jq -r '.automaticPreparation.status // "idle"' 2>/dev/null || echo "?")
+
+          echo ""
+          echo "═══════════════════════════════════════════════════"
+          echo "  📊 DELIVERY CYCLE SUMMARY"
+          echo "═══════════════════════════════════════════════════"
+          echo "  📚 Book Jobs:     ${BOOK_CLAIMED} claimed → ${BOOK_COMPLETED} completed, ${BOOK_FAILED} failed"
+          echo "  ✉️  Messages:      ${MSG_CLAIMED} claimed → ${MSG_COMPLETED} completed"
+          echo "  🌅 Briefs:        ${BRIEFS_COMPLETED} completed, ${BRIEFS_FAILED} failed"
+          echo "  📖 Auto-Prepare:  ${AUTO_STATUS}"
+          echo "  ⏱️  Duration:      ${DURATION}ms"
+          echo "═══════════════════════════════════════════════════"
+          echo ""
+
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ Delivery cycle completed successfully."
+          elif [ "$HTTP_CODE" -eq 401 ]; then
+            echo "::error::Authentication failed (HTTP 401). Verify that BOOKS_CRON_SECRET matches between GitHub Secrets and Render environment variables."
+            exit 1
+          elif [ "$HTTP_CODE" -eq 000 ]; then
+            echo "::error::Connection failed — the Render service did not respond within the timeout. It may be experiencing a cold start or outage."
+            exit 1
+          else
+            echo "::warning::Delivery trigger returned HTTP ${HTTP_CODE}. Check the response above for details."
+          fi
+
+      # ────────────────────────────────────────────────────────────────────────
+      # 3. Summary annotation for dry runs
+      # ────────────────────────────────────────────────────────────────────────
+      - name: "📋 Dry run summary"
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "ℹ️ Dry run mode: skipped delivery trigger."
+          echo "   Service health: ${{ steps.health.outputs.healthy }}"
+          echo "   To run a real delivery, trigger the workflow without dry_run."
