@@ -109,6 +109,10 @@ describe('Morning and Evening Brief Scheduler Suite', () => {
 
     it('prevents duplicate delivery when scheduled sweep runs after Send Now', async () => {
       const userId = `user_dup_check_${Date.now()}`;
+      await saveBriefConfig({
+        userId,
+        eveningTime: '23:59', // Ensure evening brief is not due during test
+      });
       const sendSpy = vi.spyOn(telegramModule, 'sendTelegramTextToChannel').mockResolvedValue({
         channel: '@SamSpac',
         messageId: 1002,
@@ -120,7 +124,7 @@ describe('Morning and Evening Brief Scheduler Suite', () => {
 
       // Now background scheduler runs cycle specifically for this user
       await processDueBriefs(Date.now(), userId);
-      // The morning brief for userId today was already completed, and evening brief is not due yet (20:00 > current time)
+      // The morning brief for userId today was already completed
       expect(sendSpy).not.toHaveBeenCalled();
     });
   });
@@ -133,6 +137,7 @@ describe('Morning and Evening Brief Scheduler Suite', () => {
         userId,
         skipNextMorningDate: today,
         morningTime: '00:01', // Force due
+        eveningTime: '23:59', // Ensure evening brief is not due during test
       });
 
       const sendSpy = vi.spyOn(telegramModule, 'sendTelegramTextToChannel');

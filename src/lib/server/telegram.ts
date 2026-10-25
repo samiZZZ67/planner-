@@ -750,7 +750,7 @@ export function formatReadingAssignment(
 
   // 2. Summary (main ideas and key concepts)
   const section2 = [
-    `\nStudy summary\n${sanitizeUtf8(notes.summary)}\n\nKey concepts\n${notes.keyConcepts.map(item => `• ${sanitizeUtf8(item)}`).join('\n')}`,
+    `\nStudy summary\n${sanitizeUtf8(notes.summary)}\n\nKey concepts\n${(notes.keyConcepts || []).map(item => `• ${sanitizeUtf8(item)}`).join('\n')}`,
     ...(notes.definitions?.length ? [`Definitions\n${notes.definitions.map(item => `• ${sanitizeUtf8(item.term)} (PDF p. ${item.pdfPage}): ${sanitizeUtf8(item.explanation)}`).join('\n')}`] : []),
   ];
 
@@ -792,14 +792,7 @@ export function formatReadingAssignment(
     section6.push(`\n🎙️ <b>Related Podcasts:</b>\n${podcastsFormatted}`);
   }
 
-  // 7. Quiz (Dedicated website practice link only; never output questions, answers, or polls directly to Telegram)
-  const section7: string[] = [];
-  const appOrigin = getAppOrigin();
-  const quizPracticeUrl = `${appOrigin}/quiz?assignmentId=${encodeURIComponent(assignment.id)}`;
-  const dayLabel = assignment.dayNumber ? `Day ${assignment.dayNumber}` : 'Online';
-
-  section7.push(`\n🎯 <b>Interactive Practice Quiz:</b>\n<a href="${quizPracticeUrl}">Take Today's Reading Quiz (${dayLabel})</a>`);
-
+  // Quizzes remain strictly on the website (/quiz) — never deliver quiz questions, polls, or links to Telegram
   const chunks: string[] = [
     ...section1,
     ...section2,
@@ -808,7 +801,6 @@ export function formatReadingAssignment(
     ...section4,
     ...section5,
     ...section6,
-    ...section7,
     ...(notes.notes ? [`\nStudy notes\n${sanitizeUtf8(notes.notes)}`] : []),
   ];
   return chunks.flatMap(chunk => splitTelegramText(sanitizeUtf8(chunk)));
@@ -904,14 +896,7 @@ export function formatLoadPlanPages(
     podcastsChunks.push(`\n🎙️ <b>Related Podcasts:</b>\n${podcastsFormatted}`);
   }
 
-  // 7. Quiz (Dedicated website practice link only; never output questions, answers, or polls directly to Telegram)
-  const quizChunks: string[] = [];
-  const appOrigin = getAppOrigin();
-  const quizPracticeUrl = `${appOrigin}/quiz?assignmentId=${encodeURIComponent(assignment.id)}`;
-  const dayLabel = assignment.dayNumber ? `Day ${assignment.dayNumber}` : 'Online';
-
-  quizChunks.push(`\n🎯 <b>Interactive Practice Quiz:</b>\n<a href="${quizPracticeUrl}">Take Today's Reading Quiz (${dayLabel})</a>`);
-
+  // Quizzes remain strictly on the website (/quiz) — never deliver quiz questions, polls, or links to Telegram
   const continuity = previousAssignment?.studyNotes
     ? `\nConnection to Day ${previousAssignment.dayNumber}:\nYesterday: ${sanitizeUtf8(previousAssignment.studyNotes.summary)}`
     : '';
@@ -924,7 +909,6 @@ export function formatLoadPlanPages(
     ...(quotesChunks.length ? quotesChunks : []),
     ...(videosChunks.length ? videosChunks : []),
     ...(podcastsChunks.length ? podcastsChunks : []),
-    ...(quizChunks.length ? quizChunks : []),
     ...(continuity ? [continuity] : []),
   ];
 

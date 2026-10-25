@@ -20,6 +20,7 @@ import { searchYouTubeVideos, type YouTubeVideoItem } from './youtube';
 import { searchPodcastEpisodes, type PodcastItem } from './podcastIndex';
 import { truncateUnicode, sanitizeUtf8 } from '../telegramFormatter';
 import { deduplicateBy } from './cache';
+import { distributeOptionsBalanced } from '../books/quizShuffle';
 
 export interface EnrichedRealLifeExample {
   title: string;
@@ -87,26 +88,39 @@ export function generateReadingQuiz(
   const targetCount = pageSpan >= 4 ? Math.min(10, Math.max(4, Math.floor(pageSpan * 0.8))) : 2;
   const questions: EnrichedQuizQuestion[] = [];
 
+  // Extract diverse sentences from across readable pages for context-relevant distractors
+  const allSentences: string[] = [];
+  for (const p of readablePages) {
+    const sList = p.text
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(s => s.length >= 35 && s.length <= 150 && !/^\d+$/.test(s));
+    allSentences.push(...sList);
+  }
+
   // 1. Incorporate questions from validated study notes if available
   if (studyNotes?.questions?.length) {
     for (let i = 0; i < studyNotes.questions.length; i++) {
       const q = studyNotes.questions[i];
       const correctAns = truncateUnicode(q.answer, 90);
-      const distractors = [
+
+      const candidateDistractors = [
+        allSentences[(i * 2 + 1) % Math.max(1, allSentences.length)],
+        allSentences[(i * 2 + 3) % Math.max(1, allSentences.length)],
         `Assuming the concepts apply passively without deliberate application.`,
         `Relying entirely on short superficial reviews rather than sustained practice.`,
         `Deferring structured execution in favor of unstructured multi-tasking.`,
-      ].map(d => truncateUnicode(d, 90));
+      ]
+        .filter((d): d is string => Boolean(d) && d !== correctAns)
+        .map(d => truncateUnicode(d, 90));
 
-      const options = [correctAns, ...distractors.slice(0, 3)].sort(() => 0.5 - ((i * 3 + 1) % 5));
-      const correctOptionIndex = options.indexOf(correctAns);
-
+      const { options, correctIndex } = distributeOptionsBalanced(correctAns, candidateDistractors, i);
       const difficulty: 'easy' | 'medium' | 'hard' = i === 0 ? 'easy' : i === 1 ? 'medium' : 'hard';
 
       questions.push({
         question: truncateUnicode(q.question, 280),
         options,
-        correctOptionIndex: Math.max(0, correctOptionIndex),
+        correctOptionIndex: correctIndex,
         explanation: `According to ${book.title} (PDF p. ${q.pdfPages?.join(', ') || assignment.startPdfPage}): ${q.answer}`,
         difficulty,
         sourcePdfPages: q.pdfPages?.length ? q.pdfPages : [assignment.startPdfPage],
@@ -119,7 +133,10 @@ export function generateReadingQuiz(
   // 2. Generate grounded questions from key concepts and page paragraphs if more are needed
   if (questions.length < targetCount && readablePages.length > 0) {
     for (let i = 0; i < readablePages.length && questions.length < targetCount; i++) {
-      const page = readablePages[i];
+      // Sample evenly across the whole range of readable pages
+      const pageIdx = Math.floor((i * readablePages.length) / Math.max(1, targetCount - questions.length));
+      const page = readablePages[Math.min(pageIdx, readablePages.length - 1)];
+
       const sentences = page.text
         .split(/(?<=[.!?])\s+/)
         .map(s => s.trim())
@@ -127,7 +144,7 @@ export function generateReadingQuiz(
 
       if (sentences.length === 0) continue;
 
-      const sentence = sentences[Math.min(i, sentences.length - 1)];
+      const sentence = sentences[i % sentences.length];
       const difficulty: 'easy' | 'medium' | 'hard' =
         questions.length % 3 === 0 ? 'easy' : questions.length % 3 === 1 ? 'medium' : 'hard';
 
@@ -136,19 +153,23 @@ export function generateReadingQuiz(
 
       const questionText = `Regarding the discussion on PDF page ${page.pdfPage}, which statement accurately reflects the author's analysis?`;
       const correctOption = truncateUnicode(sentence, 95);
-      const distractors = [
+
+      const candidateDistractors = [
+        allSentences[(i * 3 + 1) % Math.max(1, allSentences.length)],
+        allSentences[(i * 3 + 2) % Math.max(1, allSentences.length)],
         `The author argues against the relevance of ${leadKey} in practical work.`,
         `The passage states that rapid surface-level scanning produces superior results.`,
         `The text dismisses the distinction between structured focus and casual review.`,
-      ].map(d => truncateUnicode(d, 95));
+      ]
+        .filter((d): d is string => Boolean(d) && d !== correctOption)
+        .map(d => truncateUnicode(d, 95));
 
-      const options = [correctOption, ...distractors].sort(() => 0.5 - ((questions.length * 2 + 1) % 5));
-      const correctOptionIndex = options.indexOf(correctOption);
+      const { options, correctIndex } = distributeOptionsBalanced(correctOption, candidateDistractors, questions.length);
 
       questions.push({
         question: questionText,
         options,
-        correctOptionIndex: Math.max(0, correctOptionIndex),
+        correctOptionIndex: correctIndex,
         explanation: `Directly supported by PDF page ${page.pdfPage}: "${sentence}"`,
         difficulty,
         sourcePdfPages: [page.pdfPage],

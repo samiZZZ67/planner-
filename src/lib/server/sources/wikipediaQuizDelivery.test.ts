@@ -330,24 +330,22 @@ describe('Wikipedia Research, Concept Grounding, Deduplication & Telegram Quiz L
       const messageParts = formatReadingAssignment(book, day1Assignment, day1Pages, undefined, enrichment);
       const joined = messageParts.join('\n');
 
-      // MUST contain interactive practice quiz website link
-      expect(joined).toContain('🎯 <b>Interactive Practice Quiz:</b>');
-      expect(joined).toContain(`/quiz?assignmentId=${encodeURIComponent(day1Assignment.id)}`);
-      expect(joined).toContain("Take Today's Reading Quiz (Day 1)");
-
-      // MUST NEVER leak quiz questions, options, or answers directly into Telegram message
+      // MUST NEVER leak quiz links, questions, options, or answers into Telegram message
+      expect(joined).not.toContain('🎯 <b>Interactive Practice Quiz:</b>');
+      expect(joined).not.toContain('/quiz?assignmentId=');
+      expect(joined).not.toContain("Take Today's Reading Quiz");
       expect(joined).not.toContain('What is the primary function of System 1?');
       expect(joined).not.toContain('To operate quickly and automatically');
       expect(joined).not.toContain('<b>Answer:</b>');
       expect(joined).not.toContain('Reading Quiz:');
     });
 
-    it('formats Load Plan pages with dedicated quiz link and zero question texts', () => {
+    it('formats Load Plan pages with zero quiz links and zero question texts', () => {
       const loadParts = formatLoadPlanPages(book, day1Assignment, day1Pages);
       const joined = loadParts.join('\n');
 
-      expect(joined).toContain('🎯 <b>Interactive Practice Quiz:</b>');
-      expect(joined).toContain(`/quiz?assignmentId=${encodeURIComponent(day1Assignment.id)}`);
+      expect(joined).not.toContain('🎯 <b>Interactive Practice Quiz:</b>');
+      expect(joined).not.toContain('/quiz?assignmentId=');
       expect(joined).not.toContain('Reading Quiz:');
     });
 

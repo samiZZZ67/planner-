@@ -26,6 +26,7 @@ import { sanitizeUtf8, truncateUnicode } from '../telegramFormatter';
 import { searchWikipedia, getWikipediaPage, getBiographicalFacts } from '../sources/wikipedia';
 import { deduplicateBy } from '../sources/cache';
 import { updateBookAssignment } from '../bookAssignments';
+import { distributeOptionsBalanced, shuffleOptionsWithKey } from './quizShuffle';
 
 function parseJsonSafe<T>(content: string): T | null {
   const start = content.indexOf('{');
@@ -382,15 +383,19 @@ Rules:
             const qText = String(item.question || '').trim();
             const opts = Array.isArray(item.options) ? item.options.map((o: any) => String(o || '').trim()).filter(Boolean) : [];
             if (qText && opts.length >= 3) {
-              const correctIdx = Number.isInteger(Number(item.correctOptionIndex))
+              const rawCorrectIdx = Number.isInteger(Number(item.correctOptionIndex))
                 ? Math.max(0, Math.min(Number(item.correctOptionIndex), opts.length - 1))
                 : 0;
+
+              const rawOptions = opts.slice(0, 4).map((o: string) => sanitizeUtf8(truncateUnicode(o, 95)));
+              // Unbiased shuffle keeping correct option index perfectly synchronized
+              const { options: syncedOptions, correctIndex: syncedCorrectIdx } = shuffleOptionsWithKey(rawOptions, rawCorrectIdx);
 
               chunkQuestions.push({
                 id: `q_${allQuestions.length + chunkQuestions.length}`,
                 question: sanitizeUtf8(truncateUnicode(qText, 280)),
-                options: opts.slice(0, 4).map((o: string) => sanitizeUtf8(truncateUnicode(o, 95))),
-                correctOptionIndex: correctIdx,
+                options: syncedOptions,
+                correctOptionIndex: syncedCorrectIdx,
                 explanation: sanitizeUtf8(String(item.explanation || `Supported by PDF pages ${chunkStartPage}–${chunkEndPage} of ${book.title}.`).trim()),
                 conceptTested: sanitizeUtf8(String(item.conceptTested || keyConcepts[0] || 'Core Principle').trim()),
                 difficulty: item.difficulty === 'hard' ? 'hard' : item.difficulty === 'medium' ? 'medium' : 'easy',
@@ -436,8 +441,21 @@ function generateDeterministicChunkQuestions(
   const result: QuizQuestionItem[] = [];
   const primaryConcept = keyConcepts[0] || book.title;
 
+  // Gather sentences from across chunk pages to form diverse, context-rich distractors
+  const allSentences: string[] = [];
+  for (const cp of chunkPages) {
+    const sList = cp.text
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(s => s.length >= 35 && s.length <= 150 && !/^\d+$/.test(s));
+    allSentences.push(...sList);
+  }
+
   for (let i = 0; i < needed; i++) {
-    const page = chunkPages[i % chunkPages.length];
+    // Sample evenly across the chunk pages
+    const pageIdx = Math.floor((i * chunkPages.length) / Math.max(1, needed));
+    const page = chunkPages[Math.min(pageIdx, chunkPages.length - 1)];
+
     const sentences = page.text
       .split(/(?<=[.!?])\s+/)
       .map(s => s.trim())
@@ -457,20 +475,23 @@ function generateDeterministicChunkQuestions(
     }
 
     const correctOption = truncateUnicode(coreSentence, 95);
-    const distractors = [
-      truncateUnicode(`Passive scanning of material without deliberate concentration.`, 95),
-      truncateUnicode(`Discarding structured methodology in favor of unstructured review.`, 95),
-      truncateUnicode(`Treating superficial familiarity as complete conceptual mastery.`, 95),
-    ];
+    const candidateDistractors = [
+      allSentences[(i * 2 + 1) % Math.max(1, allSentences.length)],
+      allSentences[(i * 2 + 3) % Math.max(1, allSentences.length)],
+      `Passive scanning of material without deliberate concentration.`,
+      `Discarding structured methodology in favor of unstructured review.`,
+      `Treating superficial familiarity as complete conceptual mastery.`,
+    ]
+      .filter((d): d is string => Boolean(d) && d !== correctOption)
+      .map(d => truncateUnicode(d, 95));
 
-    const options = [correctOption, ...distractors].sort(() => 0.5 - ((startingIndex + i * 2 + 1) % 5));
-    const correctOptionIndex = options.indexOf(correctOption);
+    const { options, correctIndex } = distributeOptionsBalanced(correctOption, candidateDistractors, startingIndex + i);
 
     result.push({
       id: `q_${startingIndex + i}`,
       question: sanitizeUtf8(truncateUnicode(questionText, 280)),
       options: options.map(o => sanitizeUtf8(o)),
-      correctOptionIndex: Math.max(0, correctOptionIndex),
+      correctOptionIndex: correctIndex,
       explanation: sanitizeUtf8(`Directly supported by PDF page ${page.pdfPage} of ${book.title}: "${coreSentence}"`),
       conceptTested: primaryConcept,
       difficulty,

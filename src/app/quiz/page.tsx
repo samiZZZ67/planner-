@@ -17,6 +17,7 @@ import {
   BookMarked,
   FileText,
   Sparkles,
+  X,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -235,6 +236,17 @@ function QuizContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleExitQuiz = () => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('assignmentId');
+      url.searchParams.delete('quiz');
+      url.searchParams.delete('sessionId');
+      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+      window.location.href = '/?tab=books';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0a0b12] text-white flex flex-col items-center justify-center p-6">
@@ -268,12 +280,13 @@ function QuizContent() {
             >
               Try Reloading
             </button>
-            <Link
-              href="/"
+            <button
+              type="button"
+              onClick={handleExitQuiz}
               className="w-full py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-medium transition text-center"
             >
-              Back to Home
-            </Link>
+              Back to Book Planner
+            </button>
           </div>
         </div>
       </div>
@@ -285,13 +298,14 @@ function QuizContent() {
       {/* Top Header */}
       <header className="sticky top-0 z-40 bg-[#0e101b]/90 backdrop-blur-md border-b border-gray-800 px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <Link
-            href="/"
+          <button
+            type="button"
+            onClick={handleExitQuiz}
             className="flex items-center gap-2 text-xs font-semibold text-gray-400 hover:text-white transition py-1 px-2 rounded-lg hover:bg-gray-800/60"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>NightPlanner</span>
-          </Link>
+          </button>
 
           <div className="flex items-center gap-2">
             <span className="text-xs px-2.5 py-1 rounded-full bg-purple-900/40 border border-purple-500/30 text-purple-300 font-medium">
@@ -300,6 +314,15 @@ function QuizContent() {
             <span className="text-xs px-2.5 py-1 rounded-full bg-blue-900/40 border border-blue-500/30 text-blue-300 font-medium">
               PDF pp. {assignment.startPdfPage}–{assignment.endPdfPage}
             </span>
+            <button
+              type="button"
+              onClick={handleExitQuiz}
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-gray-400 hover:text-white transition ml-1"
+              title="Close Quiz (X)"
+              aria-label="Close Quiz"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </header>

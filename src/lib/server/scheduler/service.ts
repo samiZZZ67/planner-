@@ -128,27 +128,7 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
           telegramMessageIds = loadPlanResult.telegramMessageIds;
         }
 
-        // Prepare interactive quiz session for website practice (without sending polls to Telegram)
-        try {
-          const quizSettings = await getBookQuizSettings(job.userId);
-          if (quizSettings.enabled) {
-            const targetChatId = envConfig().chatId;
-            const quizSession = await startQuizSessionForAssignment(
-              job.userId,
-              book,
-              assignment,
-              pages,
-              targetChatId,
-              { skipFirstExcerpt: true, skipTelegramMessages: true }
-            );
-            if (quizSession) {
-              console.log(`[Scheduler] 🎯 Interactive Book Quiz session prepared for Day ${assignment.dayNumber} (${quizSession.totalQuestions} questions across ${quizSession.totalSections} section(s)).`);
-            }
-          }
-        } catch (quizErr: any) {
-          console.warn(`[Scheduler] ⚠️ Interactive Quiz session preparation warning:`, quizErr?.message || quizErr);
-        }
-
+        // Quizzes remain strictly on the website (/quiz) — never dispatched to Telegram
         const isEntirelyBlank = pages.every(p => !p.text?.trim() || p.method === 'empty');
 
         // Mark assignment completed and update deliveryStatus

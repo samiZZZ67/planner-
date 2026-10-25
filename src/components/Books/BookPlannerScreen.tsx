@@ -109,11 +109,14 @@ export function BookPlannerScreen({ initialQuizAssignmentId }: BookPlannerScreen
   const [baModalTab, setBaModalTab] = useState<'overview' | 'pages' | 'schedule' | 'quiz'>('overview');
   const [targetQuizAssignmentId, setTargetQuizAssignmentId] = useState<string | null>(initialQuizAssignmentId || null);
   const [reviewModalBook, setReviewModalBook] = useState<BookRecord | null>(null);
+  const hasAutoLaunchedRef = useRef(false);
 
   // Auto-launch quiz modal when accessed via deep link or Telegram quiz parameter
   useEffect(() => {
+    if (hasAutoLaunchedRef.current) return;
     const quizId = targetQuizAssignmentId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('quiz') : null);
     if (!quizId) return;
+    hasAutoLaunchedRef.current = true;
 
     let cancelled = false;
     apiFetch(`/api/books/assignment-lookup?assignmentId=${encodeURIComponent(quizId)}`)
@@ -213,18 +216,16 @@ export function BookPlannerScreen({ initialQuizAssignmentId }: BookPlannerScreen
       if (!response.ok) throw new Error(data.error || 'Could not load books.');
       const loadedBooks: BookRecord[] = data.books || [];
       setBooks(loadedBooks);
-      // Fetch assignments for active/completed books so the countdown timer immediately resolves the next delivery
+      // Fetch assignments for all loaded books so schedules resolve immediately and stay separated
       for (const b of loadedBooks) {
-        if (b.extractionStatus === 'completed' || b.automationStatus === 'ready') {
-          void apiFetch(`/api/books/${encodeURIComponent(b.id)}/assignments`)
-            .then(res => res.json())
-            .then(aData => {
-              if (aData.assignments) {
-                setAssignmentsByBook(current => ({ ...current, [b.id]: aData.assignments }));
-              }
-            })
-            .catch(() => {});
-        }
+        void apiFetch(`/api/books/${encodeURIComponent(b.id)}/assignments`)
+          .then(res => res.json())
+          .then(aData => {
+            if (aData.assignments) {
+              setAssignmentsByBook(current => ({ ...current, [b.id]: aData.assignments }));
+            }
+          })
+          .catch(() => {});
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load books.');
@@ -1007,6 +1008,13 @@ export function BookPlannerScreen({ initialQuizAssignmentId }: BookPlannerScreen
             setBaModalBook(null);
             setBaModalTab('overview');
             setTargetQuizAssignmentId(null);
+            if (typeof window !== 'undefined') {
+              const url = new URL(window.location.href);
+              if (url.searchParams.has('quiz')) {
+                url.searchParams.delete('quiz');
+                window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+              }
+            }
           }}
           book={baModalBook}
           assignments={assignmentsByBook[baModalBook.id] || []}

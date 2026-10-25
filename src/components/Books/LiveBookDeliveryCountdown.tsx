@@ -4,20 +4,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlarmClock,
   AlertTriangle,
-  ArrowRight,
-  Bell,
-  BellOff,
   BookOpen,
   Calendar,
   CheckCircle2,
   Clock,
-  CornerDownRight,
   Edit3,
   FastForward,
   Loader2,
-  RefreshCw,
   Send,
-  Sparkles,
   Volume2,
   VolumeX,
   X,
@@ -28,9 +22,8 @@ import type { BookAssignmentRecord, BookRecord } from '@/lib/books/types';
 import {
   calculateDeliveryCountdown,
   describeScheduleRemaining,
-  getDeliveryZonedTimestamp,
-  getZonedDateString,
-  resolveNextBookDelivery,
+  resolveBookScheduleSummary,
+  type BookScheduleStatusInfo,
   type DeliveryCountdown,
   type NextBookDelivery,
 } from '@/lib/date/bookDeliverySchedule';
@@ -44,15 +37,29 @@ interface LiveBookDeliveryCountdownProps {
   onOpenBookAnalytics?: (book: BookRecord) => void;
 }
 
-export function LiveBookDeliveryCountdown({
-  books,
-  assignmentsByBook,
+interface SingleBookDeliveryCardProps {
+  book: BookRecord;
+  assignments: BookAssignmentRecord[];
+  nowMs: number;
+  soundEnabled: boolean;
+  onAssignmentsUpdated: (bookId: string, assignments: BookAssignmentRecord[]) => void;
+  onBookUpdated: (book: BookRecord) => void;
+  onSendNow?: (assignment: BookAssignmentRecord, book: BookRecord) => Promise<void>;
+  onOpenBookAnalytics?: (book: BookRecord) => void;
+  showFeedback: (noticeMsg: string, errorMsg?: string) => void;
+}
+
+function SingleBookDeliveryCard({
+  book,
+  assignments,
+  nowMs,
+  soundEnabled,
   onAssignmentsUpdated,
   onBookUpdated,
   onSendNow,
   onOpenBookAnalytics,
-}: LiveBookDeliveryCountdownProps) {
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  showFeedback,
+}: SingleBookDeliveryCardProps) {
   const [isEditingSchedule, setIsEditingSchedule] = useState(false);
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('');
@@ -60,40 +67,23 @@ export function LiveBookDeliveryCountdown({
   const [skippingDelivery, setSkippingDelivery] = useState(false);
   const [cancellingDelivery, setCancellingDelivery] = useState(false);
   const [sendingNow, setSendingNow] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(false);
-  const [actionNotice, setActionNotice] = useState<string>('');
-  const [actionError, setActionError] = useState<string>('');
 
   const alarmedRef = useRef(false);
 
-  // 1. Live second tick + visibility/focus listener to prevent sleep drift
-  useEffect(() => {
-    const tick = () => setNowMs(Date.now());
-    const interval = setInterval(tick, 1000);
+  // 1. Resolve schedule strictly for this book
+  const scheduleInfo = useMemo<BookScheduleStatusInfo>(() => {
+    return resolveBookScheduleSummary(book, assignments, nowMs);
+  }, [book, assignments, nowMs]);
 
-    const onResume = () => setNowMs(Date.now());
-    document.addEventListener('visibilitychange', onResume);
-    window.addEventListener('focus', onResume);
+  const nextDelivery = scheduleInfo.nextDelivery;
 
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onResume);
-      window.removeEventListener('focus', onResume);
-    };
-  }, []);
-
-  // 2. Resolve the next delivery across all active books
-  const nextDelivery = useMemo<NextBookDelivery | null>(() => {
-    return resolveNextBookDelivery(books, assignmentsByBook, nowMs);
-  }, [books, assignmentsByBook, nowMs]);
-
-  // 3. Compute live countdown against next delivery
+  // 2. Compute countdown if an upcoming delivery exists for this book
   const countdown = useMemo<DeliveryCountdown | null>(() => {
     if (!nextDelivery) return null;
     return calculateDeliveryCountdown(nextDelivery.scheduledAt, nowMs);
   }, [nextDelivery, nowMs]);
 
-  // 4. Subtle chime when alarm reaches zero (optional, user toggleable, soft sine wave)
+  // 3. Audio chime on zero
   const playSoftChime = useCallback(() => {
     if (!soundEnabled) return;
     try {
@@ -101,8 +91,8 @@ export function LiveBookDeliveryCountdown({
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1); // A5
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
       gain.gain.setValueAtTime(0.08, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
       osc.connect(gain);
@@ -129,43 +119,27 @@ export function LiveBookDeliveryCountdown({
     }
   }, [nextDelivery, isEditingSchedule]);
 
-  // Live remaining time calculation as user edits the schedule
+  // Live remaining preview
   const liveEditPreview = useMemo(() => {
     if (!isEditingSchedule || !editTime) return null;
     return describeScheduleRemaining(
       editTime,
       editDate || undefined,
-      nextDelivery?.timezone,
+      nextDelivery?.timezone || book.timezone,
       nowMs
     );
-  }, [isEditingSchedule, editTime, editDate, nextDelivery?.timezone, nowMs]);
+  }, [isEditingSchedule, editTime, editDate, nextDelivery?.timezone, book.timezone, nowMs]);
 
-  const showFeedback = (noticeMsg: string, errorMsg?: string) => {
-    if (noticeMsg) {
-      setActionNotice(noticeMsg);
-      notifyFeedback('success', noticeMsg);
-      setTimeout(() => setActionNotice(''), 6000);
-    }
-    if (errorMsg) {
-      setActionError(errorMsg);
-      notifyFeedback('error', errorMsg);
-      setTimeout(() => setActionError(''), 7000);
-    }
-  };
-
-  // ── Action Handlers ────────────────────────────────────────────────
-
-  // Immediate delivery
+  // ── Action Handlers (strictly scoped to this book) ──
   const handleSendNow = async () => {
     if (!nextDelivery || sendingNow) return;
     setSendingNow(true);
-    setActionError('');
     try {
       if (onSendNow && nextDelivery.assignment) {
-        await onSendNow(nextDelivery.assignment, nextDelivery.book);
+        await onSendNow(nextDelivery.assignment, book);
       } else if (nextDelivery.assignmentId) {
         const response = await apiFetch(
-          `/api/books/${encodeURIComponent(nextDelivery.bookId)}/assignments/${encodeURIComponent(nextDelivery.assignmentId)}/publish`,
+          `/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(nextDelivery.assignmentId)}/publish`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -177,14 +151,13 @@ export function LiveBookDeliveryCountdown({
 
         if (data.book) onBookUpdated(data.book);
         if (data.assignment) {
-          const list = assignmentsByBook[nextDelivery.bookId] || [];
           onAssignmentsUpdated(
-            nextDelivery.bookId,
-            list.map(a => (a.id === data.assignment.id ? data.assignment : a))
+            book.id,
+            assignments.map(a => (a.id === data.assignment.id ? data.assignment : a))
           );
         }
       }
-      showFeedback(`🚀 Successfully delivered "${nextDelivery.bookTitle}" to Telegram!`);
+      showFeedback(`🚀 Successfully delivered "${book.title}" to Telegram!`);
     } catch (err: any) {
       showFeedback('', err.message || 'Immediate delivery failed.');
     } finally {
@@ -192,14 +165,12 @@ export function LiveBookDeliveryCountdown({
     }
   };
 
-  // Reschedule
   const handleSaveReschedule = async () => {
     if (!nextDelivery?.assignmentId || savingSchedule) return;
     setSavingSchedule(true);
-    setActionError('');
     try {
       const response = await apiFetch(
-        `/api/books/${encodeURIComponent(nextDelivery.bookId)}/assignments/${encodeURIComponent(nextDelivery.assignmentId)}/schedule`,
+        `/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(nextDelivery.assignmentId)}/schedule`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -214,14 +185,13 @@ export function LiveBookDeliveryCountdown({
       if (!response.ok) throw new Error(data.error || 'Failed to reschedule delivery.');
 
       if (data.assignment) {
-        const list = assignmentsByBook[nextDelivery.bookId] || [];
         onAssignmentsUpdated(
-          nextDelivery.bookId,
-          list.map(a => (a.id === data.assignment.id ? data.assignment : a))
+          book.id,
+          assignments.map(a => (a.id === data.assignment.id ? data.assignment : a))
         );
       }
       setIsEditingSchedule(false);
-      showFeedback(`Updated delivery time for ${nextDelivery.bookTitle} to ${editDate} at ${editTime}!`);
+      showFeedback(`Updated delivery time for "${book.title}" to ${editDate} at ${editTime}!`);
     } catch (err: any) {
       showFeedback('', err.message || 'Could not reschedule delivery.');
     } finally {
@@ -229,14 +199,12 @@ export function LiveBookDeliveryCountdown({
     }
   };
 
-  // Skip next delivery (postpone by 1 day)
   const handleSkipNext = async () => {
     if (!nextDelivery?.assignmentId || skippingDelivery) return;
     setSkippingDelivery(true);
-    setActionError('');
     try {
       const response = await apiFetch(
-        `/api/books/${encodeURIComponent(nextDelivery.bookId)}/assignments/${encodeURIComponent(nextDelivery.assignmentId)}/schedule`,
+        `/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(nextDelivery.assignmentId)}/schedule`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -247,13 +215,12 @@ export function LiveBookDeliveryCountdown({
       if (!response.ok) throw new Error(data.error || 'Failed to skip next delivery.');
 
       if (data.assignment) {
-        const list = assignmentsByBook[nextDelivery.bookId] || [];
         onAssignmentsUpdated(
-          nextDelivery.bookId,
-          list.map(a => (a.id === data.assignment.id ? data.assignment : a))
+          book.id,
+          assignments.map(a => (a.id === data.assignment.id ? data.assignment : a))
         );
       }
-      showFeedback(`Skipped delivery for today! Advanced section to ${data.assignment?.scheduledDate}.`);
+      showFeedback(`Skipped delivery for today for "${book.title}". Advanced section to ${data.assignment?.scheduledDate}.`);
     } catch (err: any) {
       showFeedback('', err.message || 'Could not skip delivery.');
     } finally {
@@ -261,15 +228,13 @@ export function LiveBookDeliveryCountdown({
     }
   };
 
-  // Cancel scheduled delivery
   const handleCancelDelivery = async () => {
     if (!nextDelivery?.assignmentId || cancellingDelivery) return;
-    if (!window.confirm('Cancel this scheduled Telegram delivery? The reading section will return to draft.')) return;
+    if (!window.confirm(`Cancel scheduled Telegram delivery for "${book.title}"? The section will return to draft.`)) return;
     setCancellingDelivery(true);
-    setActionError('');
     try {
       const response = await apiFetch(
-        `/api/books/${encodeURIComponent(nextDelivery.bookId)}/assignments/${encodeURIComponent(nextDelivery.assignmentId)}/schedule`,
+        `/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(nextDelivery.assignmentId)}/schedule`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -280,13 +245,12 @@ export function LiveBookDeliveryCountdown({
       if (!response.ok) throw new Error(data.error || 'Failed to cancel scheduled delivery.');
 
       if (data.assignment) {
-        const list = assignmentsByBook[nextDelivery.bookId] || [];
         onAssignmentsUpdated(
-          nextDelivery.bookId,
-          list.map(a => (a.id === data.assignment.id ? data.assignment : a))
+          book.id,
+          assignments.map(a => (a.id === data.assignment.id ? data.assignment : a))
         );
       }
-      showFeedback(`Cancelled scheduled delivery for "${nextDelivery.bookTitle}".`);
+      showFeedback(`Cancelled scheduled delivery for "${book.title}".`);
     } catch (err: any) {
       showFeedback('', err.message || 'Could not cancel delivery.');
     } finally {
@@ -294,52 +258,83 @@ export function LiveBookDeliveryCountdown({
     }
   };
 
+  // Card without upcoming delivery (e.g. all completed or no plan yet)
   if (!nextDelivery || !countdown) {
+    const isCompleted = scheduleInfo.status === 'completed';
     return (
       <div
         className="v-card"
         style={{
           padding: '16px 20px',
-          borderRadius: 16,
-          background: 'var(--v-glass-bg-subtle)',
+          borderRadius: 14,
+          background: 'rgba(30, 41, 59, 0.35)',
           border: '1px solid var(--v-glass-border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          flexWrap: 'wrap',
+          display: 'grid',
+          gap: 10,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 12,
-              background: 'rgba(99, 102, 241, 0.15)',
-              border: '1px solid rgba(99, 102, 241, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#a5b4fc',
-            }}
-          >
-            <AlarmClock size={20} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 10,
+                background: isCompleted ? 'rgba(34, 197, 94, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                border: `1px solid ${isCompleted ? 'rgba(34, 197, 94, 0.3)' : 'rgba(99, 102, 241, 0.3)'}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: isCompleted ? '#86efac' : '#a5b4fc',
+              }}
+            >
+              {isCompleted ? <CheckCircle2 size={18} /> : <BookOpen size={18} />}
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {book.title}
+                <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>
+                  by {book.author || 'Unknown'}
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: isCompleted ? '#86efac' : 'var(--text-muted)', marginTop: 2 }}>
+                {scheduleInfo.statusText}
+              </div>
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: 0.5 }}>
-              NEXT BOOK DELIVERY
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              No pending book deliveries scheduled. Generate a reading plan or add a book to activate the live alarm.
-            </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span
+              style={{
+                fontSize: 11,
+                padding: '3px 10px',
+                borderRadius: 999,
+                fontWeight: 600,
+                background: isCompleted ? 'rgba(34, 197, 94, 0.2)' : 'rgba(148, 163, 184, 0.2)',
+                color: isCompleted ? '#86efac' : '#94a3b8',
+                border: `1px solid ${isCompleted ? 'rgba(34, 197, 94, 0.35)' : 'rgba(148, 163, 184, 0.3)'}`,
+              }}
+            >
+              {isCompleted ? 'Completed' : 'No Schedule'}
+            </span>
+
+            {onOpenBookAnalytics && (
+              <button
+                type="button"
+                className="v-pill-btn"
+                onClick={() => onOpenBookAnalytics(book)}
+                style={{ padding: '4px 10px', fontSize: 11 }}
+              >
+                Open in BA →
+              </button>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
-  // Determine status color and label
+  // Active delivery card
   const isUrgent = !countdown.isZero && countdown.days === 0 && countdown.hours === 0 && countdown.minutes < 15;
   const isSubMinute = !countdown.isZero && countdown.days === 0 && countdown.hours === 0 && countdown.minutes === 0;
 
@@ -389,7 +384,7 @@ export function LiveBookDeliveryCountdown({
   }[nextDelivery.status];
 
   return (
-    <section
+    <article
       className="v-card"
       style={{
         padding: '18px 20px',
@@ -403,9 +398,9 @@ export function LiveBookDeliveryCountdown({
         overflow: 'hidden',
         transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
       }}
-      aria-label="Next Scheduled Book Delivery Countdown"
+      aria-label={`Scheduled delivery countdown for ${book.title}`}
     >
-      {/* Top Bar: Title, Status Badge, and Sound Toggle */}
+      {/* Top Header: Prominent Book Title & Author */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div
@@ -429,22 +424,11 @@ export function LiveBookDeliveryCountdown({
             />
           </div>
           <div>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 800,
-                color: 'var(--text-muted)',
-                letterSpacing: 1.2,
-                textTransform: 'uppercase',
-              }}
-            >
-              NEXT BOOK DELIVERY
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: -0.2 }}>
+              {book.title}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {nextDelivery.bookTitle}{' '}
-              <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>
-                by {nextDelivery.bookAuthor}
-              </span>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              by {book.author || 'Unknown'} · Timezone: {nextDelivery.timezone}
             </div>
           </div>
         </div>
@@ -476,16 +460,16 @@ export function LiveBookDeliveryCountdown({
             <span>{statusConfig.label}</span>
           </span>
 
-          <button
-            type="button"
-            className="v-circle-btn"
-            onClick={() => setSoundEnabled(s => !s)}
-            style={{ width: 30, height: 30 }}
-            title={soundEnabled ? 'Alarm chime is enabled (click to mute)' : 'Alarm chime is muted (click to enable)'}
-            aria-label={soundEnabled ? 'Mute alarm chime' : 'Enable alarm chime'}
-          >
-            {soundEnabled ? <Volume2 size={14} color="#60a5fa" /> : <VolumeX size={14} color="var(--text-muted)" />}
-          </button>
+          {onOpenBookAnalytics && (
+            <button
+              type="button"
+              className="v-pill-btn"
+              onClick={() => onOpenBookAnalytics(book)}
+              style={{ padding: '4px 10px', fontSize: 11 }}
+            >
+              Open in BA →
+            </button>
+          )}
         </div>
       </div>
 
@@ -494,7 +478,7 @@ export function LiveBookDeliveryCountdown({
         style={{
           background: 'rgba(0, 0, 0, 0.35)',
           borderRadius: 14,
-          padding: '16px 20px',
+          padding: '14px 18px',
           border: '1px solid rgba(255, 255, 255, 0.08)',
           display: 'flex',
           alignItems: 'center',
@@ -510,7 +494,7 @@ export function LiveBookDeliveryCountdown({
                 <span
                   style={{
                     fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
-                    fontSize: 28,
+                    fontSize: 26,
                     fontWeight: 800,
                     lineHeight: 1,
                     padding: '6px 10px',
@@ -526,7 +510,7 @@ export function LiveBookDeliveryCountdown({
                   Days
                 </span>
               </div>
-              <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 14 }}>:</span>
+              <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 12 }}>:</span>
             </>
           )}
 
@@ -534,7 +518,7 @@ export function LiveBookDeliveryCountdown({
             <span
               style={{
                 fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
-                fontSize: 28,
+                fontSize: 26,
                 fontWeight: 800,
                 lineHeight: 1,
                 padding: '6px 10px',
@@ -551,13 +535,13 @@ export function LiveBookDeliveryCountdown({
             </span>
           </div>
 
-          <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 14 }}>:</span>
+          <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 12 }}>:</span>
 
           <div style={{ display: 'grid', justifyItems: 'center', gap: 3 }}>
             <span
               style={{
                 fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
-                fontSize: 28,
+                fontSize: 26,
                 fontWeight: 800,
                 lineHeight: 1,
                 padding: '6px 10px',
@@ -574,13 +558,13 @@ export function LiveBookDeliveryCountdown({
             </span>
           </div>
 
-          <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 14 }}>:</span>
+          <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 12 }}>:</span>
 
           <div style={{ display: 'grid', justifyItems: 'center', gap: 3 }}>
             <span
               style={{
                 fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace',
-                fontSize: 28,
+                fontSize: 26,
                 fontWeight: 800,
                 lineHeight: 1,
                 padding: '6px 10px',
@@ -605,11 +589,10 @@ export function LiveBookDeliveryCountdown({
             {countdown.humanRemaining}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Scheduled delivery:{' '}
-            <strong style={{ color: 'var(--text-secondary)' }}>
-              {nextDelivery.formattedTime12h}
-            </strong>{' '}
-            <span style={{ fontSize: 11 }}>({nextDelivery.scheduledDate})</span>
+            Next delivery:{' '}
+            <strong style={{ color: '#93c5fd' }}>
+              {nextDelivery.scheduledDate} at {nextDelivery.formattedTime12h}
+            </strong>
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             Habesha Clock: {nextDelivery.ethiopianTimeStr}
@@ -640,62 +623,9 @@ export function LiveBookDeliveryCountdown({
             — {nextDelivery.conceptTitle}
           </span>
         </div>
-
-        {onOpenBookAnalytics && (
-          <button
-            type="button"
-            className="v-pill-btn"
-            onClick={() => onOpenBookAnalytics(nextDelivery.book)}
-            style={{ padding: '4px 10px', fontSize: 11 }}
-          >
-            Open in BA →
-          </button>
-        )}
       </div>
 
-      {/* Error or Notice Banners */}
-      {actionNotice && (
-        <div
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            background: 'rgba(34, 197, 94, 0.15)',
-            border: '1px solid rgba(34, 197, 94, 0.35)',
-            color: '#86efac',
-            fontSize: 12,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <span>{actionNotice}</span>
-          <button type="button" onClick={() => setActionNotice('')} style={{ background: 'none', border: 'none', color: '#86efac', cursor: 'pointer' }}>
-            <X size={12} />
-          </button>
-        </div>
-      )}
-      {actionError && (
-        <div
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.35)',
-            color: '#fca5a5',
-            fontSize: 12,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <span>{actionError}</span>
-          <button type="button" onClick={() => setActionError('')} style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer' }}>
-            <X size={12} />
-          </button>
-        </div>
-      )}
-
-      {/* Interactive Controls Bar */}
+      {/* Interactive Controls Bar for this book */}
       <div
         style={{
           display: 'flex',
@@ -715,7 +645,7 @@ export function LiveBookDeliveryCountdown({
             disabled={sendingNow}
             onClick={() => void handleSendNow()}
             style={{
-              padding: '7px 14px',
+              padding: '6px 13px',
               fontWeight: 600,
               fontSize: 12,
               display: 'inline-flex',
@@ -726,12 +656,12 @@ export function LiveBookDeliveryCountdown({
             {sendingNow ? (
               <>
                 <Loader2 size={13} style={{ animation: 'sams-action-spin .8s linear infinite' }} />
-                <span>Sending to Telegram…</span>
+                <span>Sending…</span>
               </>
             ) : (
               <>
                 <Send size={13} />
-                <span>Send Now (Override Time)</span>
+                <span>Send Now</span>
               </>
             )}
           </button>
@@ -743,7 +673,7 @@ export function LiveBookDeliveryCountdown({
               className="v-pill-btn"
               onClick={() => setIsEditingSchedule(c => !c)}
               style={{
-                padding: '7px 12px',
+                padding: '6px 12px',
                 fontSize: 12,
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -751,51 +681,51 @@ export function LiveBookDeliveryCountdown({
               }}
             >
               <Edit3 size={13} />
-              <span>{isEditingSchedule ? 'Close Editor' : 'Edit Schedule'}</span>
+              <span>{isEditingSchedule ? 'Close Editor' : 'Reschedule'}</span>
             </button>
           )}
 
-          {/* Skip Next Delivery Button */}
+          {/* Skip Next Delivery */}
           {nextDelivery.assignmentId && (
             <button
               type="button"
               className="v-pill-btn"
               disabled={skippingDelivery}
               onClick={() => void handleSkipNext()}
+              title="Postpone this section by 1 day"
               style={{
-                padding: '7px 12px',
+                padding: '6px 12px',
                 fontSize: 12,
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
               }}
-              title="Postpone this upcoming reading section to tomorrow without losing progress"
             >
               {skippingDelivery ? (
                 <Loader2 size={13} style={{ animation: 'sams-action-spin .8s linear infinite' }} />
               ) : (
                 <FastForward size={13} />
               )}
-              <span>Skip Next Delivery (Move to Tomorrow)</span>
+              <span>Skip (+1 Day)</span>
             </button>
           )}
 
-          {/* Cancel Scheduled Delivery Button */}
-          {nextDelivery.assignmentId && nextDelivery.status !== 'draft' && (
+          {/* Cancel Delivery */}
+          {nextDelivery.assignmentId && (
             <button
               type="button"
               className="v-pill-btn"
               disabled={cancellingDelivery}
               onClick={() => void handleCancelDelivery()}
+              title="Cancel this scheduled delivery and return section to draft"
               style={{
-                padding: '7px 12px',
+                padding: '6px 12px',
                 fontSize: 12,
-                color: '#fca5a5',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
+                color: '#fca5a5',
               }}
-              title="Cancel automatic publishing for this section and return it to draft"
             >
               {cancellingDelivery ? (
                 <Loader2 size={13} style={{ animation: 'sams-action-spin .8s linear infinite' }} />
@@ -808,7 +738,7 @@ export function LiveBookDeliveryCountdown({
         </div>
 
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-          Timezone: {nextDelivery.timezone}
+          {nextDelivery.timezone}
         </span>
       </div>
 
@@ -827,7 +757,7 @@ export function LiveBookDeliveryCountdown({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>
-              Reschedule Next Book Delivery
+              Reschedule Delivery for "{book.title}"
             </strong>
             <button
               type="button"
@@ -875,7 +805,6 @@ export function LiveBookDeliveryCountdown({
             </label>
           </div>
 
-          {/* Live Remaining Time Feedback */}
           {liveEditPreview && (
             <div
               style={{
@@ -923,6 +852,179 @@ export function LiveBookDeliveryCountdown({
           </div>
         </div>
       )}
+    </article>
+  );
+}
+
+export function LiveBookDeliveryCountdown({
+  books,
+  assignmentsByBook,
+  onAssignmentsUpdated,
+  onBookUpdated,
+  onSendNow,
+  onOpenBookAnalytics,
+}: LiveBookDeliveryCountdownProps) {
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string>('');
+  const [actionError, setActionError] = useState<string>('');
+
+  // Live second tick + visibility/focus listener
+  useEffect(() => {
+    const tick = () => setNowMs(Date.now());
+    const interval = setInterval(tick, 1000);
+
+    const onResume = () => setNowMs(Date.now());
+    document.addEventListener('visibilitychange', onResume);
+    window.addEventListener('focus', onResume);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onResume);
+      window.removeEventListener('focus', onResume);
+    };
+  }, []);
+
+  const showFeedback = useCallback((noticeMsg: string, errorMsg?: string) => {
+    if (noticeMsg) {
+      setActionNotice(noticeMsg);
+      notifyFeedback('success', noticeMsg);
+      setTimeout(() => setActionNotice(''), 6000);
+    }
+    if (errorMsg) {
+      setActionError(errorMsg);
+      notifyFeedback('error', errorMsg);
+      setTimeout(() => setActionError(''), 7000);
+    }
+  }, []);
+
+  if (books.length === 0) {
+    return (
+      <div
+        className="v-card"
+        style={{
+          padding: '16px 20px',
+          borderRadius: 16,
+          background: 'var(--v-glass-bg-subtle)',
+          border: '1px solid var(--v-glass-border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              background: 'rgba(99, 102, 241, 0.15)',
+              border: '1px solid rgba(99, 102, 241, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#a5b4fc',
+            }}
+          >
+            <AlarmClock size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: 0.5 }}>
+              SCHEDULED BOOK DELIVERIES
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              No books saved yet. Upload a PDF below to schedule automated Telegram lessons.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <section style={{ display: 'grid', gap: 14 }}>
+      {/* Global Header Bar for Scheduled Deliveries */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AlarmClock size={16} color="var(--accent-color, #60a5fa)" />
+          <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--text-primary)' }}>
+            SCHEDULED BOOK DELIVERIES ({books.length} {books.length === 1 ? 'Book' : 'Books'})
+          </span>
+        </div>
+
+        <button
+          type="button"
+          className="v-circle-btn"
+          onClick={() => setSoundEnabled(s => !s)}
+          style={{ width: 28, height: 28 }}
+          title={soundEnabled ? 'Alarm chime enabled (click to mute)' : 'Alarm chime muted (click to enable)'}
+          aria-label={soundEnabled ? 'Mute alarm chime' : 'Enable alarm chime'}
+        >
+          {soundEnabled ? <Volume2 size={13} color="#60a5fa" /> : <VolumeX size={13} color="var(--text-muted)" />}
+        </button>
+      </div>
+
+      {/* Global Notice / Error Banners */}
+      {actionNotice && (
+        <div
+          style={{
+            padding: '8px 12px',
+            borderRadius: 8,
+            background: 'rgba(34, 197, 94, 0.15)',
+            border: '1px solid rgba(34, 197, 94, 0.35)',
+            color: '#86efac',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <span>{actionNotice}</span>
+          <button type="button" onClick={() => setActionNotice('')} style={{ background: 'none', border: 'none', color: '#86efac', cursor: 'pointer' }}>
+            <X size={12} />
+          </button>
+        </div>
+      )}
+      {actionError && (
+        <div
+          style={{
+            padding: '8px 12px',
+            borderRadius: 8,
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.35)',
+            color: '#fca5a5',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <span>{actionError}</span>
+          <button type="button" onClick={() => setActionError('')} style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer' }}>
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
+      {/* Render each book's schedule independently */}
+      <div style={{ display: 'grid', gap: 12 }}>
+        {books.map(book => (
+          <SingleBookDeliveryCard
+            key={book.id}
+            book={book}
+            assignments={assignmentsByBook[book.id] || []}
+            nowMs={nowMs}
+            soundEnabled={soundEnabled}
+            onAssignmentsUpdated={onAssignmentsUpdated}
+            onBookUpdated={onBookUpdated}
+            onSendNow={onSendNow}
+            onOpenBookAnalytics={onOpenBookAnalytics}
+            showFeedback={showFeedback}
+          />
+        ))}
+      </div>
     </section>
   );
 }

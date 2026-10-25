@@ -19,6 +19,7 @@ import {
 import { listBookPages, updateBook } from '../books';
 import { updateBookAssignment } from '../bookAssignments';
 import type { BookRecord, BookPageRecord, BookAssignmentRecord } from '../../books/types';
+import { distributeOptionsBalanced, shuffleOptionsWithKey } from './quizShuffle';
 
 const DATA_DIR = process.env.BOOK_DATA_DIR || path.join(process.cwd(), '.data');
 const SESSIONS_PATH = path.join(DATA_DIR, 'book-quiz-sessions.json');
@@ -417,14 +418,13 @@ export function generateDeterministicQuestions(
         `Postponing structured execution indefinitely without deliberate scheduling.`,
       ].map(d => truncateUnicode(d, 95));
 
-      const options = [correctAns, ...distractors.slice(0, 3)].sort(() => 0.5 - ((i * 3 + 1) % 5));
-      const correctOptionId = options.indexOf(correctAns);
+      const { options, correctIndex } = distributeOptionsBalanced(correctAns, distractors, i);
 
       questions.push({
         id: `q_${questions.length}`,
         question: truncateUnicode(item.question, 290),
         options,
-        correctOptionId,
+        correctOptionId: correctIndex,
         conciseExplanation: `Correct! ${truncateUnicode(correctAns, 180)}`,
         detailedExplanation: `According to ${book.title} (PDF p. ${item.pdfPages?.join(', ') || startPage}): ${item.answer}`,
         definition: {
@@ -457,18 +457,19 @@ export function generateDeterministicQuestions(
     const prompt = `What core insight is established in PDF page ${page.pdfPage} of ${book.title}?`;
 
     const correct = truncateUnicode(coreSentence, 95);
-    const options = [
-      correct,
+    const candidateDistractors = [
       `Superficial multitasking without concentrated focus.`,
       `Discarding deliberate practice in favor of passive observation.`,
       `Randomizing task execution without adhering to schedule principles.`,
     ];
 
+    const { options, correctIndex } = distributeOptionsBalanced(correct, candidateDistractors, qIdx);
+
     questions.push({
       id: `q_${qIdx}`,
       question: truncateUnicode(prompt, 290),
       options,
-      correctOptionId: 0,
+      correctOptionId: correctIndex,
       conciseExplanation: `Correct! Grounded in PDF page ${page.pdfPage}: "${truncateUnicode(correct, 150)}"`,
       detailedExplanation: `In ${book.title} (PDF page ${page.pdfPage}), the text directly emphasizes: "${coreSentence}"`,
       definition: {
@@ -551,14 +552,17 @@ Rules:
         const question = truncateUnicode(String(item.question || '').trim(), 290);
         const optionsList = Array.isArray(item.options) ? item.options.map((o: any) => truncateUnicode(String(o).trim(), 95)).filter(Boolean) : [];
         if (question && optionsList.length >= 2) {
-          const correctId = Number.isInteger(Number(item.correctOptionId))
+          const rawCorrectId = Number.isInteger(Number(item.correctOptionId))
             ? Math.max(0, Math.min(Number(item.correctOptionId), optionsList.length - 1))
             : 0;
+          const rawOptions = optionsList.slice(0, 4).map((o: any) => sanitizeUtf8(o));
+          const { options: syncedOptions, correctIndex: syncedCorrectId } = shuffleOptionsWithKey(rawOptions, rawCorrectId);
+
           validated.push({
             id: `q_${i}`,
             question: sanitizeUtf8(question),
-            options: optionsList.slice(0, 4).map((o: any) => sanitizeUtf8(o)),
-            correctOptionId: correctId,
+            options: syncedOptions,
+            correctOptionId: syncedCorrectId,
             conciseExplanation: truncateUnicode(sanitizeUtf8(String(item.conciseExplanation || `Correct! Grounded in PDF pages ${startPage}-${endPage}.`).trim()), 195),
             detailedExplanation: sanitizeUtf8(String(item.detailedExplanation || `Based on ${book.title}.`).trim()),
             definition: {

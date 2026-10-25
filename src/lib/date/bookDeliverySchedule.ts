@@ -293,127 +293,213 @@ export interface NextBookDelivery {
   book: BookRecord;
 }
 
+export interface BookScheduleStatusInfo {
+  book: BookRecord;
+  nextDelivery: NextBookDelivery | null;
+  status: NextBookDelivery['status'] | 'completed' | 'no_schedule';
+  statusText: string;
+}
+
 /**
- * Find the next upcoming scheduled book delivery across all books and assignments.
+ * Determine the next scheduled delivery for a single book.
  */
-export function resolveNextBookDelivery(
-  books: BookRecord[],
-  assignmentsByBook: Record<string, BookAssignmentRecord[]>,
+export function resolveNextDeliveryForBook(
+  book: BookRecord,
+  assignments: BookAssignmentRecord[] = [],
   nowMs = Date.now()
 ): NextBookDelivery | null {
+  const tz = book.timezone || DEFAULT_BOOK_TIMEZONE;
+
+  // Filter out superseded or completed assignments
+  const activeAssignments = assignments.filter(
+    a => a.status !== 'completed' && a.status !== 'superseded'
+  );
+
   const candidates: NextBookDelivery[] = [];
 
-  for (const book of books) {
-    const tz = book.timezone || DEFAULT_BOOK_TIMEZONE;
-    const bookAssignments = assignmentsByBook[book.id] || [];
+  if (activeAssignments.length > 0) {
+    for (const assignment of activeAssignments) {
+      try {
+        const effectiveTime = normalizeTimeString(assignment.postingTime || book.postingTime || '08:00');
+        const scheduledAt = getDeliveryZonedTimestamp(assignment.scheduledDate, effectiveTime, tz);
+        const clock = getEthiopianClock(effectiveTime, tz, assignment.scheduledDate);
 
-    // Filter out superseded or completed assignments
-    const activeAssignments = bookAssignments.filter(
-      a => a.status !== 'completed' && a.status !== 'superseded'
-    );
-
-    if (activeAssignments.length > 0) {
-      // Find the earliest active assignment
-      for (const assignment of activeAssignments) {
-        try {
-          const effectiveTime = normalizeTimeString(assignment.postingTime || book.postingTime || '08:00');
-          const scheduledAt = getDeliveryZonedTimestamp(assignment.scheduledDate, effectiveTime, tz);
-          const clock = getEthiopianClock(effectiveTime, tz, assignment.scheduledDate);
-
-          let status: NextBookDelivery['status'] = 'scheduled';
-          if (assignment.deliveryStatus === 'sending') {
-            status = 'sending';
-          } else if (assignment.deliveryStatus === 'failed') {
-            status = 'failed';
-          } else if (assignment.status === 'draft') {
-            status = 'draft';
-          } else if (scheduledAt <= nowMs - 60000) {
-            status = 'overdue';
-          }
-
-          const conceptNames = assignment.concepts.map(c => c.title).filter(Boolean);
-          const conceptTitle = conceptNames.length > 0
-            ? conceptNames.join(' · ')
-            : `Day ${assignment.dayNumber} Reading Section`;
-
-          candidates.push({
-            bookId: book.id,
-            bookTitle: book.title,
-            bookAuthor: book.author,
-            assignmentId: assignment.id,
-            dayNumber: assignment.dayNumber,
-            sectionNumber: assignment.sectionNumber,
-            startPdfPage: assignment.startPdfPage,
-            endPdfPage: assignment.endPdfPage,
-            conceptTitle,
-            concepts: conceptNames,
-            scheduledAt,
-            scheduledDate: assignment.scheduledDate,
-            postingTime: effectiveTime,
-            timezone: tz,
-            formattedTime12h: clock.internationalTime12h,
-            ethiopianTimeStr: clock.ethiopianTimeStr,
-            status,
-            lastError: assignment.lastDeliveryError,
-            assignment,
-            book,
-          });
-        } catch (err) {
-          console.error(`[resolveNextBookDelivery] Error parsing assignment ${assignment.id}:`, err);
+        let status: NextBookDelivery['status'] = 'scheduled';
+        if (assignment.deliveryStatus === 'sending') {
+          status = 'sending';
+        } else if (assignment.deliveryStatus === 'failed') {
+          status = 'failed';
+        } else if (assignment.status === 'draft') {
+          status = 'draft';
+        } else if (scheduledAt <= nowMs - 60000) {
+          status = 'overdue';
         }
-      }
-    } else if (book.autoPublish !== false && book.currentPage <= book.endPage) {
-      // Book has no individual assignments yet, but is queued for daily delivery
-      const effectiveTime = normalizeTimeString(book.postingTime || '08:00');
-      const occurrence = getNextOccurrenceForDailyTime(effectiveTime, tz, nowMs);
-      const clock = getEthiopianClock(effectiveTime, tz, occurrence.dateStr);
 
-      candidates.push({
-        bookId: book.id,
-        bookTitle: book.title,
-        bookAuthor: book.author,
-        startPdfPage: book.currentPage,
-        endPdfPage: Math.min(book.endPage, book.currentPage + 5),
-        conceptTitle: `Page ${book.currentPage} Daily Reading`,
-        concepts: [`Reading starting from Page ${book.currentPage}`],
-        scheduledAt: occurrence.timestamp,
-        scheduledDate: occurrence.dateStr,
-        postingTime: effectiveTime,
-        timezone: tz,
-        formattedTime12h: clock.internationalTime12h,
-        ethiopianTimeStr: clock.ethiopianTimeStr,
-        status: 'scheduled',
-        isTomorrow: occurrence.isTomorrow,
-        book,
-      });
+        const conceptNames = assignment.concepts.map(c => c.title).filter(Boolean);
+        const conceptTitle = conceptNames.length > 0
+          ? conceptNames.join(' · ')
+          : `Day ${assignment.dayNumber} Reading Section`;
+
+        candidates.push({
+          bookId: book.id,
+          bookTitle: book.title,
+          bookAuthor: book.author,
+          assignmentId: assignment.id,
+          dayNumber: assignment.dayNumber,
+          sectionNumber: assignment.sectionNumber,
+          startPdfPage: assignment.startPdfPage,
+          endPdfPage: assignment.endPdfPage,
+          conceptTitle,
+          concepts: conceptNames,
+          scheduledAt,
+          scheduledDate: assignment.scheduledDate,
+          postingTime: effectiveTime,
+          timezone: tz,
+          formattedTime12h: clock.internationalTime12h,
+          ethiopianTimeStr: clock.ethiopianTimeStr,
+          status,
+          lastError: assignment.lastDeliveryError,
+          assignment,
+          book,
+        });
+      } catch (err) {
+        console.error(`[resolveNextDeliveryForBook] Error parsing assignment ${assignment.id}:`, err);
+      }
     }
+  } else if (book.autoPublish !== false && book.currentPage <= book.endPage) {
+    const effectiveTime = normalizeTimeString(book.postingTime || '08:00');
+    const occurrence = getNextOccurrenceForDailyTime(effectiveTime, tz, nowMs);
+    const clock = getEthiopianClock(effectiveTime, tz, occurrence.dateStr);
+
+    candidates.push({
+      bookId: book.id,
+      bookTitle: book.title,
+      bookAuthor: book.author,
+      startPdfPage: book.currentPage,
+      endPdfPage: Math.min(book.endPage, book.currentPage + 5),
+      conceptTitle: `Page ${book.currentPage} Daily Reading`,
+      concepts: [`Reading starting from Page ${book.currentPage}`],
+      scheduledAt: occurrence.timestamp,
+      scheduledDate: occurrence.dateStr,
+      postingTime: effectiveTime,
+      timezone: tz,
+      formattedTime12h: clock.internationalTime12h,
+      ethiopianTimeStr: clock.ethiopianTimeStr,
+      status: 'scheduled',
+      isTomorrow: occurrence.isTomorrow,
+      book,
+    });
   }
 
   if (!candidates.length) return null;
 
-  // Prioritize active sending first.
-  // Next: Upcoming or due deliveries (scheduledAt >= nowMs - 60000), sorted by earliest scheduledAt ascending.
-  // Next: Past / failed deliveries (if no upcoming deliveries exist), sorted by most recent first.
   candidates.sort((a, b) => {
-    // 1. Active sending comes first
     if (a.status === 'sending' && b.status !== 'sending') return -1;
     if (b.status === 'sending' && a.status !== 'sending') return 1;
 
-    // 2. Upcoming vs Past
     const aIsUpcoming = a.scheduledAt >= nowMs - 60000;
     const bIsUpcoming = b.scheduledAt >= nowMs - 60000;
 
     if (aIsUpcoming && !bIsUpcoming) return -1;
     if (!aIsUpcoming && bIsUpcoming) return 1;
 
-    // If both are upcoming, sort by earliest scheduledAt
     if (aIsUpcoming && bIsUpcoming) {
       return a.scheduledAt - b.scheduledAt;
     }
-
-    // If both are past (e.g. failed or overdue), sort by most recent first
     return b.scheduledAt - a.scheduledAt;
   });
 
   return candidates[0];
+}
+
+/**
+ * Determine summary and schedule status for a book (including completed / no schedule).
+ */
+export function resolveBookScheduleSummary(
+  book: BookRecord,
+  assignments: BookAssignmentRecord[] = [],
+  nowMs = Date.now()
+): BookScheduleStatusInfo {
+  const nextDelivery = resolveNextDeliveryForBook(book, assignments, nowMs);
+  if (nextDelivery) {
+    let statusText = `Scheduled: ${nextDelivery.scheduledDate} at ${nextDelivery.formattedTime12h}`;
+    if (nextDelivery.status === 'sending') statusText = 'Sending to Telegram now…';
+    else if (nextDelivery.status === 'overdue') statusText = `Overdue (scheduled for ${nextDelivery.scheduledDate} at ${nextDelivery.formattedTime12h})`;
+    else if (nextDelivery.status === 'failed') statusText = `Delivery failed (${nextDelivery.lastError || 'see error details'})`;
+    else if (nextDelivery.status === 'draft') statusText = 'Draft section (not queued)';
+    return {
+      book,
+      nextDelivery,
+      status: nextDelivery.status,
+      statusText,
+    };
+  }
+
+  const isAllAssignmentsCompleted = assignments.length > 0 && assignments.every(a => a.status === 'completed' || a.status === 'superseded');
+  const isPageRangeFinished = book.currentPage > book.endPage;
+
+  if (isAllAssignmentsCompleted || isPageRangeFinished) {
+    return {
+      book,
+      nextDelivery: null,
+      status: 'completed',
+      statusText: 'All reading sections delivered to Telegram.',
+    };
+  }
+
+  return {
+    book,
+    nextDelivery: null,
+    status: 'no_schedule',
+    statusText: 'No upcoming delivery scheduled.',
+  };
+}
+
+/**
+ * Resolve individual next deliveries for ALL books, each separated by book.
+ */
+export function resolveAllNextBookDeliveries(
+  books: BookRecord[],
+  assignmentsByBook: Record<string, BookAssignmentRecord[]>,
+  nowMs = Date.now()
+): NextBookDelivery[] {
+  const deliveries: NextBookDelivery[] = [];
+
+  for (const book of books) {
+    const assignments = assignmentsByBook[book.id] || [];
+    const bookDelivery = resolveNextDeliveryForBook(book, assignments, nowMs);
+    if (bookDelivery) {
+      deliveries.push(bookDelivery);
+    }
+  }
+
+  deliveries.sort((a, b) => {
+    if (a.status === 'sending' && b.status !== 'sending') return -1;
+    if (b.status === 'sending' && a.status !== 'sending') return 1;
+
+    const aIsUpcoming = a.scheduledAt >= nowMs - 60000;
+    const bIsUpcoming = b.scheduledAt >= nowMs - 60000;
+
+    if (aIsUpcoming && !bIsUpcoming) return -1;
+    if (!aIsUpcoming && bIsUpcoming) return 1;
+
+    if (aIsUpcoming && bIsUpcoming) {
+      return a.scheduledAt - b.scheduledAt;
+    }
+    return b.scheduledAt - a.scheduledAt;
+  });
+
+  return deliveries;
+}
+
+/**
+ * Find the earliest next upcoming scheduled book delivery across all books and assignments.
+ */
+export function resolveNextBookDelivery(
+  books: BookRecord[],
+  assignmentsByBook: Record<string, BookAssignmentRecord[]>,
+  nowMs = Date.now()
+): NextBookDelivery | null {
+  const all = resolveAllNextBookDeliveries(books, assignmentsByBook, nowMs);
+  return all.length > 0 ? all[0] : null;
 }

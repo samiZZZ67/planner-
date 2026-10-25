@@ -53,28 +53,7 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
       bot = result.bot;
     }
 
-    // Launch interactive quiz session if enabled
-    let quizSession: any = null;
-    try {
-      const { getBookQuizSettings, startQuizSessionForAssignment } = await import('@/lib/server/books/bookQuiz');
-      const quizSettings = await getBookQuizSettings(session.userId);
-      if (quizSettings.enabled) {
-        const { envConfig } = await import('@/lib/server/telegram');
-        const targetChatId = envConfig().chatId;
-        quizSession = await startQuizSessionForAssignment(
-          session.userId,
-          book,
-          assignment,
-          pages,
-          targetChatId,
-          { skipFirstExcerpt: true }
-        );
-      }
-    } catch (quizErr: any) {
-      console.warn('[Publish] Interactive quiz launch warning:', quizErr?.message || quizErr);
-    }
-
-    // Check if the current section was completely blank/illustration pages
+    // Quizzes are kept strictly on the website (/quiz) — never dispatched to Telegram
     const isEntirelyBlank = pages.every(p => !p.text?.trim() || p.method === 'empty');
 
     // Preserve the original schedule and all dates; mark status completed and deliveryStatus sent
@@ -141,7 +120,7 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
       channel,
       bot,
       book: updatedBook,
-      quizSession: quizSession ? { id: quizSession.id, totalQuestions: quizSession.totalQuestions, totalSections: quizSession.totalSections } : null,
+      quizSession: null,
     });
   } catch (error) {
     const failure = error as Error & { delivery?: unknown };

@@ -26,7 +26,7 @@ describe('Telegram reading assignment formatting', () => {
     expect(joined).toContain('[PDF page 1]\nExact source\ntext — with punctuation.');
     expect(joined).toContain('Study summary');
     expect(joined).toContain('• A (PDF p. 1): Meaning A');
-    expect(joined).toContain('/quiz?assignmentId=assignment-1');
+    expect(joined).not.toContain('/quiz');
   });
 
   it('splits by Unicode code points without losing characters', () => {
@@ -209,10 +209,10 @@ describe('Telegram reading assignment formatting', () => {
     }
   });
 
-  it('embeds dedicated interactive practice quiz links pointing to /quiz?assignmentId=... in reading assignments', () => {
+  it('ensures reading assignments never contain quiz links or quiz payloads for Telegram', () => {
     const assignmentParts = formatReadingAssignment(book, approved, [page]);
     const text = assignmentParts.join('');
-    expect(text).toContain('🎯 <b>Interactive Practice Quiz:</b>');
-    expect(text).toContain('/quiz?assignmentId=assignment-1');
+    expect(text).not.toContain('🎯 <b>Interactive Practice Quiz:</b>');
+    expect(text).not.toContain('/quiz');
   });
 });
