@@ -55,12 +55,12 @@ function SendNowButton({
       {sending ? (
         <>
           <LoaderCircle size={14} style={{ animation: 'sams-action-spin .8s linear infinite' }} />
-          <span>Sending to Telegramâ€¦</span>
+          <span>Sending to Telegram…</span>
         </>
       ) : isDelivered ? (
         <>
           <CheckCircle2 size={14} />
-          <span>Sent to Telegram Â· Resend</span>
+          <span>Sent to Telegram · Resend</span>
         </>
       ) : (
         <>
@@ -459,7 +459,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
       const msgIds = data.delivery?.telegramMessageIds?.length
         ? ` (Telegram message ID: ${data.delivery.telegramMessageIds.join(', ')})`
         : '';
-      showNotice(`ðŸš€ Sent Day ${assignment.dayNumber} section to ${channel}! Original schedule remains unchanged.${msgIds}`);
+      showNotice(`🚀 Sent Day ${assignment.dayNumber} section to ${channel}! Original schedule remains unchanged.${msgIds}`);
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Could not send this section to Telegram.');
     } finally {
@@ -505,7 +505,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
       if (!response.ok) throw new Error(data.error || 'Could not update this book.');
       setBooks(current => current.map(item => item.id === book.id ? data.book : item));
       setEditingBookId(null);
-      showNotice(`Updated â€œ${data.book.title}â€.`);
+      showNotice(`Updated “${data.book.title}”.`);
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Could not update this book.');
     } finally {
@@ -514,7 +514,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
   }
 
   async function removeBook(book: BookRecord) {
-    if (!window.confirm(`Delete â€œ${book.title}â€ and its extracted pages, plans, and saved delivery records? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete “${book.title}” and its extracted pages, plans, and saved delivery records? This cannot be undone.`)) return;
     setError('');
     setDeletingBookId(book.id);
     try {
@@ -524,7 +524,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
       setBooks(current => current.filter(item => item.id !== book.id));
       setPagesByBook(current => { const next = { ...current }; delete next[book.id]; return next; });
       setAssignmentsByBook(current => { const next = { ...current }; delete next[book.id]; return next; });
-      showNotice(`Deleted â€œ${book.title}â€.`);
+      showNotice(`Deleted “${book.title}”.`);
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Could not delete this book.');
     } finally {
@@ -625,7 +625,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
           );
         })()}
         <button className="v-pill-btn" type="submit" disabled={isUploading} style={{ minHeight: 44, display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 8, cursor: isUploading ? 'wait' : 'pointer' }}>
-          <FileUp size={17} /> {isUploading ? 'Saving PDFâ€¦' : 'Queue daily Telegram delivery'}
+          <FileUp size={17} /> {isUploading ? 'Saving PDF…' : 'Queue daily Telegram delivery'}
         </button>
         {notice && <p role="status" style={{ margin: 0, color: '#86efac', fontSize: 13 }}>{notice}</p>}
         {error && <p role="alert" style={{ margin: 0, color: '#fca5a5', fontSize: 13 }}>{error}</p>}
@@ -633,11 +633,11 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
 
       <div className="v-card" style={{ padding: 18, display: 'grid', gap: 14 }}>
         <h3 style={{ margin: 0 }}>Saved books</h3>
-        {loading ? <p style={{ color: 'var(--text-muted)' }}>Loadingâ€¦</p> : books.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>No books saved yet.</p> : books.map(book => (
+        {loading ? <p style={{ color: 'var(--text-muted)' }}>Loading…</p> : books.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>No books saved yet.</p> : books.map(book => (
           <article key={book.id} style={{ padding: 16, borderRadius: 16, border: '1px solid var(--v-glass-border)', display: 'grid', gap: 14, marginBottom: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <div><strong>{book.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{book.author}</div></div>
-              <span style={{ fontSize: 12, color: book.automationStatus === 'failed' || book.extractionStatus === 'failed' ? '#fca5a5' : book.automationStatus === 'ready' ? '#86efac' : '#fbbf24' }}>{book.automationStatus === 'processing' ? 'Preparing daily postsâ€¦' : book.automationStatus === 'needs_review' ? 'Waiting for page review' : book.automationStatus === 'failed' ? 'Automation needs attention' : book.automationStatus === 'ready' ? 'Daily Telegram posts active' : 'Daily Telegram posts queued'}</span>
+              <span style={{ fontSize: 12, color: book.automationStatus === 'failed' || book.extractionStatus === 'failed' ? '#fca5a5' : book.automationStatus === 'ready' ? '#86efac' : '#fbbf24' }}>{book.automationStatus === 'processing' ? 'Preparing daily posts…' : book.automationStatus === 'needs_review' ? 'Waiting for page review' : book.automationStatus === 'failed' ? 'Automation needs attention' : book.automationStatus === 'ready' ? 'Daily Telegram posts active' : 'Daily Telegram posts queued'}</span>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <button
@@ -660,7 +660,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
               <button type="button" className="v-pill-btn" aria-expanded={!collapsedBooks.has(book.id)} onClick={() => setCollapsedBooks(current => { const next = new Set(current); if (next.has(book.id)) next.delete(book.id); else next.add(book.id); return next; })} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center' }}>{collapsedBooks.has(book.id) ? <><ChevronDown size={15} /> Expand</> : <><ChevronUp size={15} /> Collapse</>}</button>
               <button type="button" className="v-pill-btn" onClick={() => beginEdit(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center' }}><Pencil size={14} /> Edit</button>
               <button type="button" className="v-pill-btn" disabled={deletingBookId === book.id} onClick={() => void removeBook(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center', color: '#fca5a5', cursor: deletingBookId === book.id ? 'wait' : 'pointer' }}>
-                <Trash2 size={14} /> {deletingBookId === book.id ? 'Deletingâ€¦' : 'Delete'}
+                <Trash2 size={14} /> {deletingBookId === book.id ? 'Deleting…' : 'Delete'}
               </button>
             </div>
 
@@ -689,13 +689,13 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, fontSize: 12 }}>
                     <div>
                       <strong style={{ color: 'var(--text-primary)' }}>Reading Position: Page {book.currentPage}</strong>
-                      <span style={{ color: 'var(--text-muted)' }}> (pp. {book.startPage}â€“{book.endPage})</span>
+                      <span style={{ color: 'var(--text-muted)' }}> (pp. {book.startPage}–{book.endPage})</span>
                     </div>
                     <div style={{ color: 'var(--text-secondary)' }}>
                       <span style={{ color: '#4ade80', fontWeight: 600 }}>{pagesRead} pages sent</span>
-                      {' Â· '}
+                      {' · '}
                       <span>{remainingPages} pages remaining</span>
-                      {' Â· '}
+                      {' · '}
                       <span style={{ color: '#60a5fa', fontWeight: 700 }}>{progressPct}%</span>
                     </div>
                   </div>
@@ -721,8 +721,8 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                         <strong style={{ color: 'var(--text-primary)' }}>
                           Day {nextPending.dayNumber}{nextPending.sectionNumber ? ` · Part ${nextPending.sectionNumber}` : ''}
                         </strong>
-                        <span style={{ color: 'var(--accent-color, #60a5fa)' }}> (pp. {nextPending.startPdfPage}â€“{nextPending.endPdfPage})</span>
-                        <span style={{ color: 'var(--text-muted)' }}> Â· Scheduled: {nextPending.scheduledDate} {nextPending.postingTime || book.postingTime}</span>
+                        <span style={{ color: 'var(--accent-color, #60a5fa)' }}> (pp. {nextPending.startPdfPage}–{nextPending.endPdfPage})</span>
+                        <span style={{ color: 'var(--text-muted)' }}> · Scheduled: {nextPending.scheduledDate} {nextPending.postingTime || book.postingTime}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span
@@ -746,7 +746,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                     </div>
                   ) : (
                     <div style={{ fontSize: 12, color: '#4ade80', fontWeight: 600 }}>
-                      âœ“ All scheduled sections for this book have been completed and delivered to Telegram.
+                      ✓ All scheduled sections for this book have been completed and delivered to Telegram.
                     </div>
                   )}
                 </div>
@@ -795,18 +795,18 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
               })()}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" className="v-pill-btn" disabled={savingBookEditId === book.id} onClick={() => void saveBookEdit(book)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center', cursor: savingBookEditId === book.id ? 'wait' : 'pointer' }}>
-                  <Save size={14} /> {savingBookEditId === book.id ? 'Saving changesâ€¦' : 'Save changes'}
+                  <Save size={14} /> {savingBookEditId === book.id ? 'Saving changes…' : 'Save changes'}
                 </button>
                 <button type="button" className="v-pill-btn" onClick={() => setEditingBookId(null)} style={{ padding: '8px 12px', display: 'inline-flex', gap: 6, alignItems: 'center' }}><X size={14} /> Cancel</button>
               </div>
             </section>}
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', color: 'var(--text-secondary)', fontSize: 12 }}>
-              <span>PDF pages {book.startPage}â€“{book.endPage}</span><span>Current page {book.currentPage}</span><span>{book.durationDays} days</span><span><Clock3 size={13} style={{ verticalAlign: 'middle' }} /> {book.postingTime} Â· {book.timezone}</span><span><LockKeyhole size={13} style={{ verticalAlign: 'middle' }} /> Private server file</span>
+              <span>PDF pages {book.startPage}–{book.endPage}</span><span>Current page {book.currentPage}</span><span>{book.durationDays} days</span><span><Clock3 size={13} style={{ verticalAlign: 'middle' }} /> {book.postingTime} · {book.timezone}</span><span><LockKeyhole size={13} style={{ verticalAlign: 'middle' }} /> Private server file</span>
             </div>
             {book.extractionProgress && <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 12 }}>Progress: {book.extractionProgress.completedPages} / {book.extractionProgress.totalPages} selected pages</p>}
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.5 }}>{book.extractionMessage}</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <button type="button" className="v-pill-btn" disabled={processingId !== null} onClick={() => void extractBook(book)} style={{ padding: '8px 12px', cursor: processingId !== null ? 'wait' : 'pointer' }}>{processingId === book.id ? 'Extractingâ€¦' : book.extractionStatus === 'pending' ? 'Extract PDF text / OCR' : book.extractionStatus === 'processing' ? 'Resume / retry extraction' : 'Re-extract PDF pages'}</button>
+              <button type="button" className="v-pill-btn" disabled={processingId !== null} onClick={() => void extractBook(book)} style={{ padding: '8px 12px', cursor: processingId !== null ? 'wait' : 'pointer' }}>{processingId === book.id ? 'Extracting…' : book.extractionStatus === 'pending' ? 'Extract PDF text / OCR' : book.extractionStatus === 'processing' ? 'Resume / retry extraction' : 'Re-extract PDF pages'}</button>
               {processingId === book.id && (
                 <button
                   type="button"
@@ -874,7 +874,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                   onClick={() => void generatePlan(book)}
                   style={{ padding: '8px 12px', cursor: generatingPlanBookId === book.id ? 'wait' : 'pointer' }}
                 >
-                  {generatingPlanBookId === book.id ? 'Generating planâ€¦' : 'Generate concept-based plan'}
+                  {generatingPlanBookId === book.id ? 'Generating plan…' : 'Generate concept-based plan'}
                 </button>
                 {generatingPlanBookId === book.id && (
                   <button
@@ -901,14 +901,14 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                   onClick={() => void loadAssignments(book)}
                   style={{ padding: '8px 12px', cursor: loadingAssignmentsBookId === book.id ? 'wait' : 'pointer' }}
                 >
-                  {loadingAssignmentsBookId === book.id ? 'Loading planâ€¦' : 'Load saved plan'}
+                  {loadingAssignmentsBookId === book.id ? 'Loading plan…' : 'Load saved plan'}
                 </button>
               </div>
             )}
             {assignmentsByBook[book.id]?.map(assignment => (
               <section key={assignment.id} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 12, padding: 12, display: 'grid', gap: 8 }}>
-                <strong>Day {assignment.dayNumber}{assignment.sectionNumber ? ` · Part ${assignment.sectionNumber}` : ''} Â· {assignment.scheduledDate} Â· PDF pages {assignment.startPdfPage}â€“{assignment.endPdfPage}</strong>
-                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{assignment.status} Â· estimated {assignment.estimatedMinutes} minutes Â· original text remains in extracted pages</span>
+                <strong>Day {assignment.dayNumber}{assignment.sectionNumber ? ` · Part ${assignment.sectionNumber}` : ''} · {assignment.scheduledDate} · PDF pages {assignment.startPdfPage}–{assignment.endPdfPage}</strong>
+                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{assignment.status} · estimated {assignment.estimatedMinutes} minutes · original text remains in extracted pages</span>
                 <div style={{ display: 'grid', gap: 5 }}>{assignment.concepts.map((concept, index) => <div key={`${assignment.id}-${index}`} style={{ fontSize: 13 }}><strong>{concept.title}</strong><div style={{ color: 'var(--text-secondary)' }}>{concept.concept}</div></div>)}</div>
                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 12 }}>Why this section: {assignment.rationale}</p>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -934,7 +934,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                   const pkg = learningPackages[assignment.id] || detail.assignment.learningPackage;
                   const returnTo = `/?tab=books&bookId=${encodeURIComponent(book.id)}&assignmentId=${encodeURIComponent(assignment.id)}`;
                   return <div style={{ display: 'grid', gap: 12, paddingTop: 8 }}>
-                    <h4 style={{ margin: 0 }}>1. Original source Â· PDF pages {assignment.startPdfPage}â€“{assignment.endPdfPage}</h4>
+                    <h4 style={{ margin: 0 }}>1. Original source · PDF pages {assignment.startPdfPage}–{assignment.endPdfPage}</h4>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button type="button" className="v-pill-btn" disabled={fullBookReaderLoadingId === book.id} onClick={() => void openFullBookReader(book)} style={{ padding: '8px 12px' }}>{fullBookReaderLoadingId === book.id ? 'Loading full book...' : 'Read full book'}</button>
                       <button type="button" className="v-pill-btn" onClick={() => void openOriginalPdf(book, assignment.startPdfPage)} style={{ padding: '8px 12px' }}>Open original PDF at page {assignment.startPdfPage}</button>
@@ -965,7 +965,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
 
       {fullBookReader && <div role="dialog" aria-modal="true" aria-label={`Full book reader: ${fullBookReader.book.title}`} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.82)', backdropFilter: 'blur(12px)', padding: 20, overflow: 'auto' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'grid', gap: 12, padding: 24, borderRadius: 24, border: '1px solid var(--v-glass-border)', background: 'var(--v-glass-bg)', color: 'var(--text-primary)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}><div><h2 style={{ margin: 0 }}>{fullBookReader.book.title}</h2><p style={{ margin: '6px 0 0', color: 'var(--text-muted)' }}>Full extracted source Â· PDF pages {fullBookReader.book.startPage}â€“{fullBookReader.book.endPage}</p></div><button type="button" className="v-pill-btn" aria-label="Close reader" onClick={() => setFullBookReader(null)} style={{ width: 44, height: 44, padding: 0, borderRadius: '50%' }}><X size={18} /></button></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}><div><h2 style={{ margin: 0 }}>{fullBookReader.book.title}</h2><p style={{ margin: '6px 0 0', color: 'var(--text-muted)' }}>Full extracted source · PDF pages {fullBookReader.book.startPage}–{fullBookReader.book.endPage}</p></div><button type="button" className="v-pill-btn" aria-label="Close reader" onClick={() => setFullBookReader(null)} style={{ width: 44, height: 44, padding: 0, borderRadius: '50%' }}><X size={18} /></button></div>
           {fullBookReader.missingPages.length > 0 && <p role="status" style={{ margin: 0, padding: 12, borderRadius: 12, border: '1px solid var(--v-glass-border)' }}>Some source pages are not extracted yet: {fullBookReader.missingPages.join(', ')}. Re-run extraction to complete the book.</p>}
           {fullBookReader.pages.map(page => <article key={page.pdfPage} style={{ padding: 16, borderRadius: 16, border: '1px solid var(--v-glass-border)' }}><strong>PDF page {page.pdfPage}</strong><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', font: '14px/1.75 inherit', margin: '10px 0 0' }}>{page.text?.trim() || '(No extractable text on this page.)'}</pre></article>)}
         </div>
