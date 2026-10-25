@@ -418,7 +418,7 @@ export function generateDeterministicQuestions(
         `Postponing structured execution indefinitely without deliberate scheduling.`,
       ].map(d => truncateUnicode(d, 95));
 
-      const { options, correctIndex } = distributeOptionsBalanced(correctAns, distractors, i);
+      const { options, correctIndex } = distributeOptionsBalanced(correctAns, distractors);
 
       questions.push({
         id: `q_${questions.length}`,
@@ -463,7 +463,7 @@ export function generateDeterministicQuestions(
       `Randomizing task execution without adhering to schedule principles.`,
     ];
 
-    const { options, correctIndex } = distributeOptionsBalanced(correct, candidateDistractors, qIdx);
+    const { options, correctIndex } = distributeOptionsBalanced(correct, candidateDistractors);
 
     questions.push({
       id: `q_${qIdx}`,
@@ -551,7 +551,7 @@ Rules:
         const item = parsed[i];
         const question = truncateUnicode(String(item.question || '').trim(), 290);
         const optionsList = Array.isArray(item.options) ? item.options.map((o: any) => truncateUnicode(String(o).trim(), 95)).filter(Boolean) : [];
-        if (question && optionsList.length >= 2) {
+        if (question && optionsList.length === 4 && new Set(optionsList).size === 4) {
           const rawCorrectId = Number.isInteger(Number(item.correctOptionId))
             ? Math.max(0, Math.min(Number(item.correctOptionId), optionsList.length - 1))
             : 0;
@@ -713,90 +713,16 @@ export async function sendQuizQuestion(
   sectionIndex: number,
   questionIndex: number
 ): Promise<{ pollResult: TelegramPollResult; controlMessageId: number }> {
-  const section = session.sections[sectionIndex];
-  if (!section) throw new Error(`Section ${sectionIndex} not found in quiz session.`);
-  const question = section.questions[questionIndex];
-  if (!question) throw new Error(`Question ${questionIndex} not found in Section ${sectionIndex}.`);
-
-  // 1. Send native Telegram Quiz Poll
-  const pollResult = await sendTelegramQuizPoll({
-    chatId: session.chatId,
-    question: truncateUnicode(`[Day ${session.dayNumber} · S${sectionIndex + 1}:Q${questionIndex + 1}] ${question.question}`, 300),
-    options: question.options,
-    correctOptionId: question.correctOptionId,
-    explanation: truncateUnicode(question.conciseExplanation, 200),
-    isAnonymous: false,
-  });
-
-  // Map poll ID to this session and question for update processing
-  await registerPollMapping({
-    pollId: pollResult.pollId,
-    sessionId: session.id,
-    questionId: question.id,
-    sectionIndex,
-    questionIndex,
-    updatedAt: Date.now(),
-  });
-
-  // 2. Send accompanying Navigation Control Card with inline keyboard
-  const navKeyboard = makeNavigationKeyboard(
-    session.id,
-    sectionIndex,
-    questionIndex,
-    section.questions.length,
-    session.sections.length
-  );
-
-  const controlText = [
-    `📍 <b>Reading & Quiz Progress:</b> Day ${session.dayNumber} · Section ${sectionIndex + 1} of ${session.sections.length}`,
-    `❓ <b>Question ${questionIndex + 1} of ${section.questions.length}</b> (PDF pages ${section.startPdfPage}–${section.endPdfPage})`,
-    `<i>Tap an answer above to test your recall. Use the buttons below to navigate:</i>`,
-  ].join('\n');
-
-  const controlMsg = await sendTelegramMessageWithKeyboard(session.chatId, controlText, navKeyboard);
-
-  // 3. If immediate explanation is enabled in settings, post the learning feedback card right away
-  if (session.settings.revealExplanation === 'immediate') {
-    const feedback = formatLearningFeedbackCard(question);
-    await sendTelegramTextToChannel(feedback, session.userId).catch(() => undefined);
-  }
-
-  // Update session pointers
-  session.currentSectionIndex = sectionIndex;
-  session.currentQuestionIndex = questionIndex;
-  session.lastPollMessageId = pollResult.messageId;
-  session.lastControlMessageId = controlMsg.message_id;
-  session.lastPollId = pollResult.pollId;
-  await saveQuizSession(session);
-
-  return { pollResult, controlMessageId: controlMsg.message_id };
+  void session; void sectionIndex; void questionIndex;
+  throw new Error('Quiz delivery is website-only; Telegram poll delivery is disabled.');
 }
 
 export async function sendSectionExcerpt(
   session: BookQuizSession,
   sectionIndex: number
 ): Promise<{ excerptMessageIds: number[] }> {
-  const section = session.sections[sectionIndex];
-  if (!section) throw new Error(`Section ${sectionIndex} not found in quiz session.`);
-
-  const header = [
-    `📖 <b>ORIGINAL BOOK READING · DAY ${session.dayNumber}</b>`,
-    `📚 <b>${session.bookTitle}</b>${session.author ? ` — ${session.author}` : ''}`,
-    `📑 <b>Section ${sectionIndex + 1} of ${session.sections.length} · PDF Pages ${section.startPdfPage}–${section.endPdfPage}</b>`,
-    `<i>Read the original unedited book excerpt below, then answer the interactive quiz questions that follow:</i>`,
-  ].join('\n');
-
-  // Split large book excerpts safely according to Telegram HTML length limits
-  const parts = splitTelegramText(`${header}\n\n${section.originalExcerpt}`, 3400);
-  const sentIds: number[] = [];
-
-  for (const part of parts) {
-    const res = await sendTelegramTextToChannel(part, session.userId);
-    if (res.messageId) sentIds.push(res.messageId);
-    if (res.messageIds?.length) sentIds.push(...res.messageIds);
-  }
-
-  return { excerptMessageIds: sentIds };
+  void session; void sectionIndex;
+  return { excerptMessageIds: [] };
 }
 
 export async function startQuizSessionForAssignment(
@@ -865,28 +791,9 @@ export async function startQuizSessionForAssignment(
 
   await saveQuizSession(session);
 
-  // If skipTelegramMessages is true, do not dispatch any messages or polls to Telegram
-  if (!options?.skipTelegramMessages) {
-    // Send Section 1's original unparaphrased excerpt unless caller already posted it
-    if (!options?.skipFirstExcerpt) {
-      await sendSectionExcerpt(session, 0);
-    }
-
-    // If timing is 'on_demand', send a prompt button to start the quiz
-    if (settings.deliveryTiming === 'on_demand') {
-      const startKeyboard: InlineKeyboardButton[][] = [
-        [{ text: `🎯 Start Section 1 Quiz (${sections[0].questions.length} Questions)`, callback_data: `quiz:start:${sessionId}` }],
-      ];
-      await sendTelegramMessageWithKeyboard(
-        chatId,
-        `📖 <b>Section 1 Reading Delivered!</b>\nWhen you have finished reading PDF pages ${sections[0].startPdfPage}–${sections[0].endPdfPage}, tap the button below to start your interactive quiz questions:`,
-        startKeyboard
-      );
-    } else {
-      // Default 'with_reading': immediately launch Question 1
-      await sendQuizQuestion(session, 0, 0);
-    }
-  }
+  // Quiz sessions are consumed by the website only. Never dispatch Telegram polls,
+  // excerpts, or inline controls from this service.
+  void options;
 
   return session;
 }
@@ -898,134 +805,8 @@ export async function handleQuizCallback(
   callbackData: string,
   fromUser?: { id?: number; first_name?: string; username?: string }
 ): Promise<{ handled: boolean; action: string; message?: string }> {
-  const parts = callbackData.split(':');
-  if (parts[0] !== 'quiz') return { handled: false, action: 'ignored' };
-
-  const action = parts[1]; // 'next_q' | 'exp' | 'next_s' | 'fin' | 'start'
-  const sessionId = parts[2];
-
-  const session = await getQuizSession(sessionId);
-  if (!session) {
-    await answerTelegramCallback(callbackQueryId, 'Quiz session expired or not found.', true);
-    return { handled: true, action: 'session_not_found' };
-  }
-
-  if (action === 'start') {
-    await answerTelegramCallback(callbackQueryId, 'Starting Quiz Question 1! 🚀');
-    await sendQuizQuestion(session, 0, 0);
-    return { handled: true, action: 'started_quiz' };
-  }
-
-  if (action === 'next_q') {
-    const secIdx = Number(parts[3]) || 0;
-    const qIdx = Number(parts[4]) || 0;
-    const section = session.sections[secIdx];
-    if (!section || !section.questions[qIdx]) {
-      await answerTelegramCallback(callbackQueryId, 'No more questions in this section. Moving to next section...');
-      if (secIdx + 1 < session.sections.length) {
-        await sendSectionExcerpt(session, secIdx + 1);
-        await sendQuizQuestion(session, secIdx + 1, 0);
-        return { handled: true, action: 'advanced_to_next_section' };
-      }
-      return await finishQuizSession(session, callbackQueryId);
-    }
-    await answerTelegramCallback(callbackQueryId, `Loading Question ${qIdx + 1}...`);
-    await sendQuizQuestion(session, secIdx, qIdx);
-    return { handled: true, action: 'next_question_sent' };
-  }
-
-  if (action === 'exp') {
-    const secIdx = Number(parts[3]) || 0;
-    const qIdx = Number(parts[4]) || 0;
-    const section = session.sections[secIdx];
-    const question = section?.questions[qIdx];
-    if (!question) {
-      await answerTelegramCallback(callbackQueryId, 'Question details not found.', true);
-      return { handled: true, action: 'question_not_found' };
-    }
-    await answerTelegramCallback(callbackQueryId, 'Displaying Learning Feedback! 💡');
-    const existingAnswer = session.answers[question.id];
-    const card = formatLearningFeedbackCard(
-      question,
-      existingAnswer?.selectedOptionId,
-      existingAnswer?.isCorrect
-    );
-    await sendTelegramTextToChannel(card, session.userId);
-    return { handled: true, action: 'explanation_repeated' };
-  }
-
-  if (action === 'next_s') {
-    const nextSecIdx = Number(parts[3]) || (session.currentSectionIndex + 1);
-    if (nextSecIdx >= session.sections.length) {
-      return await finishQuizSession(session, callbackQueryId);
-    }
-    await answerTelegramCallback(callbackQueryId, `Loading Section ${nextSecIdx + 1}... 📖`);
-    await sendSectionExcerpt(session, nextSecIdx);
-    await sendQuizQuestion(session, nextSecIdx, 0);
-    return { handled: true, action: 'next_section_sent' };
-  }
-
-  if (action === 'fin') {
-    return await finishQuizSession(session, callbackQueryId);
-  }
-
-  return { handled: false, action: 'unknown_action' };
-}
-
-async function finishQuizSession(
-  session: BookQuizSession,
-  callbackQueryId?: string
-): Promise<{ handled: boolean; action: string }> {
-  if (callbackQueryId) {
-    await answerTelegramCallback(callbackQueryId, 'Finishing Reading & Quiz Session! 🏁');
-  }
-
-  const answeredCount = Object.keys(session.answers).length;
-  const scorePercent = answeredCount > 0 ? Math.round((session.score / answeredCount) * 100) : 100;
-
-  session.status = 'completed';
-  session.completedAt = Date.now();
-  await saveQuizSession(session);
-
-  const banner = [
-    `🎉 <b>READING & QUIZ SESSION COMPLETED!</b>`,
-    `📖 <b>Book:</b> ${session.bookTitle}`,
-    `📅 <b>Day:</b> ${session.dayNumber} · All ${session.totalSections} section(s) reviewed`,
-    `📊 <b>Quiz Score:</b> ${session.score} / ${answeredCount || session.totalQuestions} correct (${scorePercent}%)`,
-    `🏆 <i>Great job! Today's assigned reading progress and comprehension review have been recorded.</i>`,
-  ].join('\n');
-
-  await sendTelegramTextToChannel(banner, session.userId);
-
-  // Automatically advance reading assignment progress
-  try {
-    const { listBookAssignments } = await import('../bookAssignments');
-    const assignments = await listBookAssignments(session.userId, session.bookId);
-    const assignment = assignments.find(a => a.id === session.assignmentId);
-    if (assignment && assignment.status !== 'completed') {
-      await updateBookAssignment({
-        ...assignment,
-        status: 'completed',
-        deliveryStatus: 'sent',
-        deliveredAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-      const { getBook } = await import('../books');
-      const book = await getBook(session.userId, session.bookId);
-      if (book) {
-        const nextCurrentPage = Math.min(book.endPage + 1, Math.max(book.currentPage, assignment.endPdfPage + 1));
-        await updateBook({
-          ...book,
-          currentPage: nextCurrentPage,
-          status: nextCurrentPage > book.endPage ? 'ready' : book.status,
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('[BookQuiz] Could not advance assignment status on finish:', err);
-  }
-
-  return { handled: true, action: 'session_completed' };
+  void callbackQueryId; void callbackData; void fromUser;
+  return { handled: false, action: 'website_only' };
 }
 
 export async function handlePollAnswer(pollAnswer: {
@@ -1033,50 +814,8 @@ export async function handlePollAnswer(pollAnswer: {
   user?: { id?: number; first_name?: string; username?: string };
   option_ids: number[];
 }): Promise<{ handled: boolean; isCorrect?: boolean; feedbackSent?: boolean }> {
-  const mapping = await getPollMapping(pollAnswer.poll_id);
-  if (!mapping) {
-    return { handled: false };
-  }
-
-  const session = await getQuizSession(mapping.sessionId);
-  if (!session) return { handled: false };
-
-  const section = session.sections[mapping.sectionIndex];
-  const question = section?.questions[mapping.questionIndex];
-  if (!question) return { handled: false };
-
-  const selectedOptionId = pollAnswer.option_ids[0] ?? -1;
-  const isCorrect = selectedOptionId === question.correctOptionId;
-
-  // Record user response
-  const answerRecord: UserAnswerRecord = {
-    questionId: question.id,
-    sectionIndex: mapping.sectionIndex,
-    questionIndex: mapping.questionIndex,
-    selectedOptionId,
-    isCorrect,
-    answeredAt: Date.now(),
-    voterId: pollAnswer.user?.id,
-    voterName: pollAnswer.user?.first_name || pollAnswer.user?.username,
-  };
-
-  const wasAlreadyAnswered = Boolean(session.answers[question.id]);
-  session.answers[question.id] = answerRecord;
-
-  if (!wasAlreadyAnswered && isCorrect) {
-    session.score += 1;
-  }
-  await saveQuizSession(session);
-
-  // If revealExplanation is 'after_answer', dispatch the rich learning feedback card!
-  let feedbackSent = false;
-  if (session.settings.revealExplanation === 'after_answer') {
-    const card = formatLearningFeedbackCard(question, selectedOptionId, isCorrect);
-    await sendTelegramTextToChannel(card, session.userId).catch(() => undefined);
-    feedbackSent = true;
-  }
-
-  return { handled: true, isCorrect, feedbackSent };
+  void pollAnswer;
+  return { handled: false };
 }
 
 // --- Background / Polling Update Processor ---
@@ -1084,31 +823,5 @@ export async function handlePollAnswer(pollAnswer: {
 let lastProcessedUpdateId = 0;
 
 export async function processTelegramUpdates(): Promise<{ processedCount: number; lastUpdateId: number }> {
-  const { getTelegramUpdates } = await import('../telegram');
-  const updates = await getTelegramUpdates(lastProcessedUpdateId > 0 ? lastProcessedUpdateId + 1 : undefined);
-
-  let processedCount = 0;
-  for (const update of updates) {
-    if (update.update_id > lastProcessedUpdateId) {
-      lastProcessedUpdateId = update.update_id;
-    }
-
-    if (update.callback_query && update.callback_query.data) {
-      await handleQuizCallback(
-        update.callback_query.id,
-        update.callback_query.data,
-        update.callback_query.from
-      );
-      processedCount++;
-    } else if (update.poll_answer) {
-      await handlePollAnswer({
-        poll_id: update.poll_answer.poll_id,
-        user: update.poll_answer.user,
-        option_ids: update.poll_answer.option_ids,
-      });
-      processedCount++;
-    }
-  }
-
-  return { processedCount, lastUpdateId: lastProcessedUpdateId };
+  return { processedCount: 0, lastUpdateId: lastProcessedUpdateId };
 }

@@ -22,7 +22,6 @@ describe('Moon book operation intent detection', () => {
     ['Post to telegram :/the above explainstion', 'send_telegram'],
     ['send the above explanation to the bot', 'send_telegram'],
     ['post the above message to telegram', 'send_telegram'],
-    ['the above explanation', 'send_telegram'],
     ['send extracted pages based on the load plan', 'send_load_plan'],
     ['send based on load plan', 'send_load_plan'],
     ['send Day 1 to telegram', 'send_load_plan'],
@@ -48,6 +47,10 @@ describe('Moon book operation intent detection', () => {
     ['Show my reading schedule.', 'schedule'],
   ] as const)('routes the explicit request %s', (text, expected) => {
     expect(detectMoonBookIntent(text)).toBe(expected);
+  });
+
+  it('does not dispatch a referential response without an explicit destination', () => {
+    expect(detectMoonBookIntent('the above explanation')).toBeNull();
   });
 
   it('does not turn ordinary book discussion into a state-changing tool call', () => {
@@ -114,12 +117,12 @@ describe('Moon book operation intent detection', () => {
     });
   });
 
-  describe('Quiz Intent Detection & Telegram Quiz Launch', () => {
-    it('detects quiz mode requests from natural language prompts', () => {
-      expect(detectMoonBookIntent('quiz me on today reading')).toBe('quiz');
-      expect(detectMoonBookIntent('start interactive quiz for day 1')).toBe('quiz');
-      expect(detectMoonBookIntent('test my recall on deep work')).toBe('quiz');
-      expect(detectMoonBookIntent('send comprehension questions to telegram')).toBe('quiz');
+  describe('Website-only quiz handling', () => {
+    it('does not route quiz requests into Telegram delivery', () => {
+      expect(detectMoonBookIntent('quiz me on today reading')).toBeNull();
+      expect(detectMoonBookIntent('start interactive quiz for day 1')).toBeNull();
+      expect(detectMoonBookIntent('test my recall on deep work')).toBeNull();
+      expect(detectMoonBookIntent('send comprehension questions to telegram')).toBeNull();
     });
   });
 });

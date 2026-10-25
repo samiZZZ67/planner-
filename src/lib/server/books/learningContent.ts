@@ -20,12 +20,14 @@ import type {
   BookLearningPackage,
   QuizQuestionItem,
   LearningPackageRealLifeExample,
+  BookLearningQuote,
+  PreviousStudyUnitConnection,
 } from '../../books/types';
 import { sendChatCompletionWithFallback, getGatewayConfig } from '../freellm/gateway';
 import { sanitizeUtf8, truncateUnicode } from '../telegramFormatter';
-import { searchWikipedia, getWikipediaPage, getBiographicalFacts } from '../sources/wikipedia';
 import { deduplicateBy } from '../sources/cache';
-import { updateBookAssignment } from '../bookAssignments';
+import { listBookAssignments, updateBookAssignment } from '../bookAssignments';
+import { listBookPages } from '../books';
 import { distributeOptionsBalanced, shuffleOptionsWithKey } from './quizShuffle';
 
 function parseJsonSafe<T>(content: string): T | null {
@@ -44,6 +46,79 @@ function parseJsonSafe<T>(content: string): T | null {
     } catch {}
   }
   return null;
+}
+
+export function extractVerifiedQuotes(pages: BookPageRecord[], limit = 3): BookLearningQuote[] {
+  const quotes: BookLearningQuote[] = [];
+  for (const page of [...pages].sort((a, b) => a.pdfPage - b.pdfPage)) {
+    if (!page.text?.trim() || page.method === 'empty') continue;
+    const candidates = page.text.split(/(?<=[.!?])\s+/).map(text => text.trim());
+    for (const text of candidates) {
+      if (text.length < 35 || text.length > 220 || /^(?:chapter|contents|copyright|all rights reserved)\b/i.test(text)) continue;
+      if (quotes.some(quote => quote.text === text)) continue;
+      quotes.push({ text, pdfPage: page.pdfPage });
+      if (quotes.length >= limit) return quotes;
+    }
+  }
+  return quotes;
+}
+
+async function buildPreviousUnitConnection(
+  userId: string,
+  book: BookRecord,
+  assignment: BookAssignmentRecord,
+  currentPages: BookPageRecord[],
+  model?: string,
+): Promise<PreviousStudyUnitConnection> {
+  const bookAssignments = await listBookAssignments(userId, book.id);
+  const previous = bookAssignments
+    .filter(item => item.bookId === book.id
+      && item.id !== assignment.id
+      && (item.deliveryStatus === 'sent' || item.status === 'completed')
+      && (item.scheduledDate < assignment.scheduledDate
+        || (item.scheduledDate === assignment.scheduledDate && item.startPdfPage < assignment.startPdfPage)))
+    .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate) || b.startPdfPage - a.startPdfPage)[0];
+
+  if (!previous) {
+    return {
+      previousAssignmentId: null,
+      previousTitle: null,
+      previousPdfPages: null,
+      explanation: 'This is the first delivered study unit for this book, so there is no previous post to connect yet.',
+    };
+  }
+
+  const previousPages = await listBookPages(userId, book.id, previous.startPdfPage, previous.endPdfPage);
+  const previousSource = previous.studyNotes?.summary
+    || previous.learningPackage?.summary
+    || previousPages.map(page => page.text).join('\n').slice(0, 5000);
+  const currentSource = currentPages.map(page => page.text).join('\n').slice(0, 5000);
+  const previousTitle = previous.concepts.map(item => item.title).filter(Boolean).join(', ') || `PDF pages ${previous.startPdfPage}-${previous.endPdfPage}`;
+  const currentTitle = assignment.concepts.map(item => item.title).filter(Boolean).join(', ') || `PDF pages ${assignment.startPdfPage}-${assignment.endPdfPage}`;
+  let explanation = `Yesterday's delivered unit focused on ${previousTitle}. Today's unit focuses on ${currentTitle}. The source material does not establish a more specific connection.`;
+
+  if (!process.env.VITEST && previousSource && currentSource) {
+    try {
+      const response = await sendChatCompletionWithFallback({
+        model: model || getGatewayConfig().defaultModel || 'auto',
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: 'Explain one specific connection between yesterday’s delivered study unit and today’s unit from the same book. Say whether the new material extends, applies, contrasts with, or depends on the earlier material. Use only the supplied text. If no meaningful relationship is supported, say so plainly. Do not invent book claims. Return concise plain text.' },
+          { role: 'user', content: JSON.stringify({ bookTitle: book.title, previousUnit: { title: previousTitle, pages: [previous.startPdfPage, previous.endPdfPage], source: previousSource }, currentUnit: { title: currentTitle, pages: [assignment.startPdfPage, assignment.endPdfPage], source: currentSource } }) },
+        ],
+      });
+      if (response.content.trim()) explanation = sanitizeUtf8(response.content.trim());
+    } catch (error) {
+      console.warn('[LearningContent] Previous-unit connection generation failed:', error);
+    }
+  }
+
+  return {
+    previousAssignmentId: previous.id,
+    previousTitle,
+    previousPdfPages: [previous.startPdfPage, previous.endPdfPage],
+    explanation,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -173,124 +248,40 @@ export async function generateRealLifeExamples(
   readablePages: BookPageRecord[],
   keyConcepts: string[]
 ): Promise<LearningPackageRealLifeExample[]> {
-  const examples: LearningPackageRealLifeExample[] = [];
-  const primaryConcept = assignment.concepts[0]?.title || keyConcepts[0] || '';
-  const authorName = book.author?.trim() || '';
-  const actualReadable = readablePages.filter(p => p.text?.trim() && p.method !== 'empty');
+  const primaryConcept = assignment.concepts[0]?.title || keyConcepts[0] || book.title;
+  const actualReadable = readablePages.filter(page => page.text?.trim() && page.method !== 'empty');
+  if (!actualReadable.length) return [];
 
-  // 1. Query Wikipedia for the actual concepts in the reading (live when not in Vitest test suite)
-  if (!process.env.VITEST) {
-    const conceptsToSearch = [primaryConcept, ...(keyConcepts || [])]
-      .filter(Boolean)
-      .filter((v, i, a) => a.indexOf(v) === i)
-      .slice(0, 3);
-
-    for (const concept of conceptsToSearch) {
-      if (!concept || concept.length < 3) continue;
-      try {
-        // Search Wikipedia for articles matching this concept
-        const searchResults = await searchWikipedia(`${concept} concept`);
-        const topMatch = searchResults[0];
-
-        if (topMatch) {
-          const article = await getWikipediaPage(topMatch.title);
-          if (article && article.extract.length > 50) {
-            const sentences = article.extract
-              .split(/(?<=[.!?])\s+/)
-              .map(s => s.trim())
-              .filter(s => s.length > 25);
-            const snippet = sentences.slice(0, 3).join(' ');
-
-            examples.push({
-              title: `${article.title} — Real-World Application`,
-              situation: snippet,
-              connection: `Demonstrates the real-world application and historical evolution of "${concept}", directly illuminating the principles analyzed on PDF pages ${assignment.startPdfPage}–${assignment.endPdfPage} of ${book.title}.`,
-              sourceTitle: `${article.title} (Wikipedia)`,
-              sourceUrl: article.sourceUrl,
-              attribution: article.attribution,
-              kind: 'external',
-              sourcePdfPages: [assignment.startPdfPage],
-            });
-            break; // Found primary concept example
-          }
-        }
-      } catch (err: any) {
-        console.warn(`[LearningContent] Wikipedia concept lookup warning for "${concept}":`, err?.message);
-      }
-    }
-
-    // 2. Query Wikipedia for author biographical context if available
-    if (authorName && examples.length < 2) {
-      try {
-        const bio = await getBiographicalFacts(authorName);
-        if (bio) {
-          examples.push({
-            title: `${bio.title} — Biographical Context`,
-            situation: bio.facts.length ? bio.facts.slice(0, 2).join(' ') : bio.summary,
-            connection: `Provides historical background on ${bio.title}, clarifying the personal and empirical observations that shaped "${book.title}".`,
-            sourceTitle: `${bio.title} (Wikipedia Biography)`,
-            sourceUrl: bio.sourceUrl,
-            attribution: bio.attribution,
-            kind: 'external',
-            sourcePdfPages: [assignment.startPdfPage],
-          });
-        }
-      } catch {}
-    }
-  } else {
-    // Under Vitest, provide deterministic external concept application to avoid outbound network timeouts
-    if (primaryConcept) {
-      examples.push({
-        title: `${primaryConcept} — Real-World Application`,
-        situation: `In historical practice and empirical research, systems applying ${primaryConcept.toLowerCase()} demonstrated measurable performance improvements across operational settings.`,
-        connection: `Demonstrates the real-world application and historical evolution of "${primaryConcept}", directly illuminating the principles analyzed on PDF pages ${assignment.startPdfPage}–${assignment.endPdfPage} of ${book.title}.`,
-        sourceTitle: `${primaryConcept} (Wikipedia)`,
-        sourceUrl: `https://en.wikipedia.org/wiki/${encodeURIComponent(primaryConcept.replace(/\s+/g, '_'))}`,
-        attribution: 'Attribution: Wikipedia contributors / CC BY-SA 4.0',
-        kind: 'external',
-        sourcePdfPages: [assignment.startPdfPage],
-      });
-    }
+  const examplePage = actualReadable.find(page => /\b(?:for example|for instance|consider the case|such as|e\.g\.)\b/i.test(page.text));
+  if (examplePage) {
+    const marker = /\b(?:for example|for instance|consider the case|such as|e\.g\.)\b/i.exec(examplePage.text);
+    const extracted = marker ? examplePage.text.slice(marker.index).split(/(?<=[.!?])\s+/)[0].trim() : '';
+    if (extracted.length > 25) return [{
+      title: `Example from ${book.title}`,
+      situation: extracted,
+      connection: `The source uses this example to illustrate ${primaryConcept}.`,
+      lesson: 'Identify which detail demonstrates the idea, then apply the same reasoning to a new case.',
+      sourceDisclosure: `Verbatim source wording from PDF page ${examplePage.pdfPage}.`,
+      sourceTitle: `${book.title}, PDF page ${examplePage.pdfPage}`,
+      sourceUrl: '',
+      attribution: 'Original source text',
+      kind: 'source',
+      sourcePdfPages: [examplePage.pdfPage],
+    }];
   }
 
-  // 3. Extract real-world case study or principle application from the book text itself
-  if (actualReadable.length > 0) {
-    for (const page of actualReadable) {
-      const raw = page.text;
-      // Look for narrative markers indicating historical/biographical examples in the book text
-      const exampleMatch = raw.match(/(?:for example|for instance|consider the case of|consider the|in the 19\d\d|in the 20\d\d|in history|researchers at|a study by|experiment conducted by|take the case of)\s+([^.!?]+[.!?])/i);
-      if (exampleMatch && exampleMatch[0]) {
-        examples.push({
-          title: `Case Study from ${book.title}`,
-          situation: exampleMatch[0].trim(),
-          connection: `Directly cited by the author in the assigned reading to demonstrate how this concept operates in concrete practice.`,
-          sourceTitle: `${book.title} (PDF p. ${page.pdfPage})`,
-          sourceUrl: `pdf_page_${page.pdfPage}`,
-          attribution: `Source: ${book.title} (PDF p. ${page.pdfPage})`,
-          kind: 'source',
-          sourcePdfPages: [page.pdfPage],
-        });
-        break;
-      }
-    }
-  }
-
-  // 4. Grounded illustrative practical application if no external/source examples were reachable
-  if (examples.length === 0 && actualReadable.length > 0) {
-    const firstPage = actualReadable[0];
-    examples.push({
-      title: `Practical Application: ${primaryConcept || book.title}`,
-      situation: `Applying deliberate daily execution principles to overcome cognitive drift and passive reading habits.`,
-      connection: `Illustrates how readers can implement the methodology described on PDF page ${firstPage.pdfPage} in their daily work routines.`,
-      sourceTitle: `${book.title} — Practice Guide (PDF p. ${firstPage.pdfPage})`,
-      sourceUrl: `pdf_page_${firstPage.pdfPage}`,
-      attribution: 'Practical application (illustrative)',
-      kind: 'illustrative',
-      sourcePdfPages: [firstPage.pdfPage],
-    });
-  }
-
-  return deduplicateBy(examples, e => e.situation.toLowerCase()).slice(0, 3);
+  return [{
+    title: `Illustrative scenario: ${primaryConcept}`,
+    situation: `Imagine a learner or team facing a practical decision where ${primaryConcept.toLowerCase()} is relevant. They identify the principle in this unit, apply it, and observe what changes.`,
+    connection: `This is a newly created illustration of ${primaryConcept}; it is not presented as an event or case from ${book.title}.`,
+    lesson: `Use this unit's explanation of ${primaryConcept} to justify the decision, then check the reasoning against the source text.`,
+    sourceDisclosure: `AI-generated illustration based on assigned PDF pages ${assignment.startPdfPage}-${assignment.endPdfPage}.`,
+    sourceTitle: `${book.title}, PDF pages ${assignment.startPdfPage}-${assignment.endPdfPage}`,
+    sourceUrl: '',
+    attribution: 'AI-generated illustrative example; not an original book example.',
+    kind: 'illustrative',
+    sourcePdfPages: [actualReadable[0].pdfPage],
+  }];
 }
 
 // ---------------------------------------------------------------------------
@@ -382,7 +373,7 @@ Rules:
             const item = parsed[qI];
             const qText = String(item.question || '').trim();
             const opts = Array.isArray(item.options) ? item.options.map((o: any) => String(o || '').trim()).filter(Boolean) : [];
-            if (qText && opts.length >= 3) {
+            if (qText && opts.length === 4 && new Set(opts).size === 4) {
               const rawCorrectIdx = Number.isInteger(Number(item.correctOptionIndex))
                 ? Math.max(0, Math.min(Number(item.correctOptionIndex), opts.length - 1))
                 : 0;
@@ -485,7 +476,7 @@ function generateDeterministicChunkQuestions(
       .filter((d): d is string => Boolean(d) && d !== correctOption)
       .map(d => truncateUnicode(d, 95));
 
-    const { options, correctIndex } = distributeOptionsBalanced(correctOption, candidateDistractors, startingIndex + i);
+    const { options, correctIndex } = distributeOptionsBalanced(correctOption, candidateDistractors);
 
     result.push({
       id: `q_${startingIndex + i}`,
@@ -523,6 +514,8 @@ export async function buildAndSaveLearningPackage(options: {
   let summary = existing?.summary || '';
   let keyConcepts = existing?.keyConcepts || assignment.concepts.map(c => c.title);
   let definitions = existing?.definitions || [];
+  let previousUnitConnection = existing?.previousUnitConnection;
+  let quotes = existing?.quotes || [];
 
   if (!existing || !summary || regenerateOnly === 'summary') {
     try {
@@ -535,6 +528,11 @@ export async function buildAndSaveLearningPackage(options: {
       summary = summary || `Reading section for ${book.title} (PDF pages ${assignment.startPdfPage}–${assignment.endPdfPage}).`;
     }
   }
+
+  if (!previousUnitConnection) {
+    previousUnitConnection = await buildPreviousUnitConnection(userId, book, assignment, readablePages, model);
+  }
+  if (!quotes.length) quotes = extractVerifiedQuotes(readablePages);
 
   // 2. Real-Life Examples
   let realLifeExamples = existing?.realLifeExamples || [];
@@ -564,6 +562,8 @@ export async function buildAndSaveLearningPackage(options: {
     summary,
     keyConcepts,
     definitions,
+    previousUnitConnection,
+    quotes,
     realLifeExamples,
     quiz,
     status: {
@@ -584,8 +584,8 @@ export async function buildAndSaveLearningPackage(options: {
       kind: pkg.realLifeExamples[0]?.kind === 'source' ? 'source' : 'illustrative',
       situation: pkg.realLifeExamples[0]?.situation || 'Practical implementation of assigned concepts.',
       conceptInAction: pkg.realLifeExamples[0]?.connection || 'Direct conceptual demonstration.',
-      lesson: 'Ground learning in structured deliberate review.',
-      sourceDisclosure: pkg.realLifeExamples[0]?.sourceTitle || 'Book study guide',
+      lesson: pkg.realLifeExamples[0]?.lesson || 'Apply the concept, then compare the result with the source text.',
+      sourceDisclosure: pkg.realLifeExamples[0]?.sourceDisclosure || pkg.realLifeExamples[0]?.sourceTitle || 'Book study guide',
       pdfPage: pkg.realLifeExamples[0]?.sourcePdfPages?.[0] || assignment.startPdfPage,
     },
     questions: pkg.quiz.map(q => ({
@@ -624,8 +624,9 @@ export async function getOrGenerateLearningPackage(
   assignment: BookAssignmentRecord,
   pages: BookPageRecord[]
 ): Promise<BookLearningPackage> {
-  if (assignment.learningPackage && assignment.learningPackage.quiz.length > 0) {
-    return assignment.learningPackage;
+  const existing = assignment.learningPackage;
+  if (existing?.quiz?.length && existing.previousUnitConnection && Array.isArray(existing.quotes) && Array.isArray(existing.realLifeExamples)) {
+    return existing;
   }
   return buildAndSaveLearningPackage({ userId, book, assignment, pages });
 }

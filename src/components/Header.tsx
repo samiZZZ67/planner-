@@ -155,6 +155,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
 
   return (
     <header
+      className="app-header"
       style={{
         width: '100%',
         maxWidth: 960,

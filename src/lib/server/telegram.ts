@@ -438,36 +438,8 @@ export interface TelegramUpdate {
 }
 
 export async function sendTelegramQuizPoll(params: SendQuizPollParams): Promise<TelegramPollResult> {
-  const question = truncateUnicode(params.question.trim(), 300);
-  const options = params.options.slice(0, 10).map(opt => truncateUnicode(opt.trim(), 100));
-  if (options.length < 2) {
-    throw new Error('A quiz poll requires at least 2 answer options.');
-  }
-  const correctOptionId = Math.max(0, Math.min(params.correctOptionId, options.length - 1));
-  const explanation = params.explanation?.trim() ? truncateUnicode(params.explanation.trim(), 200) : undefined;
-
-  const payload: any = {
-    chat_id: params.chatId,
-    question,
-    options,
-    type: 'quiz',
-    correct_option_id: correctOptionId,
-    is_anonymous: params.isAnonymous ?? false,
-  };
-  if (explanation) {
-    payload.explanation = explanation;
-  }
-  if (params.replyMarkup) {
-    payload.reply_markup = params.replyMarkup;
-  }
-
-  const res = await telegramCall<{ message_id: number; poll?: { id: string } }>('sendPoll', payload);
-  return {
-    messageId: res.message_id,
-    pollId: res.poll?.id || `poll_${Date.now()}_${res.message_id}`,
-    question,
-    correctOptionId,
-  };
+  void params;
+  throw new Error('Book quizzes are website-only; Telegram quiz polls are disabled.');
 }
 
 export async function sendTelegramMessageWithKeyboard(
@@ -722,7 +694,10 @@ export function formatReadingAssignment(
     throw new Error('The source pages contain OCR pages that still need OCR review.');
   }
   const notes = assignment.studyNotes;
-  const continuity = previousAssignment?.studyNotes
+  const learning = assignment.learningPackage;
+  const continuity = learning?.previousUnitConnection?.explanation
+    ? `Connection to the previous unit in this book\n${learning.previousUnitConnection.previousTitle || 'Previous unit'}: ${learning.previousUnitConnection.explanation}`
+    : previousAssignment?.studyNotes
     ? `Connection to yesterday's post (Day ${previousAssignment.dayNumber})\nYesterday's takeaway: ${previousAssignment.studyNotes.summary}\nToday builds on: ${assignment.concepts.map(item => item.title).join(', ')}`
     : '';
 
@@ -750,13 +725,15 @@ export function formatReadingAssignment(
 
   // 2. Summary (main ideas and key concepts)
   const section2 = [
-    `\nStudy summary\n${sanitizeUtf8(notes.summary)}\n\nKey concepts\n${(notes.keyConcepts || []).map(item => `• ${sanitizeUtf8(item)}`).join('\n')}`,
-    ...(notes.definitions?.length ? [`Definitions\n${notes.definitions.map(item => `• ${sanitizeUtf8(item.term)} (PDF p. ${item.pdfPage}): ${sanitizeUtf8(item.explanation)}`).join('\n')}`] : []),
+    `\nStudy summary\n${sanitizeUtf8(learning?.summary || notes.summary)}\n\nKey concepts\n${(learning?.keyConcepts || notes.keyConcepts || []).map(item => `• ${sanitizeUtf8(item)}`).join('\n')}`,
+    ...((learning?.definitions || notes.definitions)?.length ? [`Definitions\n${(learning?.definitions || notes.definitions || []).map(item => `• ${sanitizeUtf8(item.term)} (PDF p. ${item.pdfPage}): ${sanitizeUtf8(item.explanation)}`).join('\n')}`] : []),
   ];
 
   // 3. Real-life Examples (verifiable historical/biographical examples with links and connection to reading)
   const section3: string[] = [];
-  if (enrichment?.realLifeExamples?.length) {
+  if (learning?.realLifeExamples?.length) {
+    section3.push(`\n🏛️ <b>Real-Life Examples:</b>\n${learning.realLifeExamples.map(item => `• <b>${sanitizeUtf8(item.title)}</b>\n${sanitizeUtf8(item.situation)}\n<i>Connection:</i> ${sanitizeUtf8(item.connection)}${item.lesson ? `\n<i>Lesson:</i> ${sanitizeUtf8(item.lesson)}` : ''}\n<i>Source:</i> ${sanitizeUtf8(item.sourceDisclosure || item.attribution)}`).join('\n\n')}`);
+  } else if (enrichment?.realLifeExamples?.length) {
     const examplesFormatted = enrichment.realLifeExamples.map(e =>
       `• <b>${sanitizeUtf8(e.title)}</b>\n${sanitizeUtf8(e.situation)}\n<i>Connection:</i> ${sanitizeUtf8(e.connection)}\n<i>Source:</i> ${e.sourceUrl.startsWith('http') ? `<a href="${e.sourceUrl}">${sanitizeUtf8(e.sourceTitle)}</a>` : sanitizeUtf8(e.sourceTitle)} (${sanitizeUtf8(e.attribution)})`
     ).join('\n\n');
@@ -767,7 +744,9 @@ export function formatReadingAssignment(
 
   // 4. Quotes (verified quotations with provider attribution)
   const section4: string[] = [];
-  if (enrichment?.quotes?.length) {
+  if (learning?.quotes?.length) {
+    section4.push(`\n💬 <b>Quotes from the source:</b>\n${learning.quotes.map(item => `• <i>“${sanitizeUtf8(item.text)}”</i> (PDF p. ${item.pdfPage})`).join('\n')}`);
+  } else if (enrichment?.quotes?.length) {
     const quotesFormatted = enrichment.quotes.map(q =>
       `• <i>"${sanitizeUtf8(q.quote)}"</i> — <b>${sanitizeUtf8(q.author)}</b>${q.sourceContext ? ` <i>(${sanitizeUtf8(q.sourceContext)})</i>` : ''}\n  <i>${sanitizeUtf8(q.attribution)}</i>${q.sourceUrl ? ` · <a href="${q.sourceUrl}">Source</a>` : ''}`
     ).join('\n\n');
@@ -796,8 +775,8 @@ export function formatReadingAssignment(
   const chunks: string[] = [
     ...section1,
     ...section2,
-    ...section3,
     ...(continuity ? [sanitizeUtf8(continuity)] : []),
+    ...section3,
     ...section4,
     ...section5,
     ...section6,
@@ -847,22 +826,26 @@ export function formatLoadPlanPages(
   if (assignment.studyNotes) {
     const notes = assignment.studyNotes;
     if (notes.summary) {
-      notesChunks.push(`\n📝 Study Summary\n${sanitizeUtf8(notes.summary)}`);
+      notesChunks.push(`\n📝 Study Summary\n${sanitizeUtf8(assignment.learningPackage?.summary || notes.summary)}`);
     }
-    if (notes.keyConcepts?.length) {
-      notesChunks.push(`Key Concepts:\n${notes.keyConcepts.map(item => `• ${sanitizeUtf8(item)}`).join('\n')}`);
+    const keyConcepts = assignment.learningPackage?.keyConcepts || notes.keyConcepts;
+    if (keyConcepts?.length) {
+      notesChunks.push(`Key Concepts:\n${keyConcepts.map(item => `• ${sanitizeUtf8(item)}`).join('\n')}`);
     }
-    if (notes.definitions?.length) {
-      notesChunks.push(`Definitions:\n${notes.definitions.map(item => `• ${sanitizeUtf8(item.term)} (PDF p. ${item.pdfPage}): ${sanitizeUtf8(item.explanation)}`).join('\n')}`);
-    }
-    if (!enrichment?.quiz?.length && notes.questions?.length) {
-      notesChunks.push(`Revision Questions:\n${notes.questions.map((item, index) => `${index + 1}. ${sanitizeUtf8(item.question)}\nAnswer: ${sanitizeUtf8(item.answer)}`).join('\n\n')}`);
+    const definitions = assignment.learningPackage?.definitions || notes.definitions;
+    if (definitions?.length) {
+      notesChunks.push(`Definitions:\n${definitions.map(item => `• ${sanitizeUtf8(item.term)} (PDF p. ${item.pdfPage}): ${sanitizeUtf8(item.explanation)}`).join('\n')}`);
     }
   }
 
   // 3. Real-Life Examples
   const examplesChunks: string[] = [];
-  if (enrichment?.realLifeExamples?.length) {
+  if (assignment.learningPackage?.realLifeExamples?.length) {
+    const examplesFormatted = assignment.learningPackage.realLifeExamples.map(example =>
+      `• <b>${sanitizeUtf8(example.title)}</b>\n${sanitizeUtf8(example.situation)}\n<i>Connection:</i> ${sanitizeUtf8(example.connection)}${example.lesson ? `\n<i>Lesson:</i> ${sanitizeUtf8(example.lesson)}` : ''}\n<i>Source:</i> ${sanitizeUtf8(example.sourceDisclosure || example.attribution)}`
+    ).join('\n\n');
+    examplesChunks.push(`\n🏛️ <b>Real-Life Examples:</b>\n${examplesFormatted}`);
+  } else if (enrichment?.realLifeExamples?.length) {
     const examplesFormatted = enrichment.realLifeExamples.map(e =>
       `• <b>${sanitizeUtf8(e.title)}</b>\n${sanitizeUtf8(e.situation)}\n<i>Connection:</i> ${sanitizeUtf8(e.connection)}\n<i>Source:</i> ${e.sourceUrl.startsWith('http') ? `<a href="${e.sourceUrl}">${sanitizeUtf8(e.sourceTitle)}</a>` : sanitizeUtf8(e.sourceTitle)} (${sanitizeUtf8(e.attribution)})`
     ).join('\n\n');
@@ -871,7 +854,12 @@ export function formatLoadPlanPages(
 
   // 4. Quotes
   const quotesChunks: string[] = [];
-  if (enrichment?.quotes?.length) {
+  if (assignment.learningPackage?.quotes?.length) {
+    const quotesFormatted = assignment.learningPackage.quotes.map(quote =>
+      `• <i>“${sanitizeUtf8(quote.text)}”</i> (PDF p. ${quote.pdfPage})`
+    ).join('\n');
+    quotesChunks.push(`\n💬 <b>Quotes from the source:</b>\n${quotesFormatted}`);
+  } else if (enrichment?.quotes?.length) {
     const quotesFormatted = enrichment.quotes.map(q =>
       `• <i>"${sanitizeUtf8(q.quote)}"</i> — <b>${sanitizeUtf8(q.author)}</b>${q.sourceContext ? ` <i>(${sanitizeUtf8(q.sourceContext)})</i>` : ''}\n  <i>${sanitizeUtf8(q.attribution)}</i>${q.sourceUrl ? ` · <a href="${q.sourceUrl}">Source</a>` : ''}`
     ).join('\n\n');
@@ -897,7 +885,9 @@ export function formatLoadPlanPages(
   }
 
   // Quizzes remain strictly on the website (/quiz) — never deliver quiz questions, polls, or links to Telegram
-  const continuity = previousAssignment?.studyNotes
+  const continuity = assignment.learningPackage?.previousUnitConnection?.explanation
+    ? `\nConnection to the previous unit in this book:\n${assignment.learningPackage.previousUnitConnection.previousTitle || 'Previous unit'}: ${assignment.learningPackage.previousUnitConnection.explanation}`
+    : previousAssignment?.studyNotes
     ? `\nConnection to Day ${previousAssignment.dayNumber}:\nYesterday: ${sanitizeUtf8(previousAssignment.studyNotes.summary)}`
     : '';
 
@@ -905,11 +895,11 @@ export function formatLoadPlanPages(
     header,
     ...pageChunks,
     ...(notesChunks.length ? notesChunks : []),
+    ...(continuity ? [continuity] : []),
     ...(examplesChunks.length ? examplesChunks : []),
     ...(quotesChunks.length ? quotesChunks : []),
     ...(videosChunks.length ? videosChunks : []),
     ...(podcastsChunks.length ? podcastsChunks : []),
-    ...(continuity ? [continuity] : []),
   ];
 
   return chunks.flatMap(chunk => splitTelegramText(sanitizeUtf8(chunk)));
@@ -1026,6 +1016,14 @@ export async function publishApprovedAssignment(
   previousAssignment?: BookAssignmentRecord,
   enrichment?: EnrichedReadingContent
 ) {
+  if (!assignment.learningPackage && !process.env.VITEST) {
+    try {
+      const { getOrGenerateLearningPackage } = await import('./books/learningContent');
+      assignment.learningPackage = await getOrGenerateLearningPackage(userId, book, assignment, pages);
+    } catch (error) {
+      console.warn('[Telegram] Learning package preparation warning:', error);
+    }
+  }
   const previousDelivery = previousAssignment ? await getAssignmentDelivery(userId, previousAssignment.id) : null;
   const postedPrevious = previousDelivery?.status === 'completed' ? previousAssignment : undefined;
 
@@ -1099,6 +1097,14 @@ export async function publishLoadPlanPagesToTelegram(
   previousAssignment?: BookAssignmentRecord,
   enrichment?: EnrichedReadingContent
 ) {
+  if (!assignment.learningPackage && !process.env.VITEST) {
+    try {
+      const { getOrGenerateLearningPackage } = await import('./books/learningContent');
+      assignment.learningPackage = await getOrGenerateLearningPackage(userId, book, assignment, pages);
+    } catch (error) {
+      console.warn('[Telegram] Learning package preparation warning:', error);
+    }
+  }
   let activeEnrichment = enrichment;
   if (!activeEnrichment && !process.env.VITEST) {
     try {

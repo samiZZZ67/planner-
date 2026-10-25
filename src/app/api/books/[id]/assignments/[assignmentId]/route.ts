@@ -14,7 +14,10 @@ export async function GET(request: Request, context: RouteContext<'/api/books/[i
   const assignment = (await listBookAssignments(session.userId, id)).find(item => item.id === assignmentId);
   if (!assignment) return NextResponse.json({ error: 'Reading assignment not found.' }, { status: 404 });
   const originalPages = await listBookPages(session.userId, id, assignment.startPdfPage, assignment.endPdfPage);
-  return NextResponse.json({ book: { title: book.title, author: book.author }, assignment, originalPages });
+  const available = new Set(originalPages.map(page => page.pdfPage));
+  const missingPages = Array.from({ length: assignment.endPdfPage - assignment.startPdfPage + 1 }, (_, index) => assignment.startPdfPage + index)
+    .filter(page => !available.has(page));
+  return NextResponse.json({ book: { title: book.title, author: book.author }, assignment, originalPages, missingPages, isComplete: missingPages.length === 0 });
 }
 
 export async function PATCH(request: Request, context: RouteContext<'/api/books/[id]/assignments/[assignmentId]'>) {

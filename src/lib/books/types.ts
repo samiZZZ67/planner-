@@ -78,6 +78,20 @@ export interface LearningPackageRealLifeExample {
   attribution: string;
   kind?: 'source' | 'external' | 'illustrative';
   sourcePdfPages?: number[];
+  lesson?: string;
+  sourceDisclosure?: string;
+}
+
+export interface BookLearningQuote {
+  text: string;
+  pdfPage: number;
+}
+
+export interface PreviousStudyUnitConnection {
+  previousAssignmentId: string | null;
+  previousTitle: string | null;
+  previousPdfPages?: [number, number] | null;
+  explanation: string;
 }
 
 export interface BookLearningPackage {
@@ -88,6 +102,8 @@ export interface BookLearningPackage {
   summary: string;
   keyConcepts: string[];
   definitions?: Array<{ term: string; explanation: string; pdfPage: number }>;
+  previousUnitConnection?: PreviousStudyUnitConnection;
+  quotes?: BookLearningQuote[];
   realLifeExamples: LearningPackageRealLifeExample[];
   quiz: QuizQuestionItem[];
   status: {

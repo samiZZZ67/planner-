@@ -30,6 +30,7 @@ function isSendLoadPlanIntent(text: string): boolean {
   if (/\b(?:extracted\s*pages?|load\s*plan)\b.{0,60}\b(?:send|post|publish|share|deliver|dispatch|to\s*(?:the\s*)?(?:telegram|bot|channel))\b/i.test(text)) return true;
   if (/\b(?:send|post|publish)\b.{0,30}\bday\s*\d+\b/i.test(text) && (mentionsTelegramOrBot || /\b(?:pages?|assignment|reading|section|plan)\b/i.test(text))) return true;
   if (/\bday\s*\d+\b.{0,30}\b(?:send|post|publish)\b/i.test(text) && (mentionsTelegramOrBot || /\b(?:pages?|assignment|reading|section|plan)\b/i.test(text))) return true;
+  if (hasAction && mentionsTelegramOrBot && /\b(?:specified|selected|particular)\s+day\b/i.test(text)) return true;
   if (hasAction && /\b(?:load\s*plan|extracted\s*pages?)\b/i.test(text)) return true;
   if (hasAction && mentionsTelegramOrBot && /\b(?:pages?|assignment|reading|section|plan|day\s*\d+)\b/i.test(text)) return true;
   return false;
@@ -121,6 +122,7 @@ export function detectMoonBookIntent(text: string): Intent | null {
   const value = text.trim();
   if (!value) return null;
   if (isNonActionQuestion(value)) return null;
+  if (/\b(?:quiz|comprehension questions|test my recall)\b/i.test(value) && /\b(?:telegram|bot|channel)\b/i.test(value)) return null;
   if (/\b\d{8,12}:[A-Za-z0-9_-]{35}\b/.test(value) || /\b(?:configure|set|update|save)\s+(?:the\s+)?telegram\s+(?:bot\s+token|token|bot|credentials|chat\s*id)\b/i.test(value)) return 'configure_telegram';
   if (isScheduleTimeIntent(value)) return 'reschedule';
   if (isSendLoadPlanIntent(value)) return 'send_load_plan';

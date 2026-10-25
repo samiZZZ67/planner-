@@ -11,8 +11,11 @@ import {
 } from '@/lib/server/books/bookQuiz';
 import { generateReadingQuiz, type EnrichedQuizQuestion } from '@/lib/server/sources/enrichment';
 import { randomUUID } from 'node:crypto';
+import { getSessionUser } from '@/lib/server/auth';
 
 export async function GET(request: Request) {
+  const sessionUser = await getSessionUser(request);
+  if (!sessionUser) return NextResponse.json({ error: 'Sign in to access this quiz.' }, { status: 401 });
   const url = new URL(request.url);
   const assignmentId = url.searchParams.get('assignmentId') || url.searchParams.get('quiz');
   const sessionId = url.searchParams.get('sessionId');
@@ -43,6 +46,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Reading assignment not found. Please verify the link or contact your administrator.' }, { status: 404 });
   }
 
+  if (assignment.userId !== sessionUser.userId) {
+    return NextResponse.json({ error: 'Reading assignment not found.' }, { status: 404 });
+  }
+
   const book = await getBook(assignment.userId, assignment.bookId);
   if (!book) {
     return NextResponse.json({ error: 'Book associated with this assignment was not found.' }, { status: 404 });
@@ -70,7 +77,7 @@ export async function GET(request: Request) {
       explanation: q.explanation || `Supported by assigned PDF reading pages ${assignment!.startPdfPage}–${assignment!.endPdfPage}`,
       difficulty: q.difficulty || 'medium',
       sourcePdfPages: q.sourcePdfPages || [assignment!.startPdfPage],
-    }));
+    })).filter(q => q.options.length === 4 && new Set(q.options).size === 4 && q.correctOptionIndex >= 0 && q.correctOptionIndex < 4);
   }
 
   // 2. Check existing BookQuizSession
@@ -98,7 +105,7 @@ export async function GET(request: Request) {
 
   // 3. Generate questions if neither learningPackage nor session had questions
   if (questions.length === 0) {
-    const pages = await listBookPages(assignment.userId, assignment.bookId);
+    const pages = await listBookPages(assignment.userId, assignment.bookId, assignment.startPdfPage, assignment.endPdfPage);
     const enrichedQuestions = generateReadingQuiz(book, assignment, pages, assignment.studyNotes);
 
     if (enrichedQuestions.length > 0) {
@@ -189,6 +196,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const sessionUser = await getSessionUser(request);
+  if (!sessionUser) return NextResponse.json({ error: 'Sign in to submit this quiz.' }, { status: 401 });
   let body: any;
   try {
     body = await request.json();
@@ -203,6 +212,9 @@ export async function POST(request: Request) {
 
   const assignment = await findBookAssignmentById(assignmentId);
   if (!assignment) {
+    return NextResponse.json({ error: 'Assignment not found.' }, { status: 404 });
+  }
+  if (assignment.userId !== sessionUser.userId) {
     return NextResponse.json({ error: 'Assignment not found.' }, { status: 404 });
   }
 
@@ -231,7 +243,7 @@ export async function POST(request: Request) {
       explanation: q.explanation,
       difficulty: q.difficulty,
       sourcePdfPages: q.sourcePdfPages,
-    }));
+    })).filter(q => q.options.length === 4 && new Set(q.options).size === 4 && q.correctOptionIndex >= 0 && q.correctOptionIndex < 4);
   } else {
     const session = await getActiveQuizSessionForAssignment(assignment.userId, assignment.id);
     if (session?.sections?.length) {
@@ -248,7 +260,7 @@ export async function POST(request: Request) {
   }
 
   if (questions.length === 0) {
-    const pages = await listBookPages(assignment.userId, assignment.bookId);
+    const pages = await listBookPages(assignment.userId, assignment.bookId, assignment.startPdfPage, assignment.endPdfPage);
     const enriched = generateReadingQuiz(book, assignment, pages, assignment.studyNotes);
     questions = enriched.map((q, idx) => ({
       id: `q_${idx}`,

@@ -1071,5 +1071,155 @@ button[aria-label*="neural voice" i] { display: none !important; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
 
+/* ================================================================
+   RESPONSIVE APPLICATION SHELL
+   Shared by the dashboard, book planner, forms, settings, and auth.
+   ================================================================ */
+html {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100%;
+  font-size: clamp(0.9375rem, 0.91rem + 0.12vw, 1rem);
+  scroll-padding-block: env(safe-area-inset-top) 1rem;
+}
+
+body {
+  width: 100%;
+  min-width: 320px;
+  min-height: 100dvh;
+  overflow-x: clip;
+  padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+}
+
+.min-h-screen { min-height: 100dvh !important; }
+@supports not (height: 100dvh) {
+  body, .min-h-screen { min-height: 100vh !important; }
+}
+
+*, *::before, *::after { min-width: 0; }
+
+img, video, iframe, canvas, svg {
+  max-width: 100%;
+}
+
+img, video {
+  height: auto;
+  object-fit: cover;
+}
+
+iframe {
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+
+p, li, blockquote {
+  max-width: 70ch;
+  overflow-wrap: anywhere;
+}
+
+pre, code { max-width: 100%; }
+pre { overflow: auto; }
+
+table {
+  max-width: 100%;
+}
+
+.app-header {
+  width: min(100%, 60rem) !important;
+  padding-inline: clamp(.75rem, 2vw, 1.5rem) !important;
+  padding-top: max(clamp(.75rem, 2vw, 1.25rem), env(safe-area-inset-top)) !important;
+  gap: clamp(.5rem, 1.5vw, 1rem) !important;
+  flex-wrap: wrap;
+}
+
+.app-workspace-shell {
+  width: min(100%, 65rem) !important;
+  padding: clamp(.75rem, 2vw, 1.5rem) clamp(.75rem, 2vw, 1.5rem) max(5rem, env(safe-area-inset-bottom) + 4rem) !important;
+  gap: clamp(.75rem, 2vw, 1.25rem);
+}
+
+.app-content-window {
+  width: 100%;
+  min-width: 0;
+}
+
+.app-main-content {
+  padding: clamp(1rem, 2.4vw, 1.75rem) clamp(.875rem, 2.6vw, 2rem) !important;
+}
+
+.v-window, .v-card, .g-card, .v-modal-dialog, .g-task-row,
+.v-tabs, .v-dock, .v-modal-backdrop {
+  min-width: 0;
+}
+
+.v-card, .g-card, .g-task-row { container-type: inline-size; }
+
+.v-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  padding-inline: clamp(.75rem, 2vw, 1.5rem);
+}
+
+.v-tab-btn {
+  min-height: 44px;
+  flex: 0 0 auto;
+  font-size: clamp(.8rem, .76rem + .15vw, .94rem);
+}
+
+.v-modal-backdrop {
+  overflow: auto;
+  padding: max(.75rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) max(.75rem, env(safe-area-inset-bottom)) max(.75rem, env(safe-area-inset-left));
+}
+
+.v-modal-dialog {
+  width: min(100%, 48rem);
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+}
+
+@container (max-width: 30rem) {
+  .v-card .grid, .g-card .grid, .g-task-row .grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 599px) {
+  .app-header { justify-content: center !important; }
+  .app-workspace-shell { align-items: stretch !important; }
+  .app-content-window { border-radius: 1.5rem !important; }
+  .v-tabs { gap: .75rem !important; }
+  .v-modal-dialog { border-radius: 1.5rem !important; }
+  .v-dock { max-width: calc(100vw - 1rem); }
+}
+
+@media (min-width: 600px) {
+  .app-header { justify-content: space-between !important; }
+  .app-workspace-shell { align-items: flex-start; }
+}
+
+@media (min-width: 900px) {
+  .app-workspace-shell { padding-top: clamp(1.25rem, 2vw, 2rem) !important; }
+}
+
+@media (min-width: 1200px) {
+  .app-workspace-shell { width: min(100%, 72rem) !important; }
+}
+
+@media (min-width: 1600px) {
+  .app-workspace-shell { width: min(100%, 78rem) !important; }
+}
+
+@media (pointer: coarse) {
+  button, [role="button"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  input[type="checkbox"], input[type="radio"], select {
+    scroll-margin-block: 1rem;
+  }
+}
+
 
 

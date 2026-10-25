@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   BookOpen,
@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { apiFetch } from '@/lib/api/apiClient';
 
 interface QuizQuestion {
   id: string;
@@ -66,6 +67,7 @@ interface SubmissionResult {
 }
 
 function QuizContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const assignmentId = searchParams.get('assignmentId') || searchParams.get('quiz') || '';
   const sessionId = searchParams.get('sessionId') || '';
@@ -101,7 +103,7 @@ function QuizContent() {
       setError(null);
       try {
         const query = assignmentId ? `assignmentId=${encodeURIComponent(assignmentId)}` : `sessionId=${encodeURIComponent(sessionId)}`;
-        const res = await fetch(`/api/quiz?${query}`);
+        const res = await apiFetch(`/api/quiz?${query}`);
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.error || `Failed to load quiz (HTTP ${res.status})`);
@@ -186,7 +188,7 @@ function QuizContent() {
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/quiz', {
+      const res = await apiFetch('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -237,14 +239,11 @@ function QuizContent() {
   };
 
   const handleExitQuiz = () => {
-    if (typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('assignmentId');
-      url.searchParams.delete('quiz');
-      url.searchParams.delete('sessionId');
-      window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
-      window.location.href = '/?tab=books';
-    }
+    const requestedReturn = searchParams.get('returnTo');
+    const safeReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
+      ? requestedReturn
+      : '/?tab=books';
+    router.replace(safeReturn);
   };
 
   if (loading) {

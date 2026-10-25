@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { handleQuizCallback, handlePollAnswer } from '@/lib/server/books/bookQuiz';
 
 export async function POST(request: Request) {
   try {
@@ -16,26 +15,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'Empty payload' }, { status: 400 });
     }
 
-    // 1. Handle Inline Button Callback Queries (Next Question, Repeat Explanation, Next Section, Finish)
-    if (update.callback_query && update.callback_query.data) {
-      await handleQuizCallback(
-        update.callback_query.id,
-        update.callback_query.data,
-        update.callback_query.from
-      );
-      return NextResponse.json({ ok: true, handled: 'callback_query' });
-    }
-
-    // 2. Handle Native Telegram Quiz Poll Answers
-    if (update.poll_answer) {
-      await handlePollAnswer({
-        poll_id: update.poll_answer.poll_id,
-        user: update.poll_answer.user,
-        option_ids: update.poll_answer.option_ids || [],
-      });
-      return NextResponse.json({ ok: true, handled: 'poll_answer' });
-    }
-
+    // Quiz callbacks and poll answers are intentionally not processed here.
     return NextResponse.json({ ok: true, handled: 'ignored' });
   } catch (err: any) {
     console.error('[Telegram Webhook] Error processing update:', err);

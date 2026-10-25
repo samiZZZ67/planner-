@@ -110,7 +110,7 @@ export interface ConceptReadingPlanOptions {
   signal?: AbortSignal;
 }
 
-export function extractGroundedConceptsFromPages(
+function extractFixedPageFallback(
   pages: BookPageRecord[],
   bookTitle: string,
   firstId = 1,
@@ -167,6 +167,62 @@ export function extractGroundedConceptsFromPages(
   return sections;
 }
 
+function conceptHeading(page: BookPageRecord): string | null {
+  const lines = page.text.split(/\r?\n/).map(line => line.trim()).filter(Boolean).slice(0, 12);
+  return lines.find(line => line.length <= 120 && (
+    /^(?:chapter|part|section|lesson|unit|module|appendix)\s+[\w.-]+/i.test(line)
+    || (/^[A-Z0-9][A-Z0-9\s:,&'’()-]{4,}$/.test(line) && line.split(/\s+/).length <= 12)
+  )) || null;
+}
+
+export function extractGroundedConceptsFromPages(
+  pages: BookPageRecord[],
+  bookTitle: string,
+  firstId = 1,
+  targetSections = 0,
+): PlannedSection[] {
+  const ordered = [...pages].sort((a, b) => a.pdfPage - b.pdfPage);
+  if (!ordered.length) return [];
+  const rawGroups: BookPageRecord[][] = [];
+  let current: BookPageRecord[] = [];
+  let currentHeading = '';
+  for (const page of ordered) {
+    const heading = conceptHeading(page);
+    const startsNewConcept = current.length > 0 && heading && currentHeading && heading.toLowerCase() !== currentHeading.toLowerCase();
+    const tooLargeWithoutBoundary = current.length >= 10;
+    if (startsNewConcept || tooLargeWithoutBoundary) {
+      rawGroups.push(current);
+      current = [];
+      currentHeading = '';
+    }
+    current.push(page);
+    if (heading) currentHeading = heading;
+  }
+  if (current.length) rawGroups.push(current);
+
+  // A target may combine adjacent concepts into one study unit, but never
+  // splits a concept just to hit an arbitrary page count.
+  const desired = targetSections > 0 ? Math.min(rawGroups.length, targetSections) : rawGroups.length;
+  const grouped: BookPageRecord[][] = [];
+  for (let index = 0; index < desired; index += 1) {
+    const from = Math.floor(index * rawGroups.length / desired);
+    const to = Math.floor((index + 1) * rawGroups.length / desired);
+    grouped.push(rawGroups.slice(from, to).flat());
+  }
+
+  return grouped.map((group, index) => {
+    const startPage = group[0].pdfPage;
+    const endPage = group[group.length - 1].pdfPage;
+    const headings = [...new Set(group.map(conceptHeading).filter((value): value is string => Boolean(value)))];
+    const firstText = group.find(page => page.text.trim())?.text || '';
+    const sentences = firstText.split(/(?<=[.!?])\s+/).map(sentence => sentence.trim()).filter(sentence => sentence.length > 30 && sentence.length < 500);
+    const title = headings.slice(0, 2).join(' / ') || sentences[0]?.slice(0, 110) || `${bookTitle}: study unit ${index + 1}`;
+    const concept = sentences.slice(0, 3).join(' ') || `${title} (source PDF pages ${startPage}-${endPage}).`;
+    const estimatedMinutes = Math.max(10, Math.min(240, Math.ceil(group.reduce((sum, page) => sum + page.text.length, 0) / 900)));
+    return { id: `section-${firstId + index}`, title, concept, estimatedMinutes, startPage, endPage };
+  });
+}
+
 export async function generateConceptReadingPlan(options: ConceptReadingPlanOptions) {
   const { book, pages } = options;
   if (options.signal?.aborted) throw new Error('Operation was cancelled by the user.');
@@ -206,8 +262,9 @@ export async function generateConceptReadingPlan(options: ConceptReadingPlanOpti
   let modelUsed = model;
   let providerUsed = 'FreeLLM';
 
-  // For small to medium page counts (<= 30 pages), attempt deep AI concept extraction (skip in vitest to avoid remote network latency)
-  if (relevantPages.length <= 30 && !process.env.VITEST) {
+  // Analyze extracted source in bounded batches for books of any size. The
+  // fallback below follows headings and concept boundaries rather than equal page slices.
+  if (!process.env.VITEST) {
     try {
       const batches = pageBatches(relevantPages);
       for (const batch of batches) {
@@ -240,7 +297,7 @@ export async function generateConceptReadingPlan(options: ConceptReadingPlanOpti
       sections = extractGroundedConceptsFromPages(relevantPages, book.title, 1, targetTotalSections);
     }
   } else {
-    // For large documents (30-500+ pages), divide into chunks and extract grounded concepts
+    // Deterministic fallback still follows source headings and adjacent concepts.
     sections = extractGroundedConceptsFromPages(relevantPages, book.title, 1, targetTotalSections);
   }
 

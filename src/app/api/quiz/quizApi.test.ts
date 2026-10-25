@@ -5,8 +5,12 @@ import type { BookRecord, BookAssignmentRecord, BookPageRecord } from '@/lib/boo
 import { saveBook, saveBookPages, deleteBook } from '@/lib/server/books';
 import { updateBookAssignment, replaceDraftAssignments } from '@/lib/server/bookAssignments';
 
+vi.mock('@/lib/server/auth', () => ({
+  getSessionUser: vi.fn(async () => ({ userId: 'user_quiz_api_suite', authenticated: true, issuedAt: 0, expiresAt: Date.now() + 60_000 })),
+}));
+
 describe('Quiz API & Dedicated Practice Integration Suite', () => {
-  const testUserId = `user_quiz_${Date.now()}`;
+  const testUserId = 'user_quiz_api_suite';
   const testBookId = `book_quiz_${Date.now()}`;
   const assignmentId = `asg_quiz_${Date.now()}`;
 
@@ -112,6 +116,7 @@ describe('Quiz API & Dedicated Practice Integration Suite', () => {
             'The compound interest of self-improvement',
             'Rigid schedules that restrict creativity',
             'Random tasks done intermittently',
+            'A one-time decision with no repetition',
           ],
           correctOptionIndex: 0,
           explanation: 'James Clear defines habits as the compound interest of self-improvement on PDF page 10.',
@@ -125,6 +130,7 @@ describe('Quiz API & Dedicated Practice Integration Suite', () => {
             'You become 2 times better',
             'You end up thirty-seven times better',
             'You improve linearly by 365%',
+            'You remain exactly the same',
           ],
           correctOptionIndex: 1,
           explanation: '1.01 to the power of 365 equals approximately 37.78, or 37 times better (PDF p. 11).',
@@ -153,8 +159,8 @@ describe('Quiz API & Dedicated Practice Integration Suite', () => {
     } catch {}
   });
 
-  describe('1. GET /api/quiz (Public Dedicated Quiz Retrieval)', () => {
-    it('retrieves quiz questions for unauthenticated Telegram users without returning 401', async () => {
+  describe('1. GET /api/quiz (Authenticated Website Quiz Retrieval)', () => {
+    it('retrieves assignment-specific quiz questions for the authenticated book owner', async () => {
       const req = new Request(`http://localhost:3000/api/quiz?assignmentId=${encodeURIComponent(assignmentId)}`);
       const response = await quizGet(req);
 
@@ -170,7 +176,7 @@ describe('Quiz API & Dedicated Practice Integration Suite', () => {
       expect(data.questions.length).toBe(2);
       expect(data.questions[0].id).toBe('q_0');
       expect(data.questions[0].question).toContain('According to PDF page 10');
-      expect(data.questions[0].options.length).toBe(3);
+      expect(data.questions[0].options.length).toBe(4);
       expect(data.questions[0].sourcePdfPages).toEqual([10]);
     });
 
@@ -246,8 +252,8 @@ describe('Quiz API & Dedicated Practice Integration Suite', () => {
     });
   });
 
-  describe('3. Assignment Lookup & Dedicated Public Access', () => {
-    it('resolves assignment and book metadata publicly via /api/quiz without requiring a session cookie', async () => {
+  describe('3. Assignment Lookup & Owner Access', () => {
+    it('resolves assignment and book metadata for the authenticated book owner', async () => {
       const req = new Request(`http://localhost:3000/api/quiz?assignmentId=${encodeURIComponent(assignmentId)}`);
       const response = await quizGet(req);
 

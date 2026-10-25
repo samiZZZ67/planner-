@@ -46,7 +46,8 @@ export default function SamsSpaceApp() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [profileAvatarUrl, setProfileAvatarUrl] = useState<string>('/icons/icon-192.png');
-  const [quizAssignmentId, setQuizAssignmentId] = useState<string | null>(null);
+  const [returnBookId, setReturnBookId] = useState<string | null>(null);
+  const [returnAssignmentId, setReturnAssignmentId] = useState<string | null>(null);
 
   // Draggable Launcher Button State
   const [btnPos, setBtnPos] = useState<{ x: number; y: number } | null>(null);
@@ -131,11 +132,18 @@ export default function SamsSpaceApp() {
       const searchParams = new URLSearchParams(window.location.search);
       const requestedQuiz = searchParams.get('quiz');
       const requestedTab = searchParams.get('tab');
+      const requestedBookId = searchParams.get('bookId');
+      const requestedAssignmentId = searchParams.get('assignmentId');
+      if (requestedTab === 'books' && requestedAssignmentId) {
+        if (requestedBookId) setReturnBookId(requestedBookId);
+        setReturnAssignmentId(requestedAssignmentId);
+      }
       if (requestedQuiz) {
         const cleanUrl = new URL(window.location.href);
         cleanUrl.searchParams.delete('quiz');
         window.history.replaceState({}, '', cleanUrl.pathname + (cleanUrl.search ? cleanUrl.search : ''));
-        window.location.replace(`/quiz?assignmentId=${encodeURIComponent(requestedQuiz)}`);
+        const returnTo = `/?tab=books&assignmentId=${encodeURIComponent(requestedQuiz)}`;
+        window.location.replace(`/quiz?assignmentId=${encodeURIComponent(requestedQuiz)}&returnTo=${encodeURIComponent(returnTo)}`);
         return;
       } else if (requestedTab && ['todo', 'weekly', 'monthly', 'add_task', 'note', 'category', 'books', 'analytics', 'settings'].includes(requestedTab)) {
         setCurrentTab(requestedTab as TabType);
@@ -348,6 +356,7 @@ export default function SamsSpaceApp() {
 
       {/* ── 4. Main Spacious Workspace ── */}
       <div
+        className="app-workspace-shell"
         style={{
           position: 'relative',
           zIndex: 10,
@@ -372,7 +381,7 @@ export default function SamsSpaceApp() {
 
         {/* Central Floating Glass Window */}
         <main
-          className="v-window"
+          className="v-window app-content-window"
           style={{
             flex: 1,
             maxWidth: currentTab === 'analytics' ? 880 : 780,
@@ -472,7 +481,7 @@ export default function SamsSpaceApp() {
           </div>
 
           {/* Active Screen Content */}
-          <div style={{ padding: isPhone ? '20px 16px' : '28px 32px' }}>
+          <div className="app-main-content" style={{ padding: isPhone ? '20px 16px' : '28px 32px' }}>
             {currentTab === 'todo' && (
               <TodoListScreen
                 currentDate={currentDate}
@@ -529,7 +538,8 @@ export default function SamsSpaceApp() {
 
             {currentTab === 'books' && (
               <BookPlannerScreen
-                initialQuizAssignmentId={quizAssignmentId || undefined}
+                initialBookId={returnBookId || undefined}
+                initialAssignmentId={returnAssignmentId || undefined}
               />
             )}
 

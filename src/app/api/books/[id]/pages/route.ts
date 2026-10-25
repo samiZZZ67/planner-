@@ -47,11 +47,16 @@ export async function GET(request: Request, context: RouteContext<'/api/books/[i
   }
 
   const pages = await listBookPages(session.userId, id, from, to, { summaryOnly: isSummaryOnly });
+  const available = new Set(pages.map(page => page.pdfPage));
+  const missingPages = Array.from({ length: Math.max(0, to - from + 1) }, (_, index) => from + index)
+    .filter(pageNumber => !available.has(pageNumber));
   return NextResponse.json({
     pages,
     from,
     to,
     totalPages: book.endPage - book.startPage + 1,
+    missingPages,
+    isComplete: missingPages.length === 0,
     book: { id: book.id, startPage: book.startPage, endPage: book.endPage, extractionStatus: book.extractionStatus }
   });
 }

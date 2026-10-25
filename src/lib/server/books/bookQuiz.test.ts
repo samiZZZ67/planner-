@@ -246,31 +246,11 @@ describe('Interactive Telegram Book Quiz Mode Suite', () => {
     });
   });
 
-  describe('3. End-to-End Quiz Session Lifecycle & Telegram Delivery', () => {
-    it('launches a quiz session, sends native poll and navigation keyboard, and records poll mapping', async () => {
-      const sentPolls: any[] = [];
-      const sentMessages: any[] = [];
-
-      vi.spyOn(telegramModule, 'sendTelegramQuizPoll').mockImplementation(async (params) => {
-        sentPolls.push(params);
-        return {
-          messageId: 501,
-          pollId: 'poll_test_123',
-          question: params.question,
-          correctOptionId: params.correctOptionId,
-        };
-      });
-
-      vi.spyOn(telegramModule, 'sendTelegramMessageWithKeyboard').mockImplementation(async (chatId, text, kb) => {
-        sentMessages.push({ chatId, text, kb });
-        return { message_id: 502 };
-      });
-
-      vi.spyOn(telegramModule, 'sendTelegramTextToChannel').mockResolvedValue({
-        channel: '@SamSpac',
-        messageId: 500,
-        receiptId: '00000000-0000-0000-0000-000000000000',
-      });
+  describe('3. Website-only Quiz Session Lifecycle', () => {
+    it('keeps quiz generation website-accessible and sends no Telegram poll or messages', async () => {
+      const poll = vi.spyOn(telegramModule, 'sendTelegramQuizPoll');
+      const keyboard = vi.spyOn(telegramModule, 'sendTelegramMessageWithKeyboard');
+      const text = vi.spyOn(telegramModule, 'sendTelegramTextToChannel');
 
       const session = await startQuizSessionForAssignment(
         testUserId,
@@ -280,127 +260,17 @@ describe('Interactive Telegram Book Quiz Mode Suite', () => {
         '@SamSpac'
       );
 
-      expect(session).toBeDefined();
-      expect(session.id).toBeDefined();
       expect(session.status).toBe('active');
-      expect(session.totalSections).toBe(2);
-      expect(session.totalQuestions).toBe(4);
+      expect(session.totalQuestions).toBeGreaterThan(0);
+      expect(await getQuizSession(session.id)).not.toBeNull();
+      expect(poll).not.toHaveBeenCalled();
+      expect(keyboard).not.toHaveBeenCalled();
+      expect(text).not.toHaveBeenCalled();
 
-      // Verify native Telegram quiz poll was sent
-      expect(sentPolls).toHaveLength(1);
-      expect(sentPolls[0].correctOptionId).toBeDefined();
-      expect(sentPolls[0].options.length).toBeGreaterThanOrEqual(2);
-      expect(sentPolls[0].isAnonymous).toBe(false);
-
-      // Verify navigation control card was sent
-      expect(sentMessages).toHaveLength(1);
-      expect(sentMessages[0].text).toContain('Question 1 of 2');
-
-      // Verify session was saved persistently
-      const retrieved = await getQuizSession(session.id);
-      expect(retrieved).not.toBeNull();
-      expect(retrieved?.lastPollId).toBe('poll_test_123');
-    });
-
-    it('tracks user poll answers, scores correctly, and triggers learning feedback card', async () => {
-      let sentFeedback = '';
-      vi.spyOn(telegramModule, 'sendTelegramTextToChannel').mockImplementation(async (text) => {
-        sentFeedback = text;
-        return { channel: '@SamSpac', messageId: 601, receiptId: '00000000-0000-0000-0000-000000000000' };
-      });
-
-      vi.spyOn(telegramModule, 'sendTelegramQuizPoll').mockResolvedValue({
-        messageId: 501,
-        pollId: 'poll_answer_test',
-        question: 'Test Question?',
-        correctOptionId: 1,
-      });
-
-      vi.spyOn(telegramModule, 'sendTelegramMessageWithKeyboard').mockResolvedValue({
-        message_id: 502,
-      });
-
-      const session = await startQuizSessionForAssignment(
-        testUserId,
-        sampleBook,
-        sampleAssignment,
-        samplePages,
-        '@SamSpac'
-      );
-
-      // Simulate Telegram delivering poll_answer update
-      const answerResult = await handlePollAnswer({
-        poll_id: 'poll_answer_test',
-        user: { id: 999, first_name: 'Antigravity Reader' },
-        option_ids: [session.sections[0].questions[0].correctOptionId],
-      });
-
-      expect(answerResult.handled).toBe(true);
-      expect(answerResult.isCorrect).toBe(true);
-      expect(answerResult.feedbackSent).toBe(true);
-      expect(sentFeedback).toContain('Correct Answer!');
-      expect(sentFeedback).toContain(session.sections[0].questions[0].definition.term);
-
-      // Verify score updated
-      const updated = await getQuizSession(session.id);
-      expect(updated?.score).toBe(1);
-      expect(updated?.answers['q_0']?.isCorrect).toBe(true);
-    });
-
-    it('handles interactive navigation callbacks (Next Question, Repeat Explanation, Finish Session)', async () => {
-      let callbackAnswered = false;
-      let toastText = '';
-
-      vi.spyOn(telegramModule, 'answerTelegramCallback').mockImplementation(async (id, text) => {
-        callbackAnswered = true;
-        toastText = text || '';
-        return true;
-      });
-
-      vi.spyOn(telegramModule, 'sendTelegramQuizPoll').mockResolvedValue({
-        messageId: 701,
-        pollId: 'poll_q2',
-        question: 'Question 2?',
-        correctOptionId: 0,
-      });
-
-      vi.spyOn(telegramModule, 'sendTelegramMessageWithKeyboard').mockResolvedValue({
-        message_id: 702,
-      });
-
-      vi.spyOn(telegramModule, 'sendTelegramTextToChannel').mockResolvedValue({
-        channel: '@SamSpac',
-        messageId: 700,
-        receiptId: '00000000-0000-0000-0000-000000000000',
-      });
-
-      const session = await startQuizSessionForAssignment(
-        testUserId,
-        sampleBook,
-        sampleAssignment,
-        samplePages,
-        '@SamSpac'
-      );
-
-      // 1. Next Question Callback
-      const nextQResult = await handleQuizCallback('cb_1', `quiz:next_q:${session.id}:0:1`);
-      expect(nextQResult.handled).toBe(true);
-      expect(nextQResult.action).toBe('next_question_sent');
-      expect(callbackAnswered).toBe(true);
-      expect(toastText).toContain('Loading Question 2');
-
-      // 2. Repeat Explanation Callback
-      const expResult = await handleQuizCallback('cb_2', `quiz:exp:${session.id}:0:0`);
-      expect(expResult.handled).toBe(true);
-      expect(expResult.action).toBe('explanation_repeated');
-
-      // 3. Finish Session Callback
-      const finishResult = await handleQuizCallback('cb_3', `quiz:fin:${session.id}`);
-      expect(finishResult.handled).toBe(true);
-      expect(finishResult.action).toBe('session_completed');
-
-      const finishedSession = await getQuizSession(session.id);
-      expect(finishedSession?.status).toBe('completed');
+      const answerResult = await handlePollAnswer({ poll_id: 'old-poll', option_ids: [0] });
+      expect(answerResult.handled).toBe(false);
+      const callbackResult = await handleQuizCallback('old-callback', `quiz:next_q:${session.id}:0:1`);
+      expect(callbackResult).toEqual({ handled: false, action: 'website_only' });
     });
   });
 

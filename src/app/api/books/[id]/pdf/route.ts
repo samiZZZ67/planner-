@@ -13,11 +13,12 @@ export async function GET(request: Request, context: RouteContext<'/api/books/[i
   try {
     const bytes = await fs.readFile(filePath);
     const safeName = book.originalFilename.replace(/[\r\n"\\]/g, '_');
+    const inline = new URL(request.url).searchParams.get('inline') === 'true';
     return new Response(new Uint8Array(bytes), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Length': String(bytes.byteLength),
-        'Content-Disposition': `attachment; filename="${safeName}"`,
+        'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${safeName}"`,
         'Cache-Control': 'private, no-store',
         'X-Content-Type-Options': 'nosniff',
       },

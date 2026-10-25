@@ -32,21 +32,24 @@ export function shuffleOptionsWithKey<T extends string>(
 }
 
 /**
- * Distribute the correct answer across option slots (A, B, C, D) using a balanced position
- * and shuffle distractors across the remaining slots.
- *
- * When targetPosition is specified (e.g., questionIndex), correct answers cycle evenly
- * across 0 (A), 1 (B), 2 (C), and 3 (D).
+ * Randomize the answer slot independently for each question and shuffle its distractors.
+ * targetPosition is retained for call compatibility, but never controls a predictable cycle.
  */
 export function distributeOptionsBalanced<T extends string>(
   correctOption: T,
   distractors: T[],
   targetPosition?: number
 ): { options: T[]; correctIndex: number } {
-  const filteredDistractors = distractors.filter(d => Boolean(d) && d !== correctOption);
+  void targetPosition;
+  const filteredDistractors = [...new Set(distractors.filter(d => Boolean(d) && d !== correctOption))];
+  const fallbackDistractors = [
+    'A conclusion that is not supported by the assigned passage',
+    'An unrelated interpretation of the topic',
+    'A claim that reverses the author’s stated point',
+  ].filter(option => option !== correctOption && !new Set<string>(filteredDistractors).has(option)) as T[];
 
   // Shuffle distractors with Fisher-Yates
-  const shuffledDistractors = [...filteredDistractors];
+  const shuffledDistractors = [...filteredDistractors, ...fallbackDistractors].slice(0, 3);
   for (let i = shuffledDistractors.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     const temp = shuffledDistractors[i];
@@ -54,10 +57,8 @@ export function distributeOptionsBalanced<T extends string>(
     shuffledDistractors[j] = temp;
   }
 
-  const totalSlots = Math.min(4, shuffledDistractors.length + 1);
-  const pos = targetPosition !== undefined
-    ? Math.abs(targetPosition) % totalSlots
-    : Math.floor(Math.random() * totalSlots);
+  const totalSlots = 4;
+  const pos = Math.floor(Math.random() * totalSlots);
 
   const options: T[] = [];
   let distractorIdx = 0;
