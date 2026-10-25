@@ -5,6 +5,7 @@ import { listBookAssignments, updateBookAssignment } from '@/lib/server/bookAssi
 import { getOrGenerateLearningPackage, buildAndSaveLearningPackage } from '@/lib/server/books/learningContent';
 import { saveQuizSession, getQuizSession, type BookQuizSession } from '@/lib/server/books/bookQuiz';
 import { randomUUID } from 'node:crypto';
+import { getAssignmentSourceIssues } from '@/lib/server/books/sourceCoverage';
 
 async function getOwnedAssignment(userId: string, bookId: string, assignmentId: string) {
   const book = await getBook(userId, bookId);
@@ -27,12 +28,13 @@ export async function GET(
 
   const { book, assignment } = owned;
 
-  // Retrieve existing or generate on demand
-  let learningPackage = assignment.learningPackage;
-  if (!learningPackage || !learningPackage.quiz || learningPackage.quiz.length === 0) {
-    const pages = await listBookPages(session.userId, id, assignment.startPdfPage, assignment.endPdfPage);
-    learningPackage = await getOrGenerateLearningPackage(session.userId, book, assignment, pages);
-  }
+  // Revalidate the saved package against the complete current source before returning quiz material.
+  const pages = await listBookPages(session.userId, id, assignment.startPdfPage, assignment.endPdfPage);
+  const sourceIssues = getAssignmentSourceIssues(assignment, pages);
+  if (sourceIssues.length) return NextResponse.json({ error: `Original source extraction is incomplete for PDF pages ${sourceIssues.join(', ')}.`, missingPages: sourceIssues }, { status: 409 });
+  const unreviewedOcrPages = pages.filter(page => page.method === 'ocr' && page.text?.trim() && page.requiresReview && !page.reviewedByUser).map(page => page.pdfPage);
+  if (unreviewedOcrPages.length) return NextResponse.json({ error: `Review OCR pages ${unreviewedOcrPages.join(', ')} before studying this unit.`, unreviewedOcrPages }, { status: 409 });
+  const learningPackage = await getOrGenerateLearningPackage(session.userId, book, assignment, pages);
 
   return NextResponse.json({
     ok: true,
@@ -74,6 +76,10 @@ export async function POST(
   // 1. Regenerate quiz specifically without touching summary or examples
   if (action === 'regenerate') {
     const pages = await listBookPages(session.userId, id, assignment.startPdfPage, assignment.endPdfPage);
+    const sourceIssues = getAssignmentSourceIssues(assignment, pages);
+    if (sourceIssues.length) return NextResponse.json({ error: `Original source extraction is incomplete for PDF pages ${sourceIssues.join(', ')}.`, missingPages: sourceIssues }, { status: 409 });
+    const unreviewedOcrPages = pages.filter(page => page.method === 'ocr' && page.text?.trim() && page.requiresReview && !page.reviewedByUser).map(page => page.pdfPage);
+    if (unreviewedOcrPages.length) return NextResponse.json({ error: `Review OCR pages ${unreviewedOcrPages.join(', ')} before regenerating this quiz.`, unreviewedOcrPages }, { status: 409 });
     const updatedPackage = await buildAndSaveLearningPackage({
       userId: session.userId,
       book,

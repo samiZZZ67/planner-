@@ -99,6 +99,8 @@ export interface BookLearningPackage {
   assignmentId: string;
   startPdfPage: number;
   endPdfPage: number;
+  /** Hash of every extracted source page used to generate this package. */
+  sourceFingerprint?: string;
   summary: string;
   keyConcepts: string[];
   definitions?: Array<{ term: string; explanation: string; pdfPage: number }>;

@@ -4,6 +4,7 @@ import { getBook, listBookPages, updateBook } from '@/lib/server/books';
 import { listBookAssignments, updateBookAssignment } from '@/lib/server/bookAssignments';
 import { publishApprovedAssignment, publishLoadPlanPagesToTelegram } from '@/lib/server/telegram';
 import { listBookPublishJobs, updateBookPublishJob } from '@/lib/server/bookScheduler';
+import { orderCompleteAssignmentPages } from '@/lib/server/books/sourceCoverage';
 
 export async function POST(request: Request, context: RouteContext<'/api/books/[id]/assignments/[assignmentId]/publish'>) {
   const session = await getSessionUser(request);
@@ -24,13 +25,10 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
   }
 
   try {
-    const pages = await listBookPages(session.userId, id, assignment.startPdfPage, assignment.endPdfPage);
-    if (!pages.length) {
-      return NextResponse.json({ error: 'No extracted page content found for this section. Extract the book pages first.' }, { status: 400 });
-    }
+    const pages = orderCompleteAssignmentPages(assignment, await listBookPages(session.userId, id, assignment.startPdfPage, assignment.endPdfPage));
     const previous = assignments.find(item => item.dayNumber === assignment.dayNumber - 1);
 
-    if (!assignment.learningPackage && !process.env.VITEST) {
+    if (!process.env.VITEST) {
       try {
         const { getOrGenerateLearningPackage } = await import('@/lib/server/books/learningContent');
         const pkg = await getOrGenerateLearningPackage(session.userId, book, assignment, pages);
@@ -124,6 +122,9 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
     });
   } catch (error) {
     const failure = error as Error & { delivery?: unknown };
+    if (/source is incomplete|unassigned PDF pages|another book|OCR review/i.test(failure.message)) {
+      return NextResponse.json({ error: failure.message }, { status: 409 });
+    }
     // Record failure status on assignment without premature page advancement
     await updateBookAssignment({
       ...assignment,

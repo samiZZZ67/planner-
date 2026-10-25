@@ -4,6 +4,8 @@ import { getBook, listBookPages } from '@/lib/server/books';
 import { listBookAssignments, updateBookAssignment } from '@/lib/server/bookAssignments';
 import { rescheduleBookPublishJob, upsertBookPublishJob } from '@/lib/server/bookScheduler';
 import { normalizeTimeString } from '@/lib/date/ethiopianTime';
+import { getAssignmentSourceIssues } from '@/lib/server/books/sourceCoverage';
+import { getAssignmentSourceFingerprint } from '@/lib/server/books/learningContent';
 
 export async function GET(request: Request, context: RouteContext<'/api/books/[id]/assignments/[assignmentId]'>) {
   const session = await getSessionUser(request);
@@ -14,10 +16,9 @@ export async function GET(request: Request, context: RouteContext<'/api/books/[i
   const assignment = (await listBookAssignments(session.userId, id)).find(item => item.id === assignmentId);
   if (!assignment) return NextResponse.json({ error: 'Reading assignment not found.' }, { status: 404 });
   const originalPages = await listBookPages(session.userId, id, assignment.startPdfPage, assignment.endPdfPage);
-  const available = new Set(originalPages.map(page => page.pdfPage));
-  const missingPages = Array.from({ length: assignment.endPdfPage - assignment.startPdfPage + 1 }, (_, index) => assignment.startPdfPage + index)
-    .filter(page => !available.has(page));
-  return NextResponse.json({ book: { title: book.title, author: book.author }, assignment, originalPages, missingPages, isComplete: missingPages.length === 0 });
+  const missingPages = getAssignmentSourceIssues(assignment, originalPages);
+  const unreviewedOcrPages = originalPages.filter(page => page.method === 'ocr' && page.text?.trim() && page.requiresReview && !page.reviewedByUser).map(page => page.pdfPage);
+  return NextResponse.json({ book: { title: book.title, author: book.author }, assignment, originalPages, missingPages, unreviewedOcrPages, sourceFingerprint: getAssignmentSourceFingerprint(book, assignment, originalPages), isComplete: missingPages.length === 0 && unreviewedOcrPages.length === 0 });
 }
 
 export async function PATCH(request: Request, context: RouteContext<'/api/books/[id]/assignments/[assignmentId]'>) {

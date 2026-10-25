@@ -237,7 +237,7 @@ describe('Book Delivery Separation, Quiz Exit, and Quiz Quality Suite', () => {
       const parts = formatReadingAssignment(book2, singlePageAssignment, samplePages);
       const fullText = parts.join('\n');
 
-      expect(fullText).not.toContain('/quiz');
+      expect(fullText).toContain('/quiz?assignmentId=');
       expect(fullText).not.toContain('🎯');
       expect(fullText).not.toContain('Interactive Practice Quiz');
       expect(fullText).not.toContain('Take Today\'s Reading Quiz');
@@ -258,10 +258,10 @@ describe('Book Delivery Separation, Quiz Exit, and Quiz Quality Suite', () => {
         },
       ];
 
-      const parts = formatLoadPlanPages(book2, book2Assignments[0], samplePages);
+      const parts = formatLoadPlanPages(book2, { ...book2Assignments[0], startPdfPage: 1, endPdfPage: 1 }, samplePages);
       const fullText = parts.join('\n');
 
-      expect(fullText).not.toContain('/quiz');
+      expect(fullText).toContain('/quiz?assignmentId=');
       expect(fullText).not.toContain('🎯');
       expect(fullText).not.toContain('Interactive Practice Quiz');
       expect(fullText).not.toContain('Take Today\'s Reading Quiz');

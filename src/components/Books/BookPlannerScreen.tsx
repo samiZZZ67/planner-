@@ -18,6 +18,8 @@ interface AssignmentDetail {
   assignment: BookAssignmentRecord;
   originalPages: BookPageRecord[];
   missingPages?: number[];
+  unreviewedOcrPages?: number[];
+  sourceFingerprint?: string;
 }
 
 function SendNowButton({
@@ -931,7 +933,10 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                 </div>
                 {assignmentDetails[assignment.id] && (() => {
                   const detail = assignmentDetails[assignment.id];
-                  const pkg = learningPackages[assignment.id] || detail.assignment.learningPackage;
+                  const candidatePackage = learningPackages[assignment.id] || detail.assignment.learningPackage;
+                  const unreviewedOcrPages = detail.originalPages.filter(page => page.method === 'ocr' && page.text?.trim() && page.requiresReview && !page.reviewedByUser).map(page => page.pdfPage);
+                  const sourceComplete = (detail.missingPages || []).length === 0 && !unreviewedOcrPages.length && detail.originalPages.length === assignment.endPdfPage - assignment.startPdfPage + 1;
+                  const pkg = candidatePackage?.sourceFingerprint === detail.sourceFingerprint ? candidatePackage : undefined;
                   const returnTo = `/?tab=books&bookId=${encodeURIComponent(book.id)}&assignmentId=${encodeURIComponent(assignment.id)}`;
                   return <div style={{ display: 'grid', gap: 12, paddingTop: 8 }}>
                     <h4 style={{ margin: 0 }}>1. Original source · PDF pages {assignment.startPdfPage}–{assignment.endPdfPage}</h4>
@@ -940,12 +945,13 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                       <button type="button" className="v-pill-btn" onClick={() => void openOriginalPdf(book, assignment.startPdfPage)} style={{ padding: '8px 12px' }}>Open original PDF at page {assignment.startPdfPage}</button>
                     </div>
                     {detail.originalPages.map(page => <section key={page.pdfPage} style={{ border: '1px solid var(--v-glass-border)', borderRadius: 10, padding: 10 }}>
-                      <strong style={{ fontSize: 12 }}>Original PDF page {page.pdfPage}{page.method === 'ocr' ? ' (OCR, visually reviewed)' : ''}</strong>
+                      <strong style={{ fontSize: 12 }}>Original PDF page {page.pdfPage}{page.method === 'ocr' ? (page.requiresReview && !page.reviewedByUser ? ' (OCR, review required)' : page.reviewedByUser ? ' (OCR, reviewed)' : ' (OCR)') : ''}</strong>
                       {previewUrls[`${book.id}:${page.pdfPage}`] && <img src={previewUrls[`${book.id}:${page.pdfPage}`]} alt={`Visual preview of original PDF page ${page.pdfPage}`} style={{ display: 'block', width: '100%', maxHeight: 600, objectFit: 'contain', marginTop: 8, borderRadius: 8, background: '#fff' }} />}
-                      <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflow: 'auto', margin: '8px 0 0', font: '13px/1.6 ui-monospace,Consolas,monospace' }}>{page.text}</pre>
+                      <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', margin: '8px 0 0', font: '13px/1.6 ui-monospace,Consolas,monospace' }}>{page.text}</pre>
                     </section>)}
                     {!!detail.missingPages?.length && <p role="alert" style={{ margin: 0, padding: 12, borderRadius: 12, border: '1px solid var(--v-glass-border)', color: 'var(--text-secondary)' }}>Extraction is incomplete for PDF pages {detail.missingPages.join(', ')}. The displayed source is partial; re-run extraction before studying or publishing this unit.</p>}
-                    {!pkg ? <button type="button" className="v-pill-btn" disabled={learningPackageLoadingId === assignment.id} onClick={() => void loadLearningPackage(book, assignment)} style={{ justifySelf: 'start', padding: '9px 15px' }}>{learningPackageLoadingId === assignment.id ? 'Preparing study unit...' : 'Prepare concept study unit'}</button> : <div style={{ display: 'grid', gap: 12, padding: 16, border: '1px solid var(--v-glass-border)', borderRadius: 18, background: 'var(--v-glass-bg-subtle)' }}>
+                    {!!unreviewedOcrPages.length && <p role="alert" style={{ margin: 0, padding: 12, borderRadius: 12, border: '1px solid var(--v-glass-border)', color: 'var(--text-secondary)' }}>Review OCR source pages {unreviewedOcrPages.join(', ')} before preparing study materials.</p>}
+                    {sourceComplete && !pkg ? <button type="button" className="v-pill-btn" disabled={learningPackageLoadingId === assignment.id} onClick={() => void loadLearningPackage(book, assignment)} style={{ justifySelf: 'start', padding: '9px 15px' }}>{learningPackageLoadingId === assignment.id ? 'Preparing study unit...' : 'Prepare concept study unit'}</button> : sourceComplete && pkg ? <div style={{ display: 'grid', gap: 12, padding: 16, border: '1px solid var(--v-glass-border)', borderRadius: 18, background: 'var(--v-glass-bg-subtle)' }}>
                       <button type="button" className="v-pill-btn" disabled={learningPackageLoadingId === assignment.id} onClick={() => void loadLearningPackage(book, assignment)} style={{ justifySelf: 'start', padding: '8px 12px' }}>{learningPackageLoadingId === assignment.id ? 'Refreshing...' : 'Refresh study material'}</button>
                       <h4 style={{ margin: 0 }}>2. Study summary</h4><p style={{ margin: 0, lineHeight: 1.65 }}>{pkg.summary}</p>
                       <h4 style={{ margin: '6px 0 0' }}>3. Definitions</h4>{pkg.definitions?.length ? pkg.definitions.map((item, index) => <p key={`${item.term}-${index}`} style={{ margin: 0 }}><strong>{item.term}</strong>: {item.explanation} <span style={{ color: 'var(--text-muted)' }}>(PDF p. {item.pdfPage})</span></p>) : <p style={{ margin: 0, color: 'var(--text-muted)' }}>No source-grounded definitions were identified for this section.</p>}
@@ -953,7 +959,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                       <h4 style={{ margin: '6px 0 0' }}>5. &#x1F3DB;&#xFE0F; Real-Life Examples</h4>{(pkg.realLifeExamples || []).length ? (pkg.realLifeExamples || []).map((example, index) => <div key={`${example.title}-${index}`} style={{ display: 'grid', gap: 4 }}><strong>{example.title}</strong><p style={{ margin: 0 }}>{example.situation}</p><span style={{ color: 'var(--text-secondary)' }}>Connection: {example.connection}</span>{example.lesson && <span>Lesson: {example.lesson}</span>}<small style={{ color: 'var(--text-muted)' }}>{example.sourceDisclosure || example.attribution}{example.sourcePdfPages?.length ? ` - PDF p. ${example.sourcePdfPages.join(', ')}` : ''}</small></div>) : <p style={{ margin: 0, color: 'var(--text-muted)' }}>No examples are available for this unit.</p>}
                       <h4 style={{ margin: '6px 0 0' }}>6. &#x1F4AC; Quotes</h4>{pkg.quotes?.length ? pkg.quotes.map((quote, index) => <blockquote key={`${quote.pdfPage}-${index}`} style={{ margin: 0, paddingLeft: 12, borderLeft: '2px solid var(--v-glass-border)' }}>&ldquo;{quote.text}&rdquo; <small style={{ color: 'var(--text-muted)' }}>(PDF p. {quote.pdfPage})</small></blockquote>) : <p style={{ margin: 0, color: 'var(--text-muted)' }}>No verified quotation is available in this unit&apos;s extracted source.</p>}
                       <h4 style={{ margin: '6px 0 0' }}>7. Quiz</h4><a className="v-pill-btn" href={`/quiz?assignmentId=${encodeURIComponent(assignment.id)}&returnTo=${encodeURIComponent(returnTo)}`} style={{ justifySelf: 'start', padding: '9px 15px', textDecoration: 'none' }}>Start this unit&apos;s quiz</a>
-                    </div>}
+                    </div> : null}
                   </div>;
                 })()}
               </section>

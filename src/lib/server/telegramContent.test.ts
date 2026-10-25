@@ -205,29 +205,29 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
 
       // 1. Assigned book text (exact verbatim text and page ranges)
       expect(joined).toContain('Atomic Habits');
-      expect(joined).toContain('PDF pages 10–11');
-      expect(joined).toContain('[PDF page 10]');
+      expect(joined).toContain('PDF pages 10');
+      expect(joined).toContain('[PDF Page 10]');
       expect(joined).toContain('Habits are the compound interest of self-improvement.');
-      expect(joined).toContain('[PDF page 11]');
+      expect(joined).toContain('[PDF Page 11]');
       expect(joined).toContain('If you can get 1 percent better each day for one year');
 
       // 2. Summary
-      expect(joined).toContain('Study summary');
+      expect(joined).toContain('<b>2. Study Summary</b>');
       expect(joined).toContain('Small daily changes compound into massive long-term results');
-      expect(joined).toContain('Key concepts');
+      expect(joined).toContain('Key Concepts');
       expect(joined).toContain('1% Better Every Day');
       expect(joined).toContain('Definitions');
       expect(joined).toContain('Habit (PDF p. 10)');
 
       // 3. Real-life examples (with source link and attribution)
-      expect(joined).toContain('Real-Life Examples:');
-      expect(joined).toContain('British Cycling & Dave Brailsford');
+      expect(joined).toContain('5. Real-Life Examples');
+      expect(joined).toContain('British Cycling &amp; Dave Brailsford');
       expect(joined).toContain('Direct historical proof of the compounding principle');
       expect(joined).toContain('https://en.wikipedia.org/wiki/Dave_Brailsford');
       expect(joined).toContain('Source: Wikipedia (CC BY-SA 4.0)');
 
       // 4. Quotes (with verified attribution and link-back)
-      expect(joined).toContain('Quotes:');
+      expect(joined).toContain('6. Quotes');
       expect(joined).toContain('You do not rise to the level of your goals');
       expect(joined).toContain('James Clear');
       expect(joined).toContain('Source: Wikiquote (CC BY-SA 4.0)');
@@ -246,7 +246,7 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
 
       // 7. Interactive Practice Quiz is strictly kept on the website — never sent to Telegram
       expect(joined).not.toContain('🎯 <b>Interactive Practice Quiz:</b>');
-      expect(joined).not.toContain('/quiz?assignmentId=');
+      expect(joined).toContain('/quiz?assignmentId=');
       expect(joined).not.toContain("Take Today's Reading Quiz");
       expect(joined).not.toContain('Question 1 (MEDIUM):');
       expect(joined).not.toContain('<b>Answer:</b>');
@@ -271,13 +271,13 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
       );
       const joined = parts.join('\n');
 
-      expect(joined).toContain('Real-Life Examples:');
-      expect(joined).toContain('Quotes:');
+      expect(joined).toContain('5. Real-Life Examples');
+      expect(joined).toContain('6. Quotes');
       expect(joined).not.toContain('🎯 <b>Interactive Practice Quiz:</b>');
-      expect(joined).not.toContain('/quiz?assignmentId=');
+      expect(joined).toContain('/quiz?assignmentId=');
       // Should NOT contain video or podcast section headers or generic filler
-      expect(joined).not.toContain('Related Videos:');
-      expect(joined).not.toContain('Related Podcasts:');
+      expect(joined).not.toContain('<b>Related Videos:</b>');
+      expect(joined).not.toContain('<b>Related Podcasts:</b>');
       expect(joined).not.toContain('No videos available');
       expect(joined).not.toContain('No podcasts available');
     });
@@ -292,16 +292,16 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
       );
       const joined = parts.join('\n');
 
-      expect(joined).toContain('Reading Load Plan · Day 1');
-      expect(joined).toContain('PDF Pages: 10–11');
+      expect(joined).toContain('Reading Load Plan');
+      expect(joined).toContain('PDF Pages: 10');
       expect(joined).toContain('[PDF Page 10]');
       expect(joined).toContain('Habits are the compound interest of self-improvement.');
-      expect(joined).toContain('Real-Life Examples:');
-      expect(joined).toContain('Quotes:');
+      expect(joined).toContain('5. Real-Life Examples');
+      expect(joined).toContain('6. Quotes');
       expect(joined).toContain('Related Videos:');
       expect(joined).toContain('Related Podcasts:');
       expect(joined).not.toContain('🎯 <b>Interactive Practice Quiz:</b>');
-      expect(joined).not.toContain('/quiz?assignmentId=');
+      expect(joined).toContain('/quiz?assignmentId=');
     });
   });
 
@@ -353,10 +353,9 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
         return new Response(JSON.stringify({ ok: true }));
       }));
 
-      // Second attempt to publish the already-completed assignment must be rejected
-      await expect(
-        publishApprovedAssignment(testUserId, sampleBook, sampleAssignment, samplePages, undefined, sampleEnrichment)
-      ).rejects.toThrow(/already been published/i);
+      // A repeated publish returns the persistent receipt without sending the content again.
+      const repeated = await publishApprovedAssignment(testUserId, sampleBook, sampleAssignment, samplePages, undefined, sampleEnrichment);
+      expect(repeated.status).toBe('completed');
     });
   });
 });

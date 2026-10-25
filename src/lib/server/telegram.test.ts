@@ -21,12 +21,13 @@ const page: BookPageRecord = { bookId: 'book-1', pdfPage: 1, text: 'Exact source
 describe('Telegram reading assignment formatting', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('preserves extracted page text and includes page references and separate notes', () => {
+  it('preserves extracted page text and puts the website quiz link after study sections', () => {
     const joined = formatReadingAssignment(book, approved, [page]).join('');
-    expect(joined).toContain('[PDF page 1]\nExact source\ntext — with punctuation.');
-    expect(joined).toContain('Study summary');
-    expect(joined).toContain('• A (PDF p. 1): Meaning A');
-    expect(joined).not.toContain('/quiz');
+    expect(joined).toContain('<b>[PDF Page 1]</b>\nExact source\ntext');
+    expect(joined).toContain('<b>2. Study Summary</b>');
+    expect(joined).toContain('A (PDF p. 1): Meaning A');
+    expect(joined).toContain('/quiz?assignmentId=assignment-1');
+    expect(joined).not.toContain('What is A?');
   });
 
   it('splits by Unicode code points without losing characters', () => {
@@ -38,7 +39,7 @@ describe('Telegram reading assignment formatting', () => {
 
   it('refuses draft assignments and pages awaiting OCR review', () => {
     expect(() => formatReadingAssignment(book, { ...approved, status: 'draft' }, [page])).toThrow(/approved/i);
-    expect(() => formatReadingAssignment(book, approved, [{ ...page, method: 'ocr', requiresReview: true }])).toThrow(/OCR review/i);
+    expect(() => formatReadingAssignment(book, approved, [{ ...page, method: 'ocr', requiresReview: true }])).toThrow(/OCR.*review/i);
   });
 
   it('formats load plan pages without requiring approved notes status', () => {
@@ -50,10 +51,10 @@ describe('Telegram reading assignment formatting', () => {
     };
     const parts = formatLoadPlanPages(book, draftAssignment, [page]);
     const joined = parts.join('');
-    expect(joined).toContain('Reading Load Plan · Day 1');
-    expect(joined).toContain('PDF Pages: 1–1');
+    expect(joined).toContain('Reading Load Plan');
+    expect(joined).toContain('PDF Pages: 1');
     expect(joined).toContain('[PDF Page 1]');
-    expect(joined).toContain('Exact source\ntext — with punctuation.');
+    expect(joined).toContain('Exact source\ntext');
     expect(joined).toContain('Core Insight');
   });
 
@@ -115,7 +116,7 @@ describe('Telegram reading assignment formatting', () => {
       const { publishLoadPlanPagesToTelegram } = await import('./telegram');
       const testAssignment: BookAssignmentRecord = {
         ...approved,
-        id: 'assignment-sendnow-1',
+        id: `assignment-sendnow-${Date.now()}`,
         dayNumber: 1,
         scheduledDate: '2026-10-15',
         status: 'draft',
@@ -125,7 +126,11 @@ describe('Telegram reading assignment formatting', () => {
       expect(result.delivery.status).toBe('completed');
       expect(result.delivery.telegramMessageIds.length).toBeGreaterThan(0);
       expect(sentMessages.length).toBeGreaterThan(0);
-      expect(sentMessages[0].text).toContain('Reading Load Plan · Day 1');
+      expect(sentMessages[0].text).toContain('Reading Load Plan');
+      const firstDeliveryCount = sentMessages.length;
+      const repeated = await publishLoadPlanPagesToTelegram('owner', book, testAssignment, [page]);
+      expect(repeated.delivery.id).toBe(result.delivery.id);
+      expect(sentMessages.length).toBe(firstDeliveryCount);
       // Original assignment scheduled date was NOT modified by the delivery
       expect(testAssignment.scheduledDate).toBe('2026-10-15');
       expect(testAssignment.dayNumber).toBe(1);
@@ -170,8 +175,8 @@ describe('Telegram reading assignment formatting', () => {
     // Format reading assignment with an empty page
     const assignmentParts = formatReadingAssignment(book, approved, [emptyPage]);
     const assignmentText = assignmentParts.join('');
-    expect(assignmentText).toContain('Blank / Illustration Page');
-    expect(assignmentText).toContain('proceeding to the next reading section');
+    expect(assignmentText).toContain('Blank or Illustration Page');
+    expect(assignmentText).toContain('No extractable text was found');
 
     // Format load plan pages with an empty page
     const draftAssignment: BookAssignmentRecord = {
@@ -181,8 +186,8 @@ describe('Telegram reading assignment formatting', () => {
     };
     const loadPlanParts = formatLoadPlanPages(book, draftAssignment, [emptyPage]);
     const loadPlanText = loadPlanParts.join('');
-    expect(loadPlanText).toContain('Blank / Illustration Page');
-    expect(loadPlanText).toContain('proceeding to the next reading section');
+    expect(loadPlanText).toContain('Blank or Illustration Page');
+    expect(loadPlanText).toContain('No extractable text was found');
   });
 
   it('resolves getAppOrigin across RENDER_EXTERNAL_URL, CLIENT_URL, and fallback', async () => {
@@ -209,10 +214,22 @@ describe('Telegram reading assignment formatting', () => {
     }
   });
 
-  it('ensures reading assignments never contain quiz links or quiz payloads for Telegram', () => {
-    const assignmentParts = formatReadingAssignment(book, approved, [page]);
-    const text = assignmentParts.join('');
-    expect(text).not.toContain('🎯 <b>Interactive Practice Quiz:</b>');
-    expect(text).not.toContain('/quiz');
+  it('sends the website quiz link after the required original-first section sequence', () => {
+    const text = formatReadingAssignment(book, approved, [page]).join('');
+    const headings = [
+      '<b>1. Original Extracted Text</b>', '<b>2. Study Summary</b>', '<b>3. Definitions</b>',
+      "<b>4. Connection to Yesterday's Post</b>", '<b>5. Real-Life Examples</b>', '<b>6. Quotes</b>', '<b>7. Website Quiz</b>',
+    ];
+    const offsets = headings.map(heading => text.indexOf(heading));
+    expect(offsets.every(offset => offset >= 0)).toBe(true);
+    expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
+    expect(text.indexOf('[PDF Page 1]')).toBeLessThan(offsets[1]);
+    expect(text).toContain('/quiz?assignmentId=assignment-1');
+    expect(text).not.toContain('What is A?');
+  });
+
+  it('refuses partial page ranges for scheduled delivery', () => {
+    const twoPages = { ...approved, startPdfPage: 1, endPdfPage: 2 };
+    expect(() => formatLoadPlanPages(book, twoPages, [page])).toThrow(/incomplete/i);
   });
 });

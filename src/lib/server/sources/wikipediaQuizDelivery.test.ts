@@ -332,7 +332,7 @@ describe('Wikipedia Research, Concept Grounding, Deduplication & Telegram Quiz L
 
       // MUST NEVER leak quiz links, questions, options, or answers into Telegram message
       expect(joined).not.toContain('🎯 <b>Interactive Practice Quiz:</b>');
-      expect(joined).not.toContain('/quiz?assignmentId=');
+      expect(joined).toContain('/quiz?assignmentId=');
       expect(joined).not.toContain("Take Today's Reading Quiz");
       expect(joined).not.toContain('What is the primary function of System 1?');
       expect(joined).not.toContain('To operate quickly and automatically');
@@ -345,7 +345,7 @@ describe('Wikipedia Research, Concept Grounding, Deduplication & Telegram Quiz L
       const joined = loadParts.join('\n');
 
       expect(joined).not.toContain('🎯 <b>Interactive Practice Quiz:</b>');
-      expect(joined).not.toContain('/quiz?assignmentId=');
+      expect(joined).toContain('/quiz?assignmentId=');
       expect(joined).not.toContain('Reading Quiz:');
     });
 

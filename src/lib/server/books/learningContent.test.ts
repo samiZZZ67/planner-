@@ -5,6 +5,7 @@ import {
   generateAdaptiveQuiz,
   buildAndSaveLearningPackage,
   getOrGenerateLearningPackage,
+  chunkAssignmentSource,
 } from './learningContent';
 import type { BookRecord, BookAssignmentRecord, BookPageRecord } from '../../books/types';
 
@@ -147,9 +148,35 @@ describe('Book Learning Content Generation & Adaptive Quiz Suite', () => {
       expect(result.summary.length).toBeGreaterThan(40);
       expect(result.summary).toContain('compound interest');
       expect(result.keyConcepts.length).toBeGreaterThanOrEqual(1);
-      expect(result.definitions.length).toBeGreaterThanOrEqual(1);
-      expect(result.definitions[0].pdfPage).toBeGreaterThanOrEqual(smallAssignment.startPdfPage);
-      expect(result.definitions[0].pdfPage).toBeLessThanOrEqual(smallAssignment.endPdfPage);
+      expect(result.definitions).toEqual([]); // No definition is invented when the source only mentions a concept.
+    });
+
+    it('retains every source page in bounded, page-labelled model chunks', () => {
+      const pages = [
+        { ...smallPages[0], pdfPage: 2, text: `EARLY_SENTINEL ${'middle '.repeat(800)} LATE_SENTINEL` },
+        { ...smallPages[1], pdfPage: 3, text: 'A later page has its own unique closing claim.' },
+      ];
+      const chunks = chunkAssignmentSource(pages, 700);
+      const joined = chunks.map(chunk => chunk.sourceText).join('\n');
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(joined).toContain('[PDF Page 2]');
+      expect(joined).toContain('EARLY_SENTINEL');
+      expect(joined).toContain('LATE_SENTINEL');
+      expect(joined).toContain('[PDF Page 3]');
+      expect(joined).toContain('unique closing claim');
+    });
+
+    it('draws deterministic summaries from late pages in the complete assigned unit', async () => {
+      const pages = Array.from({ length: 2 }, (_, index) => ({
+        ...smallPages[index],
+        pdfPage: index + 1,
+        text: index === 0
+          ? Array.from({ length: 8 }, (_, sentence) => `Early page sentence ${sentence} explains an important foundational detail in this study.`).join(' ')
+          : 'LateUnitConcept describes the final important relationship and changes how the earlier argument is applied.',
+      }));
+      const result = await generateSectionSummary(smallBook, smallAssignment, pages);
+      expect(result.summary).toContain('LateUnitConcept');
+      expect(result.summary).toContain('PDF p. 2');
     });
 
     it('gracefully handles empty/visual divider sections without throwing', async () => {
@@ -259,6 +286,7 @@ describe('Book Learning Content Generation & Adaptive Quiz Suite', () => {
       // Verify questions are distributed across chunks and citation pages
       const citedPages = new Set(questions.flatMap(q => q.sourcePdfPages));
       expect(citedPages.size).toBeGreaterThanOrEqual(2);
+      expect(citedPages.has(largeAssignment.endPdfPage)).toBe(true);
 
       // Verify questions have unique questions (no duplicate question stems)
       const questionTexts = questions.map(q => q.question.toLowerCase());
@@ -358,6 +386,28 @@ describe('Book Learning Content Generation & Adaptive Quiz Suite', () => {
       const retrieved = await getOrGenerateLearningPackage(testUserId, smallBook, withPackage, smallPages);
       expect(retrieved.assignmentId).toBe(smallAssignment.id);
       expect(retrieved.quiz.length).toBe(initial.quiz.length);
+    });
+
+    it('invalidates cached study materials when assigned source text changes', async () => {
+      const initial = await buildAndSaveLearningPackage({ userId: testUserId, book: smallBook, assignment: smallAssignment, pages: smallPages });
+      const changedPages = [{ ...smallPages[0], text: 'A newly extracted source page describes updated material and a revised principle.' }, smallPages[1]];
+      const refreshed = await getOrGenerateLearningPackage(testUserId, smallBook, { ...smallAssignment, learningPackage: initial }, changedPages);
+      expect(refreshed.sourceFingerprint).not.toBe(initial.sourceFingerprint);
+      expect(refreshed.summary).toContain('newly extracted source page');
+    });
+
+    it('refuses to create study material from an incomplete assigned source', async () => {
+      await expect(buildAndSaveLearningPackage({ userId: testUserId, book: smallBook, assignment: smallAssignment, pages: [smallPages[0]] })).rejects.toThrow(/incomplete/i);
+    });
+
+    it('refuses source pages outside the planned unit instead of leaking adjacent-book content', async () => {
+      const extraPage = { ...smallPages[1], pdfPage: 3, text: 'This page is outside the planned unit.' };
+      await expect(buildAndSaveLearningPackage({ userId: testUserId, book: smallBook, assignment: smallAssignment, pages: [...smallPages, extraPage] })).rejects.toThrow(/unassigned PDF pages/i);
+    });
+
+    it('keeps extracted pages scoped to the assignment book', async () => {
+      const otherBookPage = { ...smallPages[1], bookId: 'another-book' };
+      await expect(buildAndSaveLearningPackage({ userId: testUserId, book: smallBook, assignment: smallAssignment, pages: [smallPages[0], otherBookPage] })).rejects.toThrow(/another book/i);
     });
   });
 });

@@ -3,6 +3,7 @@ import { getSessionUser } from '@/lib/server/auth';
 import { getBook, listBookPages } from '@/lib/server/books';
 import { listBookAssignments } from '@/lib/server/bookAssignments';
 import { getOrGenerateLearningPackage, buildAndSaveLearningPackage } from '@/lib/server/books/learningContent';
+import { getAssignmentSourceIssues } from '@/lib/server/books/sourceCoverage';
 
 async function getOwnedAssignment(userId: string, bookId: string, assignmentId: string) {
   const book = await getBook(userId, bookId);
@@ -25,6 +26,10 @@ export async function GET(
 
   const { book, assignment } = owned;
   const pages = await listBookPages(session.userId, id, assignment.startPdfPage, assignment.endPdfPage);
+  const sourceIssues = getAssignmentSourceIssues(assignment, pages);
+  if (sourceIssues.length) return NextResponse.json({ error: `Original source extraction is incomplete for PDF pages ${sourceIssues.join(', ')}. Re-run extraction before generating study materials.`, missingPages: sourceIssues }, { status: 409 });
+  const unreviewedOcr = pages.filter(page => page.method === 'ocr' && page.text?.trim() && page.requiresReview && !page.reviewedByUser).map(page => page.pdfPage);
+  if (unreviewedOcr.length) return NextResponse.json({ error: `Review OCR source pages ${unreviewedOcr.join(', ')} before generating study materials.`, unreviewedOcrPages: unreviewedOcr }, { status: 409 });
   const pkg = await getOrGenerateLearningPackage(session.userId, book, assignment, pages);
 
   return NextResponse.json({
@@ -57,6 +62,10 @@ export async function POST(
   const model = body?.model as string | undefined;
 
   const pages = await listBookPages(session.userId, id, assignment.startPdfPage, assignment.endPdfPage);
+  const sourceIssues = getAssignmentSourceIssues(assignment, pages);
+  if (sourceIssues.length) return NextResponse.json({ error: `Original source extraction is incomplete for PDF pages ${sourceIssues.join(', ')}. Re-run extraction before generating study materials.`, missingPages: sourceIssues }, { status: 409 });
+  const unreviewedOcr = pages.filter(page => page.method === 'ocr' && page.text?.trim() && page.requiresReview && !page.reviewedByUser).map(page => page.pdfPage);
+  if (unreviewedOcr.length) return NextResponse.json({ error: `Review OCR source pages ${unreviewedOcr.join(', ')} before generating study materials.`, unreviewedOcrPages: unreviewedOcr }, { status: 409 });
   const pkg = await buildAndSaveLearningPackage({
     userId: session.userId,
     book,

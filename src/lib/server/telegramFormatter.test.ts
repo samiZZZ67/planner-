@@ -78,7 +78,7 @@ const testAssignment: BookAssignmentRecord = {
 };
 
 const testPage: BookPageRecord = {
-  bookId: 'test-book-1',
+  bookId: 'test-book-formatter',
   pdfPage: 1,
   text: 'To build resilient software, interfaces must decouple services from implementations: if (service < 0 && client > 10) return false;',
   method: 'native',
