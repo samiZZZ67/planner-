@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/db';
 import { syncEngine } from '@/lib/sync/syncEngine';
 import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
+  ResponsiveContainer, ComposedChart, BarChart, Bar, Line,
   XAxis, YAxis, CartesianGrid, Tooltip
 } from 'recharts';
 import {
@@ -1315,7 +1315,7 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
           )}
 
           {/* ── CHARTS (LARGE, CLEAR, RESPONSIVE, EXPANDABLE / COMPRESSIBLE) ── */}
-          {/* Chart 1: Focus Hours (Area Chart) */}
+          {/* Chart 1: Focus Hours and Tasks (Combo Chart) */}
           <div
             className="v-card"
             style={{
@@ -1363,35 +1363,46 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
 
             <div style={{ width: '100%', height: chartHeightPrimary }}>
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="focusHoursGlow" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.6} />
-                      <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.02} />
+                      <stop offset="5%" stopColor="#e7e7ea" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#e7e7ea" stopOpacity={0.03} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--v-glass-border-subtle)" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 5" stroke="rgba(255,255,255,.13)" vertical={false} />
                   <XAxis
                     dataKey="label"
                     tick={{ fill: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}
                     stroke="var(--v-glass-border-subtle)"
                   />
                   <YAxis
+                    yAxisId="hours"
                     tick={{ fill: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}
                     stroke="var(--v-glass-border-subtle)"
                     unit="h"
                   />
+                  <YAxis yAxisId="tasks" orientation="right" hide />
                   <Tooltip content={<GlassTooltip />} />
-                  <Area
-                    type="monotone"
+                  <Bar
                     dataKey="hours"
                     name="Hours Taken"
-                    stroke="#38bdf8"
-                    strokeWidth={3}
+                    yAxisId="hours"
                     fill="url(#focusHoursGlow)"
-                    activeDot={{ r: 6, fill: '#38bdf8', stroke: '#fff', strokeWidth: 2 }}
+                    radius={[8, 8, 0, 0]}
+                    maxBarSize={38}
                   />
-                </AreaChart>
+                  <Line
+                    type="monotone"
+                    dataKey="tasks"
+                    name="Tasks Completed"
+                    yAxisId="tasks"
+                    stroke="#16161a"
+                    strokeWidth={2}
+                    dot={{ r: 4, fill: '#ff5a2e', stroke: '#0b0b0d', strokeWidth: 1.5 }}
+                    activeDot={{ r: 5, fill: '#ff5a2e', stroke: '#e7e7ea', strokeWidth: 2 }}
+                  />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           </div>
@@ -1449,8 +1460,8 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                   <Bar
                     dataKey="tasks"
                     name="Tasks Completed"
-                    fill="#22c55e"
-                    radius={[6, 6, 0, 0]}
+                    fill="#e7e7ea"
+                    radius={[8, 8, 0, 0]}
                     maxBarSize={44}
                   />
                 </BarChart>

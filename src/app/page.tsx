@@ -303,9 +303,9 @@ export default function SamsSpaceApp() {
 
   if (!isMounted || isAuthenticated === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0d0d11] text-white">
+      <div className="min-h-screen flex items-center justify-center bg-[#0b0b0d] text-white">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-xl border-2 border-purple-500/40 flex items-center justify-center shadow-[0_0_35px_rgba(168,85,247,0.4)] animate-pulse overflow-hidden">
+          <div className="w-20 h-20 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 flex items-center justify-center shadow-[0_0_35px_rgba(201,201,204,0.16)] animate-pulse overflow-hidden">
             <img
               src="/icons/icon-192.png"
               alt="Sam'Space"

@@ -758,5 +758,190 @@ button:disabled {
   }
 }
 
+/* ================================================================
+   EMBER LEDGER — shared report system for every workspace surface
+   ================================================================ */
+:root,
+[data-theme="light"],
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-void: #0b0b0d;
+  --bg-fog: #c9c9cc;
+  --surface: rgba(255, 255, 255, 0.07);
+  --surface-border: rgba(255, 255, 255, 0.16);
+  --ink: #16161a;
+  --muted: #6c6c72;
+  --divider: rgba(22, 22, 26, 0.14);
+  --accent: #ff5a2e;
+  --bar: #e7e7ea;
+  --line-stroke: #16161a;
+  --pill-bg: rgba(10, 10, 11, 0.85);
+
+  /* Compatibility aliases used by existing screens and inline styles. */
+  --font-app: 'Inter', 'Aptos', 'Segoe UI', sans-serif;
+  --font-heading: 'Space Grotesk', 'Inter', 'Aptos', 'Segoe UI', sans-serif;
+  --font-body: 'Inter', 'Aptos', 'Segoe UI', sans-serif;
+  --font-system: 'Inter', 'Aptos', 'Segoe UI', sans-serif;
+  --font-handle: 'Inter', 'Aptos', 'Segoe UI', sans-serif;
+  --v-app-bg: var(--bg-void);
+  --v-glass-bg: rgba(255, 255, 255, 0.055);
+  --v-glass-bg-card: var(--surface);
+  --v-glass-bg-subtle: rgba(255, 255, 255, 0.055);
+  --v-glass-bg-hover: rgba(255, 255, 255, 0.105);
+  --v-glass-border: var(--surface-border);
+  --v-glass-border-subtle: rgba(255, 255, 255, 0.11);
+  --v-glass-border-bright: rgba(255, 255, 255, 0.23);
+  --v-shadow-spatial: 0 32px 100px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255,255,255,.12);
+  --v-shadow-card: 0 22px 64px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255,255,255,.09);
+  --v-shadow-btn: 0 12px 30px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,.11);
+  --text-primary: #e7e7ea;
+  --text-secondary: #c1c1c6;
+  --text-muted: #92929a;
+  --text-dim: #72727a;
+  --accent-color: var(--accent);
+  --accent-glow: rgba(255, 90, 46, 0.18);
+  --glass-bg: var(--v-glass-bg);
+  --glass-bg-card: var(--v-glass-bg-card);
+  --glass-bg-light: var(--v-glass-bg-subtle);
+  --glass-bg-subtle: var(--v-glass-bg-subtle);
+  --glass-border: var(--v-glass-border);
+  --shadow-glass: var(--v-shadow-card);
+}
+
+html,
+body {
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+
+body {
+  background-image:
+    radial-gradient(ellipse at 50% -20%, rgba(201, 201, 204, 0.12), transparent 48%),
+    radial-gradient(ellipse at 8% 72%, rgba(255, 90, 46, 0.045), transparent 34%);
+  background-attachment: fixed;
+}
+
+.vision-room-bg,
+[data-theme="light"] .vision-room-bg {
+  background-color: transparent !important;
+  background-image:
+    radial-gradient(ellipse at 50% 0%, rgba(201, 201, 204, 0.12), transparent 52%),
+    linear-gradient(160deg, rgba(255,255,255,.025), transparent 42%) !important;
+}
+
+.v-window,
+.v-card,
+.g-card,
+.v-modal-dialog {
+  color: var(--text-primary);
+  background-color: var(--surface) !important;
+  background-image:
+    radial-gradient(ellipse at 18% 0%, rgba(201,201,204,.12), transparent 44%),
+    radial-gradient(ellipse at 100% 100%, rgba(255,90,46,.035), transparent 42%),
+    linear-gradient(145deg, rgba(255,255,255,.045), rgba(255,255,255,.012)) !important;
+  border: 1px solid var(--surface-border) !important;
+  border-radius: 30px !important;
+  box-shadow: var(--v-shadow-card);
+  backdrop-filter: blur(30px) saturate(125%);
+  -webkit-backdrop-filter: blur(30px) saturate(125%);
+}
+
+.v-window { box-shadow: var(--v-shadow-spatial); }
+.v-card:hover { border-color: rgba(255,255,255,.21) !important; }
+.v-dock { background: rgba(255,255,255,.045); border-color: var(--surface-border); }
+.v-tabs { border-color: rgba(255,255,255,.1); }
+.v-tab-btn { font-family: var(--font-body); letter-spacing: .015em; }
+.font-bloody,
+h1, h2, h3, h4 {
+  font-family: var(--font-heading) !important;
+  letter-spacing: -0.02em !important;
+}
+
+.v-pill-btn,
+.g-btn {
+  color: var(--text-primary);
+  background: rgba(255,255,255,.055);
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 999px;
+  box-shadow: none;
+}
+.v-pill-btn:hover,
+.g-btn:hover { background: rgba(255,255,255,.10); border-color: rgba(255,255,255,.25); }
+.v-pill-btn-primary,
+.g-btn-primary,
+[data-theme="dark"] .v-pill-btn-primary,
+[data-theme="dark"] .g-btn-primary,
+[data-theme="light"] .v-pill-btn-primary,
+[data-theme="light"] .g-btn-primary {
+  background: linear-gradient(135deg, #e7e7ea, #c9c9cc);
+  border-color: transparent;
+  color: var(--ink);
+  box-shadow: 0 8px 22px rgba(201,201,204,.12);
+}
+.v-pill-btn-accent,
+[data-theme="light"] .v-pill-btn-accent {
+  color: var(--accent);
+  background: rgba(255,90,46,.08);
+  border-color: rgba(255,90,46,.35);
+}
+.v-pill-btn-accent:hover,
+[data-theme="light"] .v-pill-btn-accent:hover { color: var(--accent); background: rgba(255,90,46,.14); }
+
+.v-input,
+.g-input,
+input, textarea, select {
+  font-family: var(--font-body) !important;
+}
+.v-input, .g-input {
+  color: var(--text-primary);
+  background: rgba(7,7,9,.42);
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 15px;
+}
+.v-input:focus, .g-input:focus { border-color: rgba(255,90,46,.72); box-shadow: 0 0 0 3px rgba(255,90,46,.12); }
+.g-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.g-label::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 8px 1px 0;
+  background: var(--accent);
+}
+
+.g-task-row { background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.11); border-radius: 20px; }
+.g-section-accent { display: none; }
+.v-modal-backdrop { background: rgba(4,4,5,.72); }
+.v-modal-dialog { border-radius: 28px !important; }
+.v-circle-btn:hover,
+.g-icon-btn:hover,
+.freellm-moon-button:hover,
+.freellm-telegram-trigger:hover { transform: scale(1.05); }
+.v-circle-btn.active,
+[data-theme="light"] .v-circle-btn.active,
+[data-theme="dark"] .v-circle-btn.active {
+  color: var(--ink);
+  background: linear-gradient(135deg, #e7e7ea, #c9c9cc);
+  border-color: transparent;
+  box-shadow: 0 0 0 3px rgba(255,90,46,.16);
+}
+
+::selection { color: var(--ink); background: rgba(255,90,46,.38); }
+
+@media (max-width: 640px) {
+  .v-window, .v-card, .g-card { border-radius: 24px !important; }
+  .v-tabs { gap: 18px !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
+
 
 
