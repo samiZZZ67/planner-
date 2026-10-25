@@ -82,7 +82,7 @@ export default function SamsSpaceApp() {
     };
 
     const handlePointerMove = (moveEvt: PointerEvent) => {
-      if (!dragInfoRef.current) return;
+      if (!dragInfoRef.current || moveEvt.pointerId !== e.pointerId) return;
       const dx = moveEvt.clientX - dragInfoRef.current.startX;
       const dy = moveEvt.clientY - dragInfoRef.current.startY;
       if (Math.hypot(dx, dy) > 4) {
@@ -96,9 +96,12 @@ export default function SamsSpaceApp() {
       }
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (upEvt: PointerEvent) => {
+      if (upEvt.pointerId !== e.pointerId) return;
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+      window.removeEventListener('blur', handlePointerCancel);
       setIsDragging(false);
 
       if (dragInfoRef.current && !dragInfoRef.current.moved) {
@@ -107,8 +110,19 @@ export default function SamsSpaceApp() {
       dragInfoRef.current = null;
     };
 
+    const handlePointerCancel = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+      window.removeEventListener('blur', handlePointerCancel);
+      dragInfoRef.current = null;
+      setIsDragging(false);
+    };
+
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+    window.addEventListener('blur', handlePointerCancel);
   };
 
   // Lifecycle Initialization

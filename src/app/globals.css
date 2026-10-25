@@ -1194,6 +1194,20 @@ table {
   .v-dock { max-width: calc(100vw - 1rem); }
 }
 
+/* Keep the frosted look while reducing costly fixed backgrounds and large
+   backdrop filters on phones. Also prevent sticky hover transforms on touch. */
+@media (max-width: 767px) {
+  body { background-attachment: scroll; }
+  .v-window, .v-card, .g-card, .v-modal-dialog, .v-dock,
+  .v-pill-btn, .g-btn, .v-circle-btn, .g-icon-btn {
+    backdrop-filter: blur(12px) saturate(115%);
+    -webkit-backdrop-filter: blur(12px) saturate(115%);
+  }
+  .v-window { box-shadow: 0 16px 40px rgba(0,0,0,.32); }
+  .v-pill-btn:hover, .g-btn:hover, .v-circle-btn:hover, .g-icon-btn:hover,
+  .v-card:hover { transform: none; }
+}
+
 @media (min-width: 600px) {
   .app-header { justify-content: space-between !important; }
   .app-workspace-shell { align-items: flex-start; }
