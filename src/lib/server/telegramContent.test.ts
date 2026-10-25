@@ -244,13 +244,12 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
       expect(joined).toContain('The Tim Ferriss Show: James Clear on Habits and Focus');
       expect(joined).toContain('https://tim.blog/podcast/james-clear');
 
-      // 7. Quiz (original reading-grounded questions with options, difficulty, and explanations)
-      expect(joined).toContain('Reading Quiz:');
-      expect(joined).toContain('Question 1 (MEDIUM):');
-      expect(joined).toContain('A) You become 37 times better.');
-      expect(joined).toContain('<b>Answer:</b> A)');
-      expect(joined).toContain('Explanation:');
-      expect(joined).toContain('Question 2 (EASY):');
+      // 7. Interactive Practice Quiz (Dedicated URL only — zero questions/polls directly in Telegram)
+      expect(joined).toContain('🎯 <b>Interactive Practice Quiz:</b>');
+      expect(joined).toContain('/quiz?assignmentId=');
+      expect(joined).toContain("Take Today's Reading Quiz (Day 1)");
+      expect(joined).not.toContain('Question 1 (MEDIUM):');
+      expect(joined).not.toContain('<b>Answer:</b>');
     });
 
     it('omits unavailable sections cleanly without sending generic filler', () => {
@@ -274,7 +273,8 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
 
       expect(joined).toContain('Real-Life Examples:');
       expect(joined).toContain('Quotes:');
-      expect(joined).toContain('Reading Quiz:');
+      expect(joined).toContain('🎯 <b>Interactive Practice Quiz:</b>');
+      expect(joined).toContain('/quiz?assignmentId=');
       // Should NOT contain video or podcast section headers or generic filler
       expect(joined).not.toContain('Related Videos:');
       expect(joined).not.toContain('Related Podcasts:');
@@ -300,7 +300,8 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
       expect(joined).toContain('Quotes:');
       expect(joined).toContain('Related Videos:');
       expect(joined).toContain('Related Podcasts:');
-      expect(joined).toContain('Reading Quiz:');
+      expect(joined).toContain('🎯 <b>Interactive Practice Quiz:</b>');
+      expect(joined).toContain('/quiz?assignmentId=');
     });
   });
 

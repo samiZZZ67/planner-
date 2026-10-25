@@ -46,6 +46,16 @@ const SEND_RECEIPTS_PATH = path.join(DATA_ROOT, 'telegram-send-receipts.json');
 let schemaReady: Promise<void> | null = null;
 
 export function getAppOrigin(): string {
+  const moonAppUrl = process.env.MOON_APP_URL?.trim();
+  if (moonAppUrl) {
+    return (moonAppUrl.startsWith('http') ? moonAppUrl : `https://${moonAppUrl}`).replace(/\/+$/, '');
+  }
+
+  const appUrl = process.env.APP_URL?.trim();
+  if (appUrl) {
+    return (appUrl.startsWith('http') ? appUrl : `https://${appUrl}`).replace(/\/+$/, '');
+  }
+
   const clientUrl = process.env.CLIENT_URL?.split(',')[0]?.trim();
   if (clientUrl && clientUrl !== '*') {
     return clientUrl.replace(/\/+$/, '');
@@ -782,21 +792,13 @@ export function formatReadingAssignment(
     section6.push(`\n🎙️ <b>Related Podcasts:</b>\n${podcastsFormatted}`);
   }
 
-  // 7. Quiz (original reading-grounded questions with difficulty, options, and explanations)
+  // 7. Quiz (Dedicated website practice link only; never output questions, answers, or polls directly to Telegram)
   const section7: string[] = [];
   const appOrigin = getAppOrigin();
-  const interactiveQuizUrl = `${appOrigin}/?tab=books&quiz=${assignment.id}`;
+  const quizPracticeUrl = `${appOrigin}/quiz?assignmentId=${encodeURIComponent(assignment.id)}`;
+  const dayLabel = assignment.dayNumber ? `Day ${assignment.dayNumber}` : 'Online';
 
-  if (enrichment?.quiz?.length) {
-    const quizFormatted = enrichment.quiz.map((q, idx) => {
-      const optionsFormatted = q.options.map((opt, oIdx) => `  ${String.fromCharCode(65 + oIdx)}) ${sanitizeUtf8(opt)}`).join('\n');
-      const correctLetter = String.fromCharCode(65 + q.correctOptionIndex);
-      return `<b>Question ${idx + 1} (${q.difficulty.toUpperCase()}):</b> ${sanitizeUtf8(q.question)}\n${optionsFormatted}\n<b>Answer:</b> ${correctLetter}) ${sanitizeUtf8(q.options[q.correctOptionIndex])}\n<i>Explanation:</i> ${sanitizeUtf8(q.explanation)}`;
-    }).join('\n\n');
-    section7.push(`\n🧠 <b>Reading Quiz:</b>\n${quizFormatted}\n\n🎯 <b>Interactive Quiz:</b> <a href="${interactiveQuizUrl}">Launch Website Interactive Quiz</a>`);
-  } else if (notes.questions?.length) {
-    section7.push(`Revision questions\n${notes.questions.map((item, index) => `${index + 1}. ${sanitizeUtf8(item.question)}\nAnswer: ${sanitizeUtf8(item.answer)}\nSource: PDF page${item.pdfPages.length === 1 ? '' : 's'} ${item.pdfPages.join(', ')}`).join('\n\n')}\n\n🎯 <b>Interactive Quiz:</b> <a href="${interactiveQuizUrl}">Launch Website Interactive Quiz</a>`);
-  }
+  section7.push(`\n🎯 <b>Interactive Practice Quiz:</b>\n<a href="${quizPracticeUrl}">Take Today's Reading Quiz (${dayLabel})</a>`);
 
   const chunks: string[] = [
     ...section1,
@@ -902,19 +904,13 @@ export function formatLoadPlanPages(
     podcastsChunks.push(`\n🎙️ <b>Related Podcasts:</b>\n${podcastsFormatted}`);
   }
 
-  // 7. Quiz
+  // 7. Quiz (Dedicated website practice link only; never output questions, answers, or polls directly to Telegram)
   const quizChunks: string[] = [];
   const appOrigin = getAppOrigin();
-  const interactiveQuizUrl = `${appOrigin}/?tab=books&quiz=${assignment.id}`;
+  const quizPracticeUrl = `${appOrigin}/quiz?assignmentId=${encodeURIComponent(assignment.id)}`;
+  const dayLabel = assignment.dayNumber ? `Day ${assignment.dayNumber}` : 'Online';
 
-  if (enrichment?.quiz?.length) {
-    const quizFormatted = enrichment.quiz.map((q, idx) => {
-      const optionsFormatted = q.options.map((opt, oIdx) => `  ${String.fromCharCode(65 + oIdx)}) ${sanitizeUtf8(opt)}`).join('\n');
-      const correctLetter = String.fromCharCode(65 + q.correctOptionIndex);
-      return `<b>Question ${idx + 1} (${q.difficulty.toUpperCase()}):</b> ${sanitizeUtf8(q.question)}\n${optionsFormatted}\n<b>Answer:</b> ${correctLetter}) ${sanitizeUtf8(q.options[q.correctOptionIndex])}\n<i>Explanation:</i> ${sanitizeUtf8(q.explanation)}`;
-    }).join('\n\n');
-    quizChunks.push(`\n🧠 <b>Reading Quiz:</b>\n${quizFormatted}\n\n🎯 <b>Interactive Quiz:</b> <a href="${interactiveQuizUrl}">Launch Website Interactive Quiz</a>`);
-  }
+  quizChunks.push(`\n🎯 <b>Interactive Practice Quiz:</b>\n<a href="${quizPracticeUrl}">Take Today's Reading Quiz (${dayLabel})</a>`);
 
   const continuity = previousAssignment?.studyNotes
     ? `\nConnection to Day ${previousAssignment.dayNumber}:\nYesterday: ${sanitizeUtf8(previousAssignment.studyNotes.summary)}`
@@ -1052,7 +1048,13 @@ export async function publishApprovedAssignment(
   let activeEnrichment = enrichment;
   if (!activeEnrichment && !process.env.VITEST) {
     try {
-      activeEnrichment = await researchReadingEnrichment({ book, assignment, pages, studyNotes: assignment.studyNotes });
+      activeEnrichment = await researchReadingEnrichment({
+        book,
+        assignment,
+        pages,
+        studyNotes: assignment.studyNotes,
+        previousAssignments: previousAssignment ? [previousAssignment] : undefined,
+      });
     } catch (enrichErr: any) {
       console.warn('[Telegram] External enrichment lookup non-fatal warning:', enrichErr.message);
     }
@@ -1092,29 +1094,7 @@ export async function publishApprovedAssignment(
       sendingStarted = false;
     }
 
-    // Dispatch native interactive Telegram quiz polls for subscribers
-    if (activeEnrichment?.quiz?.length && !process.env.VITEST) {
-      for (let qIdx = 0; qIdx < Math.min(3, activeEnrichment.quiz.length); qIdx++) {
-        const q = activeEnrichment.quiz[qIdx];
-        try {
-          const pollRes = await sendTelegramQuizPoll({
-            chatId,
-            question: truncateUnicode(`[Day ${assignment.dayNumber} · Quiz] ${q.question}`, 300),
-            options: q.options,
-            correctOptionId: q.correctOptionIndex,
-            explanation: truncateUnicode(q.explanation, 200),
-            isAnonymous: false,
-          });
-          delivery = await saveDelivery({
-            ...delivery,
-            telegramMessageIds: [...delivery.telegramMessageIds, pollRes.messageId],
-            updatedAt: Date.now(),
-          });
-        } catch (pollErr: any) {
-          console.warn('[Telegram] Quiz poll dispatch warning:', pollErr?.message);
-        }
-      }
-    }
+
 
     return await saveDelivery({ ...delivery, status: 'completed', lastError: '', safeToRetry: false, retryAfterAt: null, updatedAt: Date.now() });
   } catch (error) {
@@ -1138,7 +1118,13 @@ export async function publishLoadPlanPagesToTelegram(
   let activeEnrichment = enrichment;
   if (!activeEnrichment && !process.env.VITEST) {
     try {
-      activeEnrichment = await researchReadingEnrichment({ book, assignment, pages, studyNotes: assignment.studyNotes });
+      activeEnrichment = await researchReadingEnrichment({
+        book,
+        assignment,
+        pages,
+        studyNotes: assignment.studyNotes,
+        previousAssignments: previousAssignment ? [previousAssignment] : undefined,
+      });
     } catch (enrichErr: any) {
       console.warn('[Telegram] External enrichment lookup non-fatal warning:', enrichErr.message);
     }
@@ -1215,29 +1201,7 @@ export async function publishLoadPlanPagesToTelegram(
       }
     }
 
-    // Dispatch native interactive Telegram quiz polls for subscribers
-    if (activeEnrichment?.quiz?.length && !process.env.VITEST) {
-      for (let qIdx = 0; qIdx < Math.min(3, activeEnrichment.quiz.length); qIdx++) {
-        const q = activeEnrichment.quiz[qIdx];
-        try {
-          const pollRes = await sendTelegramQuizPoll({
-            chatId,
-            question: truncateUnicode(`[Day ${assignment.dayNumber} · Quiz] ${q.question}`, 300),
-            options: q.options,
-            correctOptionId: q.correctOptionIndex,
-            explanation: truncateUnicode(q.explanation, 200),
-            isAnonymous: false,
-          });
-          delivery = await saveDelivery({
-            ...delivery,
-            telegramMessageIds: [...delivery.telegramMessageIds, pollRes.messageId],
-            updatedAt: Date.now(),
-          });
-        } catch (pollErr: any) {
-          console.warn('[Telegram] Quiz poll dispatch warning in load plan:', pollErr?.message);
-        }
-      }
-    }
+
 
     const completed = await saveDelivery({
       ...delivery,

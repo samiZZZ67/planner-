@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/server/auth';
 import { getDb } from '@/lib/server/neon';
 import { getBook, listBooks } from '@/lib/server/books';
-import { listBookAssignments } from '@/lib/server/bookAssignments';
+import { listBookAssignments, findBookAssignmentById } from '@/lib/server/bookAssignments';
 
 export async function GET(request: Request) {
   const session = await getSessionUser(request);
@@ -12,6 +12,23 @@ export async function GET(request: Request) {
   const assignmentId = url.searchParams.get('assignmentId') || url.searchParams.get('quiz');
   if (!assignmentId) {
     return NextResponse.json({ error: 'assignmentId parameter is required.' }, { status: 400 });
+  }
+
+  // 1. Direct assignment lookup by ID if present
+  if (assignmentId) {
+    const directAssignment = await findBookAssignmentById(assignmentId);
+    if (directAssignment && directAssignment.userId === session.userId) {
+      const book = await getBook(session.userId, directAssignment.bookId);
+      if (book) {
+        const assignments = await listBookAssignments(session.userId, book.id);
+        return NextResponse.json({
+          ok: true,
+          book,
+          assignment: directAssignment,
+          assignments,
+        });
+      }
+    }
   }
 
   let bookId: string | null = null;

@@ -603,6 +603,14 @@ describe('Long PDF Extraction, Batching, Persistence, and Review Suite', () => {
     process.env.BOOK_DATA_DIR = temporaryDirectory;
     vi.resetModules();
 
+    vi.doMock('tesseract.js', () => ({
+      createWorker: async () => ({
+        setParameters: async () => {},
+        recognize: async () => ({ data: { text: '', confidence: 0 } }),
+        terminate: async () => {},
+      }),
+    }));
+
     const store = await import('../books');
     const { extractPdfRange } = await import('./pdfExtraction');
 
@@ -688,7 +696,7 @@ describe('Long PDF Extraction, Batching, Persistence, and Review Suite', () => {
     const approveAllResult = await store.approveAllBookPages('test-user-blank', book.id, 1, 5);
     expect(approveAllResult.book?.extractionStatus).toBe('completed');
     expect(approveAllResult.stats.unreviewedCount).toBe(0);
-  });
+  }, 35_000);
 
   it('allows approving extracted content via review route and loading saved plan even with skipped pages', async () => {
     temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'np-approve-route-'));

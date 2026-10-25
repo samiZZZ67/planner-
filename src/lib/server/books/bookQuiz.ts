@@ -801,7 +801,7 @@ export async function startQuizSessionForAssignment(
   assignment: BookAssignmentRecord,
   pages: BookPageRecord[],
   chatId: string,
-  options?: { skipFirstExcerpt?: boolean }
+  options?: { skipFirstExcerpt?: boolean; skipTelegramMessages?: boolean }
 ): Promise<BookQuizSession> {
   const hasReadablePages = pages.some(p => p.text?.trim() && p.method !== 'empty');
   if (!hasReadablePages) {
@@ -861,24 +861,27 @@ export async function startQuizSessionForAssignment(
 
   await saveQuizSession(session);
 
-  // Send Section 1's original unparaphrased excerpt unless caller already posted it
-  if (!options?.skipFirstExcerpt) {
-    await sendSectionExcerpt(session, 0);
-  }
+  // If skipTelegramMessages is true, do not dispatch any messages or polls to Telegram
+  if (!options?.skipTelegramMessages) {
+    // Send Section 1's original unparaphrased excerpt unless caller already posted it
+    if (!options?.skipFirstExcerpt) {
+      await sendSectionExcerpt(session, 0);
+    }
 
-  // If timing is 'on_demand', send a prompt button to start the quiz
-  if (settings.deliveryTiming === 'on_demand') {
-    const startKeyboard: InlineKeyboardButton[][] = [
-      [{ text: `🎯 Start Section 1 Quiz (${sections[0].questions.length} Questions)`, callback_data: `quiz:start:${sessionId}` }],
-    ];
-    await sendTelegramMessageWithKeyboard(
-      chatId,
-      `📖 <b>Section 1 Reading Delivered!</b>\nWhen you have finished reading PDF pages ${sections[0].startPdfPage}–${sections[0].endPdfPage}, tap the button below to start your interactive quiz questions:`,
-      startKeyboard
-    );
-  } else {
-    // Default 'with_reading': immediately launch Question 1
-    await sendQuizQuestion(session, 0, 0);
+    // If timing is 'on_demand', send a prompt button to start the quiz
+    if (settings.deliveryTiming === 'on_demand') {
+      const startKeyboard: InlineKeyboardButton[][] = [
+        [{ text: `🎯 Start Section 1 Quiz (${sections[0].questions.length} Questions)`, callback_data: `quiz:start:${sessionId}` }],
+      ];
+      await sendTelegramMessageWithKeyboard(
+        chatId,
+        `📖 <b>Section 1 Reading Delivered!</b>\nWhen you have finished reading PDF pages ${sections[0].startPdfPage}–${sections[0].endPdfPage}, tap the button below to start your interactive quiz questions:`,
+        startKeyboard
+      );
+    } else {
+      // Default 'with_reading': immediately launch Question 1
+      await sendQuizQuestion(session, 0, 0);
+    }
   }
 
   return session;

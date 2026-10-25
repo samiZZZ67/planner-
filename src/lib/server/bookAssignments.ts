@@ -93,6 +93,23 @@ export async function updateBookAssignment(assignment: BookAssignmentRecord) {
   return assignment;
 }
 
+export async function findBookAssignmentById(assignmentId: string): Promise<BookAssignmentRecord | null> {
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    try {
+      const rows = await sql`SELECT data FROM book_assignments WHERE id = ${assignmentId} LIMIT 1`;
+      if (rows[0]?.data) {
+        return rows[0].data as BookAssignmentRecord;
+      }
+    } catch (err: any) {
+      console.warn('[BookAssignments] findBookAssignmentById Neon query warning:', err?.message);
+    }
+  }
+  const all = readAll();
+  return all.find(item => item.id === assignmentId) || null;
+}
+
 export async function deleteBookAssignments(userId: string, bookId: string) {
   const sql = getDb();
   if (sql) {

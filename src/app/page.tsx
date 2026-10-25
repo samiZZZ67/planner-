@@ -132,8 +132,8 @@ export default function SamsSpaceApp() {
       const requestedQuiz = searchParams.get('quiz');
       const requestedTab = searchParams.get('tab');
       if (requestedQuiz) {
-        setQuizAssignmentId(requestedQuiz);
-        setCurrentTab('books');
+        window.location.replace(`/quiz?assignmentId=${encodeURIComponent(requestedQuiz)}`);
+        return;
       } else if (requestedTab && ['todo', 'weekly', 'monthly', 'add_task', 'note', 'category', 'books', 'analytics', 'settings'].includes(requestedTab)) {
         setCurrentTab(requestedTab as TabType);
       }

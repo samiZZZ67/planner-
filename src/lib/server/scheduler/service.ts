@@ -128,7 +128,7 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
           telegramMessageIds = loadPlanResult.telegramMessageIds;
         }
 
-        // Interactive Telegram Quiz Mode integration
+        // Prepare interactive quiz session for website practice (without sending polls to Telegram)
         try {
           const quizSettings = await getBookQuizSettings(job.userId);
           if (quizSettings.enabled) {
@@ -139,20 +139,14 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
               assignment,
               pages,
               targetChatId,
-              { skipFirstExcerpt: true }
+              { skipFirstExcerpt: true, skipTelegramMessages: true }
             );
-            if (quizSession?.lastPollMessageId) {
-              telegramMessageIds.push(quizSession.lastPollMessageId);
-            }
-            if (quizSession?.lastControlMessageId) {
-              telegramMessageIds.push(quizSession.lastControlMessageId);
-            }
             if (quizSession) {
-              console.log(`[Scheduler] 🎯 Interactive Book Quiz session started for Day ${assignment.dayNumber} (${quizSession.totalQuestions} questions across ${quizSession.totalSections} section(s)).`);
+              console.log(`[Scheduler] 🎯 Interactive Book Quiz session prepared for Day ${assignment.dayNumber} (${quizSession.totalQuestions} questions across ${quizSession.totalSections} section(s)).`);
             }
           }
         } catch (quizErr: any) {
-          console.warn(`[Scheduler] ⚠️ Interactive Quiz launch warning:`, quizErr?.message || quizErr);
+          console.warn(`[Scheduler] ⚠️ Interactive Quiz session preparation warning:`, quizErr?.message || quizErr);
         }
 
         const isEntirelyBlank = pages.every(p => !p.text?.trim() || p.method === 'empty');
