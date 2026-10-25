@@ -1031,23 +1031,8 @@ input, textarea, select {
 [data-theme="light"] [style*="background: rgb(0, 0, 0)"],
 [data-theme="light"] [style*="background: #000"] { background-color: rgba(255,255,255,.84) !important; }
 
-/* Reading and generated media stay visual; the UI exposes no playback controls. */
+/* Keep video playback controls hidden; response voice actions remain available. */
 video[controls] { display: none !important; }
-button[title*="voice playback" i],
-button[title*="voice reading" i],
-button[title*="read aloud" i],
-button[title*="speak message with voice" i],
-button[title*="speak using system browser voice" i],
-button[title*="test voice" i],
-button[title*="stop speech" i],
-button[title*="switch to system browser voice" i],
-button[title*="speech playback" i],
-button[aria-label*="audio playback" i],
-button[aria-label*="control audio" i],
-button[aria-label*="voice playback" i],
-button[aria-label*="control voice preview" i],
-button[aria-label*="read aloud" i],
-button[aria-label*="neural voice" i] { display: none !important; }
 
 /* Keep circular quick actions icon-only and give Telegram its single blue marker. */
 .freellm-telegram-trigger {
