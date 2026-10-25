@@ -9,7 +9,7 @@ import {
   Maximize2, Minimize2, Check, CheckSquare, PlusCircle,
   Menu, Plus, Search, Edit2, Square, Mic, MicOff,
   Volume2, VolumeX, Paperclip, FileText, Image as ImageIcon,
-  Play, Pause, LoaderCircle, Sliders, Headphones, Radio
+  Play, Pause, LoaderCircle, Sliders, Headphones, Radio, Copy
 } from 'lucide-react';
 import type { Task, Section, WeeklyPlan, MonthlyPlan, AIConversation, AIMessageItem } from '@/types';
 import { apiFetch } from '@/lib/api/apiClient';
@@ -3105,7 +3105,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                           }}
                         >
                           <Volume2 size={12} />
-                          <span>Listen</span>
+                          <span>Voice</span>
                         </button>
                       )}
 
@@ -3130,6 +3130,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                           padding: '2px 4px',
                         }}
                       >
+                        <Copy size={12} />
                         <span>Copy</span>
                       </button>
 

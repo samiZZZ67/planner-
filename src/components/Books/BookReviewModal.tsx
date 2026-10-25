@@ -19,6 +19,8 @@ import {
   Save,
   Search,
   Sparkles,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api/apiClient';
@@ -54,6 +56,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
   const [notice, setNotice] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
+  const [isSpeakingPage, setIsSpeakingPage] = useState<boolean>(false);
   const [pageWindowIndex, setPageWindowIndex] = useState<number>(0);
   const PAGE_WINDOW_SIZE = 50;
 
@@ -441,6 +444,37 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
       setTimeout(() => setCopied(false), 2000);
     });
   };
+
+  const togglePageVoice = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      showError('Speech synthesis voice is not supported in this browser.');
+      return;
+    }
+    if (isSpeakingPage) {
+      window.speechSynthesis.cancel();
+      setIsSpeakingPage(false);
+      return;
+    }
+    const textToSpeak = editedText.trim() || currentPage?.text?.trim() || '';
+    if (!textToSpeak) {
+      showError('No page text available to read aloud.');
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    utterance.onend = () => setIsSpeakingPage(false);
+    utterance.onerror = () => setIsSpeakingPage(false);
+    window.speechSynthesis.speak(utterance);
+    setIsSpeakingPage(true);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [selectedPageNum, isOpen]);
 
   const handleJumpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1231,6 +1265,27 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                   >
                     {copied ? <Check size={12} color="#4ade80" /> : <Copy size={12} />}
                     {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={togglePageVoice}
+                    style={{
+                      background: isSpeakingPage ? 'rgba(168, 85, 247, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                      border: `1px solid ${isSpeakingPage ? 'rgba(168, 85, 247, 0.4)' : 'rgba(255, 255, 255, 0.1)'}`,
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      color: isSpeakingPage ? '#c084fc' : 'var(--text-secondary, #cbd5e1)',
+                      fontSize: 11,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                    title={isSpeakingPage ? 'Stop voice reading' : 'Read page aloud (Voice)'}
+                    aria-label="Voice reading"
+                  >
+                    {isSpeakingPage ? <VolumeX size={12} color="#f87171" /> : <Volume2 size={12} />}
+                    <span>{isSpeakingPage ? 'Stop' : 'Voice'}</span>
                   </button>
                   <span style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)' }}>
                     {editedText.length} chars · {editedText.trim() ? editedText.trim().split(/\s+/).length : 0} words

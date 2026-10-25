@@ -4433,7 +4433,7 @@ export function FreeLLMAssistant({
                         padding: 2,
                       }}
                     >
-                      <Volume2 style={{ width: 12, height: 12 }} /> Listen
+                      <Volume2 style={{ width: 12, height: 12 }} /> Voice
                     </button>
                   )}
 
