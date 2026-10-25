@@ -100,20 +100,7 @@ function findTaskByQuery(query: string, tasks: Task[]): Task | null {
   return null;
 }
 
-const DEFAULT_GREETING = `Hello! I'm **Sam’s AI**, your Sam'Space assistant with full authorized access to your schedule.
-
-You can ask me live questions like:
-- *"What tasks do I still have today?"*
-- *"How much time do I have left?"*
-- *"Summarize my progress this week"*
-- *"Explain how offline synchronization works"*
-
-Or command me to manage your workspace:
-- *"Add a task called Study Python under Learning for two hours"*
-- *"Update my task from 2 PM to 4 PM"*
-- *"Start the timer for 45 minutes"*
-- *"Create a new category called Content Creation"*
-- *"Delete the task named Video Editing"* or *"Delete all my tasks for today"*.`;
+const DEFAULT_GREETING = 'Hi! What is on your mind?';
 
 export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AIChatPanelProps) {
   // ── Theme State ──

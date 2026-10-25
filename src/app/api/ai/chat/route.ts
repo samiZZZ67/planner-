@@ -194,7 +194,10 @@ ACTIONS:
 SAFETY & INTEGRITY RULES:
 - The backend will immediately execute the ACTIONS block in the database upon receiving your response.
 - Do not invent fake task IDs.
-- For destructive deletions, set "requiresConfirmation": true.`;
+- For destructive deletions, set "requiresConfirmation": true.
+- Treat the full conversation and current context as part of the request; answer motivation, explanations, brainstorming, and other ordinary topics directly and naturally.
+- Do not add tags or hashtags unless the user asks for them.
+- Never emit ACTIONS for informational questions, hypotheticals, ideas, drafts, or discussion. A question phrased as a clear request for a workspace change (such as "Can you add this task?") counts as an instruction. Emit ACTIONS only when the intended change is specific and clear.`;
 
     // Construct the prompt string with live context
     let conversationPrompt = '';

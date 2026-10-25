@@ -119,6 +119,12 @@ export function handleFallbackNaturalLanguage(
   const budgetHours = context?.focusBudgetHours || context?.dayRecord?.freeHours || 8;
   const timeLogs = (context?.timeLogsToday || []) as any[];
 
+  // The deterministic parser is intentionally conservative: reflective or
+  // hypothetical wording must never fall through into a mutation matcher.
+  if (/^\s*(?:what\s+if|should\s+i|could\s+i|do\s+you\s+think|would\s+it\s+be|i(?:'m|\s+am)\s+thinking\s+about)\b/i.test(rawPrompt)) {
+    return { content: 'That sounds worth thinking through. Tell me what outcome you want, and I can help weigh the options.', actions: [] };
+  }
+
   // 1. "What is my current task?"
   if (p.includes('current task') || p.includes('working on now') || p.includes('what am i doing')) {
     if (activeTimer && activeTimer.isRunning) {
@@ -528,19 +534,9 @@ export function handleFallbackNaturalLanguage(
     };
   }
 
-  // Default conversational answer
+  // Keep offline failures brief and conversational instead of showing a feature menu.
   return {
-    content: `Hello! I'm **Sam’s AI**, your Sam'Space assistant. I have full authorized access to your schedule, tasks, categories, and timers.\n\nYou can ask me live questions like:\n` +
-      `- *"What tasks do I still have today?"*\n` +
-      `- *"How much time do I have left?"*\n` +
-      `- *"Summarize my progress this week"* or *"What did I complete today?"*\n` +
-      `- *"Explain how offline synchronization works"*\n\n` +
-      `Or command me directly:\n` +
-      `- *"Add a task called Study Python under Learning for two hours"*\n` +
-      `- *"Update my task from 2 PM to 4 PM"*\n` +
-      `- *"Start the timer for 45 minutes"*\n` +
-      `- *"Create a new category called Content Creation"*\n` +
-      `- *"Delete the task named Video Editing"* or *"Delete all my tasks for today"*.`,
+    content: 'I could not work that out just now. Could you try asking another way?',
     actions: [],
   };
 }

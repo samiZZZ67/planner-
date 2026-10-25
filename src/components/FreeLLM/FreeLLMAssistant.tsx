@@ -124,7 +124,7 @@ export function getDefaultGreeting(): FreeLLMMessage {
     id: 'msg-greeting',
     role: 'assistant',
     content:
-      '👋 Hello! I am your multimodal **FreeLLM Moon Assistant**.\n\nNow equipped with full multimodal power:\n• 🎙️ **Voice dictation and spoken replies**\n• 👁️ **Visual question answering & photo analysis**\n• 📄 **PDF, document, and source code understanding**\n• 🎨 **High-resolution image generation (Flux)**\n• 🎬 **Text & prompt video generation**\n• 🔊 **Neural speech when configured, with browser voice fallback**\n\nHow can I help you today?',
+      'Hi! What is on your mind?',
     timestamp: Date.now(),
     model: 'auto',
   };
