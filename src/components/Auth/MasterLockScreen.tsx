@@ -128,7 +128,7 @@ export function MasterLockScreen({ onUnlock, theme = 'dark' }: MasterLockScreenP
               width: 26,
               height: 26,
               borderRadius: '50%',
-              background: '#ff5a2e',
+              background: '#ffffff',
               border: '2px solid var(--v-app-bg)',
               display: 'flex',
               alignItems: 'center',
@@ -136,7 +136,7 @@ export function MasterLockScreen({ onUnlock, theme = 'dark' }: MasterLockScreenP
               boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
             }}
           >
-            <Lock size={13} color="#ffffff" />
+            <Lock size={13} color="#000000" />
           </div>
         </div>
 
@@ -175,9 +175,9 @@ export function MasterLockScreen({ onUnlock, theme = 'dark' }: MasterLockScreenP
               width: '100%',
               padding: '10px 14px',
               borderRadius: 12,
-              background: 'rgba(239, 68, 68, 0.12)',
-              border: '1.5px solid rgba(239, 68, 68, 0.4)',
-              color: '#ef4444',
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1.5px solid rgba(255, 255, 255, 0.25)',
+              color: 'var(--text-primary)',
               fontSize: 12,
               display: 'flex',
               alignItems: 'center',

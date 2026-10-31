@@ -617,9 +617,9 @@ export function BookAnalyticsModal({
                     fontSize: 11,
                     padding: '2px 8px',
                     borderRadius: 999,
-                    background: 'rgba(99, 102, 241, 0.2)',
-                    color: '#a5b4fc',
-                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    color: '#ffffff',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
                     fontWeight: 600,
                   }}
                 >
@@ -673,8 +673,8 @@ export function BookAnalyticsModal({
                   gap: 8,
                   fontSize: 13,
                   fontWeight: active ? 600 : 400,
-                  color: active ? 'var(--accent-color, #60a5fa)' : 'var(--text-secondary)',
-                  borderBottom: active ? '2px solid var(--accent-color, #60a5fa)' : '2px solid transparent',
+                  color: active ? 'var(--accent-color, #ffffff)' : 'var(--text-secondary)',
+                  borderBottom: active ? '2px solid var(--accent-color, #ffffff)' : '2px solid transparent',
                   background: 'none',
                   borderTop: 'none',
                   borderLeft: 'none',
@@ -696,9 +696,9 @@ export function BookAnalyticsModal({
           <div
             style={{
               padding: '10px 20px',
-              background: 'rgba(34, 197, 94, 0.14)',
-              borderBottom: '1px solid rgba(34, 197, 94, 0.3)',
-              color: '#86efac',
+              background: 'rgba(255, 255, 255, 0.08)',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
+              color: '#ffffff',
               fontSize: 13,
               display: 'flex',
               alignItems: 'center',
@@ -709,7 +709,7 @@ export function BookAnalyticsModal({
             <button
               type="button"
               onClick={() => setNotice('')}
-              style={{ background: 'none', border: 'none', color: '#86efac', cursor: 'pointer' }}
+              style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer' }}
             >
               <X size={14} />
             </button>
@@ -719,9 +719,9 @@ export function BookAnalyticsModal({
           <div
             style={{
               padding: '10px 20px',
-              background: 'rgba(239, 68, 68, 0.14)',
-              borderBottom: '1px solid rgba(239, 68, 68, 0.3)',
-              color: '#fca5a5',
+              background: 'rgba(255, 255, 255, 0.08)',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
+              color: 'var(--text-secondary)',
               fontSize: 13,
               display: 'flex',
               alignItems: 'center',
@@ -732,7 +732,7 @@ export function BookAnalyticsModal({
             <button
               type="button"
               onClick={() => setError('')}
-              style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer' }}
+              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
             >
               <X size={14} />
             </button>
@@ -780,7 +780,7 @@ export function BookAnalyticsModal({
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     Reading Position
                   </div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: '#60a5fa', marginTop: 4 }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#ffffff', marginTop: 4 }}>
                     Page {book.currentPage}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
@@ -800,7 +800,7 @@ export function BookAnalyticsModal({
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     Pages Sent / Left
                   </div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: '#4ade80', marginTop: 4 }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#ffffff', marginTop: 4 }}>
                     {sentPagesCount}{' '}
                     <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 400 }}>
                       / {remainingPagesCount} left
@@ -823,7 +823,7 @@ export function BookAnalyticsModal({
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     Delivery Status
                   </div>
-                  <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: failedAssignments.length ? '#f87171' : '#38bdf8' }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: '#ffffff' }}>
                     {completedAssignments.length} Sent
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
@@ -847,7 +847,7 @@ export function BookAnalyticsModal({
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                   <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Overall Reading & Telegram Delivery Progress</span>
-                  <span style={{ color: '#4ade80', fontWeight: 700 }}>{progressPercent}%</span>
+                  <span style={{ color: '#ffffff', fontWeight: 700 }}>{progressPercent}%</span>
                 </div>
                 <div
                   style={{
@@ -863,7 +863,7 @@ export function BookAnalyticsModal({
                       height: '100%',
                       width: `${progressPercent}%`,
                       borderRadius: 999,
-                      background: 'linear-gradient(90deg, #3b82f6, #10b981)',
+                      background: '#ffffff',
                       transition: 'width 0.4s ease',
                     }}
                   />
@@ -882,14 +882,14 @@ export function BookAnalyticsModal({
                   padding: 16,
                   borderRadius: 14,
                   border: '1px solid rgba(59, 130, 246, 0.35)',
-                  background: 'rgba(59, 130, 246, 0.05)',
+                  background: 'var(--v-glass-bg-subtle)',
                   display: 'grid',
                   gap: 12,
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Clock size={16} color="#60a5fa" />
+                    <Clock size={16} color="#ffffff" />
                     <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>
                       Current & Next Pending Delivery
                     </strong>
@@ -901,19 +901,9 @@ export function BookAnalyticsModal({
                         borderRadius: 999,
                         fontSize: 11,
                         fontWeight: 600,
-                        background:
-                          nextPendingAssignment.deliveryStatus === 'failed'
-                            ? 'rgba(239, 68, 68, 0.2)'
-                            : nextPendingAssignment.status === 'approved'
-                            ? 'rgba(59, 130, 246, 0.2)'
-                            : 'rgba(245, 158, 11, 0.2)',
-                        color:
-                          nextPendingAssignment.deliveryStatus === 'failed'
-                            ? '#fca5a5'
-                            : nextPendingAssignment.status === 'approved'
-                            ? '#93c5fd'
-                            : '#fcd34d',
-                        border: '1px solid currentColor',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        color: '#ffffff',
+                        border: '1px solid rgba(255, 255, 255, 0.25)',
                       }}
                     >
                       {nextPendingAssignment.deliveryStatus === 'failed'
@@ -923,7 +913,7 @@ export function BookAnalyticsModal({
                         : 'Draft Pending Review'}
                     </span>
                   ) : (
-                    <span style={{ fontSize: 12, color: '#4ade80', fontWeight: 600 }}>All Scheduled Sections Delivered</span>
+                    <span style={{ fontSize: 12, color: '#ffffff', fontWeight: 600 }}>All Scheduled Sections Delivered</span>
                   )}
                 </div>
 
@@ -966,9 +956,9 @@ export function BookAnalyticsModal({
                             fontSize: 12,
                             padding: '6px 10px',
                             borderRadius: 8,
-                            background: 'rgba(59, 130, 246, 0.1)',
-                            border: '1px solid rgba(59, 130, 246, 0.25)',
-                            color: '#93c5fd',
+                            background: 'rgba(255, 255, 255, 0.08)',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            color: '#ffffff',
                           }}
                         >
                           <Clock size={13} style={{ flexShrink: 0 }} />
@@ -988,11 +978,11 @@ export function BookAnalyticsModal({
                       <div
                         style={{
                           fontSize: 12,
-                          color: '#fca5a5',
-                          background: 'rgba(239,68,68,0.1)',
+                          color: 'var(--text-secondary)',
+                          background: 'rgba(255, 255, 255, 0.08)',
                           padding: '6px 10px',
                           borderRadius: 8,
-                          border: '1px solid rgba(239,68,68,0.2)',
+                          border: '1px solid rgba(255, 255, 255, 0.25)',
                         }}
                       >
                         Last Error: {nextPendingAssignment.lastDeliveryError}
@@ -1047,7 +1037,7 @@ export function BookAnalyticsModal({
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <FileCheck2 size={16} color="var(--accent-color, #60a5fa)" />
+                  <FileCheck2 size={16} color="var(--text-primary)" />
                   <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>Extraction & Content Health Audit</strong>
                 </div>
 
@@ -1058,7 +1048,7 @@ export function BookAnalyticsModal({
                   <div
                     style={{
                       fontSize: 12,
-                      color: emptyPages.length > 0 ? '#fbbf24' : 'var(--text-secondary)',
+                      color: 'var(--text-secondary)',
                     }}
                   >
                     • Empty/Unreadable Pages:{' '}
@@ -1067,7 +1057,7 @@ export function BookAnalyticsModal({
                   <div
                     style={{
                       fontSize: 12,
-                      color: unreviewedOcrPages.length > 0 ? '#fbbf24' : 'var(--text-secondary)',
+                      color: 'var(--text-secondary)',
                     }}
                   >
                     • OCR Needs Review:{' '}
@@ -1076,7 +1066,7 @@ export function BookAnalyticsModal({
                   <div
                     style={{
                       fontSize: 12,
-                      color: missingPageNumbers.length > 0 ? '#f87171' : 'var(--text-secondary)',
+                      color: 'var(--text-secondary)',
                     }}
                   >
                     • Missing Range Pages:{' '}
@@ -1089,9 +1079,9 @@ export function BookAnalyticsModal({
                     style={{
                       padding: '8px 12px',
                       borderRadius: 10,
-                      background: 'rgba(251, 191, 36, 0.12)',
-                      border: '1px solid rgba(251, 191, 36, 0.3)',
-                      color: '#fde68a',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      color: '#ffffff',
                       fontSize: 12,
                       display: 'flex',
                       alignItems: 'center',
@@ -1233,25 +1223,15 @@ export function BookAnalyticsModal({
                               fontSize: 11,
                               padding: '2px 8px',
                               borderRadius: 6,
-                              background:
-                                currentPageRecord.method === 'ocr'
-                                    ? 'rgba(234, 179, 8, 0.2)'
-                                    : currentPageRecord.method === 'empty'
-                                    ? 'rgba(239, 68, 68, 0.2)'
-                                    : 'rgba(34, 197, 94, 0.2)',
-                              color:
-                                currentPageRecord.method === 'ocr'
-                                    ? '#facc15'
-                                    : currentPageRecord.method === 'empty'
-                                    ? '#fca5a5'
-                                    : '#86efac',
+                              background: 'rgba(255, 255, 255, 0.1)',
+                              color: '#ffffff',
                             }}
                           >
                             {currentPageRecord.method.toUpperCase()}
                             {currentPageRecord.confidence !== null ? ` (${currentPageRecord.confidence.toFixed(1)}%)` : ''}
                           </span>
                           {currentPageRecord.reviewedByUser && (
-                            <span style={{ marginLeft: 6, fontSize: 11, color: '#4ade80' }}>✓ Reviewed</span>
+                            <span style={{ marginLeft: 6, fontSize: 11, color: '#ffffff' }}>✓ Reviewed</span>
                           )}
                         </div>
 
@@ -1261,7 +1241,7 @@ export function BookAnalyticsModal({
                               type="button"
                               className="v-pill-btn"
                               onClick={() => void handleMarkReviewed()}
-                              style={{ padding: '6px 10px', fontSize: 12, color: '#86efac' }}
+                              style={{ padding: '6px 10px', fontSize: 12, color: '#ffffff' }}
                             >
                               ✓ Verify Page
                             </button>
@@ -1275,9 +1255,9 @@ export function BookAnalyticsModal({
                               padding: '6px 12px',
                               fontSize: 12,
                               fontWeight: 600,
-                              background: 'rgba(34, 197, 94, 0.2)',
-                              borderColor: 'rgba(34, 197, 94, 0.45)',
-                              color: '#86efac',
+                              background: 'rgba(255, 255, 255, 0.15)',
+                              borderColor: 'rgba(255, 255, 255, 0.35)',
+                              color: '#ffffff',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 6,
@@ -1295,11 +1275,11 @@ export function BookAnalyticsModal({
                           key={w}
                           style={{
                             fontSize: 12,
-                            color: '#fbbf24',
-                            background: 'rgba(251, 191, 36, 0.1)',
+                            color: '#ffffff',
+                            background: 'rgba(255, 255, 255, 0.08)',
                             padding: '6px 10px',
                             borderRadius: 8,
-                            border: '1px solid rgba(251, 191, 36, 0.25)',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
                           }}
                         >
                           ⚠️ {w}
@@ -1311,7 +1291,7 @@ export function BookAnalyticsModal({
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span>Extracted Page Text (Editable — Corrections are saved to DB):</span>
                           {loadingSinglePage && (
-                            <span style={{ fontSize: 11, color: '#93c5fd', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ fontSize: 11, color: '#ffffff', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                               <Loader2 size={11} style={{ animation: 'sams-action-spin .8s linear infinite' }} /> Loading page text…
                             </span>
                           )}
@@ -1431,7 +1411,7 @@ export function BookAnalyticsModal({
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Layers size={16} color="var(--accent-color, #60a5fa)" />
+                  <Layers size={16} color="var(--accent-color, #ffffff)" />
                   <strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>
                     Flexible Daily Reading Plan Configuration
                   </strong>
@@ -1453,9 +1433,9 @@ export function BookAnalyticsModal({
                             flex: 1,
                             padding: '6px 12px',
                             fontWeight: sectionsPerDay === num ? 700 : 400,
-                            background: sectionsPerDay === num ? 'rgba(59, 130, 246, 0.3)' : undefined,
-                            borderColor: sectionsPerDay === num ? '#3b82f6' : undefined,
-                            color: sectionsPerDay === num ? '#93c5fd' : undefined,
+                            background: sectionsPerDay === num ? 'rgba(255, 255, 255, 0.15)' : undefined,
+                            borderColor: sectionsPerDay === num ? '#ffffff' : undefined,
+                            color: sectionsPerDay === num ? '#ffffff' : undefined,
                           }}
                         >
                           {num} {num === 1 ? 'part' : 'parts'}
@@ -1501,9 +1481,9 @@ export function BookAnalyticsModal({
                               fontSize: 11,
                               padding: '2px 7px',
                               borderRadius: 6,
-                              background: 'rgba(59, 130, 246, 0.1)',
-                              border: '1px solid rgba(59, 130, 246, 0.2)',
-                              color: '#93c5fd',
+                              background: 'rgba(255, 255, 255, 0.08)',
+                              border: '1px solid rgba(255, 255, 255, 0.2)',
+                              color: '#ffffff',
                             }}
                           >
                             Part {idx + 1} ({time}): {desc.remainingText}
@@ -1529,9 +1509,9 @@ export function BookAnalyticsModal({
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 6,
-                        background: 'rgba(99, 102, 241, 0.25)',
-                        borderColor: 'rgba(99, 102, 241, 0.45)',
-                        color: '#a5b4fc',
+                        background: 'rgba(255, 255, 255, 0.15)',
+                        borderColor: 'rgba(255, 255, 255, 0.35)',
+                        color: '#ffffff',
                         fontWeight: 600,
                       }}
                     >
@@ -1552,9 +1532,9 @@ export function BookAnalyticsModal({
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 6,
-                          background: 'rgba(239, 68, 68, 0.2)',
-                          borderColor: 'rgba(239, 68, 68, 0.45)',
-                          color: '#fca5a5',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          borderColor: 'rgba(255, 255, 255, 0.25)',
+                          color: 'var(--text-secondary)',
                           fontWeight: 600,
                         }}
                       >
@@ -1585,7 +1565,7 @@ export function BookAnalyticsModal({
                           padding: 14,
                           borderRadius: 12,
                           border: '1px solid var(--v-glass-border)',
-                          background: isDelivered ? 'rgba(34, 197, 94, 0.04)' : 'var(--v-glass-bg-subtle)',
+                          background: isDelivered ? 'rgba(255, 255, 255, 0.04)' : 'var(--v-glass-bg-subtle)',
                           display: 'grid',
                           gap: 10,
                         }}
@@ -1599,7 +1579,7 @@ export function BookAnalyticsModal({
                             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                               ({assignment.scheduledDate} · {assignment.postingTime || book.postingTime})
                             </span>
-                            <span style={{ fontSize: 12, color: 'var(--accent-color, #60a5fa)', fontWeight: 600 }}>
+                            <span style={{ fontSize: 12, color: '#ffffff', fontWeight: 600 }}>
                               pp. {assignment.startPdfPage}–{assignment.endPdfPage}
                             </span>
                           </div>
@@ -1611,12 +1591,8 @@ export function BookAnalyticsModal({
                                 padding: '2px 8px',
                                 borderRadius: 6,
                                 fontWeight: 600,
-                                background: isDelivered
-                                  ? 'rgba(34, 197, 94, 0.2)'
-                                  : assignment.status === 'approved'
-                                  ? 'rgba(59, 130, 246, 0.2)'
-                                  : 'rgba(245, 158, 11, 0.2)',
-                                color: isDelivered ? '#4ade80' : assignment.status === 'approved' ? '#93c5fd' : '#fcd34d',
+                                background: 'rgba(255, 255, 255, 0.1)',
+                                color: '#ffffff',
                               }}
                             >
                               {isDelivered ? 'Delivered' : assignment.status.toUpperCase()}
@@ -1764,9 +1740,9 @@ export function BookAnalyticsModal({
                                   fontSize: 11,
                                   padding: '5px 10px',
                                   borderRadius: 6,
-                                  background: 'rgba(59, 130, 246, 0.1)',
-                                  border: '1px solid rgba(59, 130, 246, 0.2)',
-                                  color: '#93c5fd',
+                                  background: 'rgba(255, 255, 255, 0.08)',
+                                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                                  color: '#ffffff',
                                   display: 'flex',
                                   alignItems: 'center',
                                   gap: 6,
@@ -1804,9 +1780,9 @@ export function BookAnalyticsModal({
                                   padding: '5px 14px',
                                   fontSize: 12,
                                   fontWeight: 600,
-                                  background: 'rgba(59, 130, 246, 0.25)',
-                                  borderColor: 'rgba(59, 130, 246, 0.45)',
-                                  color: '#93c5fd',
+                                  background: 'rgba(255, 255, 255, 0.15)',
+                                  borderColor: 'rgba(255, 255, 255, 0.35)',
+                                  color: '#ffffff',
                                 }}
                               >
                                 {savingAssignmentId === assignment.id ? 'Saving…' : 'Save Section'}
@@ -1865,7 +1841,7 @@ export function BookAnalyticsModal({
                     }}
                   >
                     {assignments.map(a => (
-                      <option key={a.id} value={a.id} style={{ background: '#1e293b', color: '#f8fafc' }}>
+                      <option key={a.id} value={a.id} style={{ background: '#18181b', color: '#ffffff' }}>
                         Day {a.dayNumber} (PDF pp. {a.startPdfPage}–{a.endPdfPage}) {a.status === 'completed' ? '✓ Delivered' : `(${a.scheduledDate})`}
                       </option>
                     ))}
@@ -1919,7 +1895,7 @@ export function BookAnalyticsModal({
                         gap: 12,
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent-color, #60a5fa)', fontWeight: 600, fontSize: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ffffff', fontWeight: 600, fontSize: 14 }}>
                         <BookOpen size={16} />
                         <span>Section Summary & Conceptual Breakdown</span>
                       </div>
@@ -1935,9 +1911,9 @@ export function BookAnalyticsModal({
                                 fontSize: 11,
                                 padding: '3px 8px',
                                 borderRadius: 6,
-                                background: 'rgba(96, 165, 250, 0.12)',
-                                border: '1px solid rgba(96, 165, 250, 0.25)',
-                                color: '#93c5fd',
+                                background: 'rgba(255, 255, 255, 0.08)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
+                                color: '#ffffff',
                                 fontWeight: 500,
                               }}
                             >
@@ -1962,7 +1938,7 @@ export function BookAnalyticsModal({
                         gap: 12,
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#34d399', fontWeight: 600, fontSize: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ffffff', fontWeight: 600, fontSize: 14 }}>
                         <Sparkles size={16} />
                         <span>Real-Life Examples & Verified Sources</span>
                       </div>
@@ -1989,7 +1965,7 @@ export function BookAnalyticsModal({
                                   rel="noopener noreferrer"
                                   style={{
                                     fontSize: 11,
-                                    color: 'var(--accent-color, #60a5fa)',
+                                    color: 'var(--accent-color, #ffffff)',
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     gap: 3,

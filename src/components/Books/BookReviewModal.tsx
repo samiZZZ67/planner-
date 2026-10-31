@@ -515,7 +515,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
     >
       <div
         style={{
-          background: 'var(--v-glass-bg, #090d16)',
+          background: 'var(--v-glass-bg, #101014)',
           border: '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.12))',
           borderRadius: 16,
           width: '98vw',
@@ -547,12 +547,12 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 width: 38,
                 height: 38,
                 borderRadius: 10,
-                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2))',
-                border: '1px solid rgba(168, 85, 247, 0.3)',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid var(--v-glass-border)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#c084fc',
+                color: 'var(--text-primary)',
               }}
             >
               <FileText size={20} />
@@ -566,9 +566,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 {currentBook.extractionStatus === 'completed' && (
                   <span
                     style={{
-                      background: 'rgba(34, 197, 94, 0.15)',
-                      color: '#4ade80',
-                      border: '1px solid rgba(34, 197, 94, 0.3)',
+                      background: 'rgba(255, 255, 255, 0.12)',
+                      color: '#ffffff',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
                       borderRadius: 12,
                       padding: '2px 8px',
                       fontSize: 11,
@@ -581,9 +581,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 {currentBook.extractionStatus === 'needs_review' && (
                   <span
                     style={{
-                      background: 'rgba(234, 179, 8, 0.15)',
-                      color: '#facc15',
-                      border: '1px solid rgba(234, 179, 8, 0.3)',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      color: '#d4d4d8',
+                      border: '1px solid rgba(255, 255, 255, 0.25)',
                       borderRadius: 12,
                       padding: '2px 8px',
                       fontSize: 11,
@@ -596,9 +596,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 {currentBook.extractionStatus === 'processing' && (
                   <span
                     style={{
-                      background: 'rgba(56, 189, 248, 0.15)',
-                      color: '#38bdf8',
-                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      color: '#ffffff',
+                      border: '1px solid rgba(255, 255, 255, 0.25)',
                       borderRadius: 12,
                       padding: '2px 8px',
                       fontSize: 11,
@@ -611,9 +611,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 {currentBook.extractionStatus === 'failed' && (
                   <span
                     style={{
-                      background: 'rgba(239, 68, 68, 0.15)',
-                      color: '#f87171',
-                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      color: '#a1a1aa',
+                      border: '1px solid var(--v-glass-border)',
                       borderRadius: 12,
                       padding: '2px 8px',
                       fontSize: 11,
@@ -624,7 +624,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                   </span>
                 )}
               </div>
-              <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted, #94a3b8)' }}>
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted, #71717a)' }}>
                 PDF Pages {currentBook.startPage}–{currentBook.endPage} ({totalPages} pages total) · Author: {currentBook.author || 'Unknown'}
               </p>
             </div>
@@ -649,7 +649,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                     type="button"
                     className="v-pill-btn"
                     onClick={cancelBatchExtraction}
-                    style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center', color: '#fca5a5', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                    style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center', color: 'var(--text-secondary)', borderColor: 'var(--v-glass-border)' }}
                     title="Cancel active extraction batch"
                   >
                     <X size={13} />
@@ -672,9 +672,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 display: 'inline-flex',
                 gap: 6,
                 alignItems: 'center',
-                background: currentBook?.extractionStatus === 'completed' ? 'rgba(34, 197, 94, 0.2)' : undefined,
-                borderColor: currentBook?.extractionStatus === 'completed' ? '#4ade80' : undefined,
-                color: currentBook?.extractionStatus === 'completed' ? '#86efac' : undefined,
+                background: currentBook?.extractionStatus === 'completed' ? 'rgba(255, 255, 255, 0.15)' : undefined,
+                borderColor: currentBook?.extractionStatus === 'completed' ? '#ffffff' : undefined,
+                color: currentBook?.extractionStatus === 'completed' ? '#ffffff' : undefined,
               }}
               title="Approve all extracted pages to enable reading plan generation and loading"
             >
@@ -690,7 +690,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 border: '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.15))',
                 borderRadius: 8,
                 padding: '6px 10px',
-                color: 'var(--text-secondary, #cbd5e1)',
+                color: 'var(--text-secondary, #d4d4d8)',
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -706,9 +706,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
           <div
             style={{
               padding: '8px 20px',
-              background: 'rgba(234, 179, 8, 0.12)',
-              borderBottom: '1px solid rgba(234, 179, 8, 0.25)',
-              color: '#fde047',
+              background: 'rgba(255, 255, 255, 0.08)',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
+              color: 'var(--text-primary)',
               fontSize: 12,
               display: 'flex',
               alignItems: 'center',
@@ -726,8 +726,8 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 disabled={extractingBatch}
                 onClick={() => void resumeBatchExtraction()}
                 style={{
-                  background: 'rgba(234, 179, 8, 0.25)',
-                  border: '1px solid rgba(234, 179, 8, 0.4)',
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
                   borderRadius: 6,
                   padding: '3px 8px',
                   color: '#fff',
@@ -742,11 +742,11 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                   type="button"
                   onClick={cancelBatchExtraction}
                   style={{
-                    background: 'rgba(239, 68, 68, 0.25)',
-                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
                     borderRadius: 6,
                     padding: '3px 8px',
-                    color: '#fca5a5',
+                    color: 'var(--text-secondary)',
                     fontSize: 11,
                     cursor: 'pointer',
                   }}
@@ -763,9 +763,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
           <div
             style={{
               padding: '8px 20px',
-              background: 'rgba(34, 197, 94, 0.14)',
-              borderBottom: '1px solid rgba(34, 197, 94, 0.3)',
-              color: '#86efac',
+              background: 'rgba(255, 255, 255, 0.08)',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
+              color: '#ffffff',
               fontSize: 12,
               display: 'flex',
               alignItems: 'center',
@@ -776,7 +776,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
             <button
               type="button"
               onClick={() => setNotice('')}
-              style={{ background: 'none', border: 'none', color: '#86efac', cursor: 'pointer' }}
+              style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer' }}
             >
               <X size={14} />
             </button>
@@ -786,9 +786,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
           <div
             style={{
               padding: '8px 20px',
-              background: 'rgba(239, 68, 68, 0.14)',
-              borderBottom: '1px solid rgba(239, 68, 68, 0.3)',
-              color: '#fca5a5',
+              background: 'rgba(255, 255, 255, 0.08)',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
+              color: '#ffffff',
               fontSize: 12,
               display: 'flex',
               alignItems: 'center',
@@ -799,7 +799,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
             <button
               type="button"
               onClick={() => setError('')}
-              style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer' }}
+              style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer' }}
             >
               <X size={14} />
             </button>
@@ -816,12 +816,12 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
             justifyContent: 'space-between',
             gap: 12,
             flexWrap: 'wrap',
-            background: 'rgba(15, 23, 42, 0.3)',
+            background: 'rgba(255, 255, 255, 0.02)',
           }}
         >
           {/* Filter Pills */}
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted, #94a3b8)', marginRight: 4 }}>Filter:</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted, #71717a)', marginRight: 4 }}>Filter:</span>
             <button
               type="button"
               onClick={() => setFilter('all')}
@@ -830,9 +830,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 borderRadius: 8,
                 fontSize: 12,
                 cursor: 'pointer',
-                border: filter === 'all' ? '1px solid #6366f1' : '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.1))',
-                background: filter === 'all' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-                color: filter === 'all' ? '#a5b4fc' : 'var(--text-secondary, #cbd5e1)',
+                border: filter === 'all' ? '1px solid #ffffff' : '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.1))',
+                background: filter === 'all' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                color: filter === 'all' ? '#ffffff' : 'var(--text-secondary, #d4d4d8)',
               }}
             >
               All Pages ({summaries.length})
@@ -845,9 +845,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 borderRadius: 8,
                 fontSize: 12,
                 cursor: 'pointer',
-                border: filter === 'needs_review' ? '1px solid #eab308' : '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.1))',
-                background: filter === 'needs_review' ? 'rgba(234, 179, 8, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-                color: filter === 'needs_review' ? '#fde047' : 'var(--text-secondary, #cbd5e1)',
+                border: filter === 'needs_review' ? '1px solid #ffffff' : '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.1))',
+                background: filter === 'needs_review' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                color: filter === 'needs_review' ? '#ffffff' : 'var(--text-secondary, #d4d4d8)',
               }}
             >
               Needs Review ({needsReviewCount})
@@ -860,9 +860,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 borderRadius: 8,
                 fontSize: 12,
                 cursor: 'pointer',
-                border: filter === 'ocr' ? '1px solid #38bdf8' : '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.1))',
-                background: filter === 'ocr' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-                color: filter === 'ocr' ? '#7dd3fc' : 'var(--text-secondary, #cbd5e1)',
+                border: filter === 'ocr' ? '1px solid #ffffff' : '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.1))',
+                background: filter === 'ocr' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                color: filter === 'ocr' ? '#ffffff' : 'var(--text-secondary, #d4d4d8)',
               }}
             >
               OCR Pages ({ocrCount})
@@ -875,9 +875,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 borderRadius: 8,
                 fontSize: 12,
                 cursor: 'pointer',
-                border: filter === 'empty' ? '1px solid #f87171' : '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.1))',
-                background: filter === 'empty' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-                color: filter === 'empty' ? '#fca5a5' : 'var(--text-secondary, #cbd5e1)',
+                border: filter === 'empty' ? '1px solid #ffffff' : '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.1))',
+                background: filter === 'empty' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                color: filter === 'empty' ? '#ffffff' : 'var(--text-secondary, #d4d4d8)',
               }}
             >
               Empty ({emptyCount})
@@ -908,7 +908,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
 
             {/* Jump to page form */}
             <form onSubmit={handleJumpSubmit} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 13, color: 'var(--text-secondary, #cbd5e1)' }}>Page</span>
+              <span style={{ fontSize: 13, color: 'var(--text-secondary, #d4d4d8)' }}>Page</span>
               <input
                 type="number"
                 min={currentBook.startPage}
@@ -927,7 +927,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                   textAlign: 'center',
                 }}
               />
-              <span style={{ fontSize: 13, color: 'var(--text-muted, #94a3b8)' }}>of {currentBook.endPage}</span>
+              <span style={{ fontSize: 13, color: 'var(--text-muted, #71717a)' }}>of {currentBook.endPage}</span>
             </form>
 
             <button
@@ -958,8 +958,8 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 style={{
                   padding: '4px 8px',
                   fontSize: 11,
-                  background: viewMode === 'split' ? 'rgba(99, 102, 241, 0.25)' : 'none',
-                  color: viewMode === 'split' ? '#a5b4fc' : 'var(--text-secondary, #cbd5e1)',
+                  background: viewMode === 'split' ? 'rgba(255, 255, 255, 0.15)' : 'none',
+                  color: viewMode === 'split' ? '#ffffff' : 'var(--text-secondary, #d4d4d8)',
                   border: 'none',
                   cursor: 'pointer',
                 }}
@@ -972,8 +972,8 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 style={{
                   padding: '4px 8px',
                   fontSize: 11,
-                  background: viewMode === 'text' ? 'rgba(99, 102, 241, 0.25)' : 'none',
-                  color: viewMode === 'text' ? '#a5b4fc' : 'var(--text-secondary, #cbd5e1)',
+                  background: viewMode === 'text' ? 'rgba(255, 255, 255, 0.15)' : 'none',
+                  color: viewMode === 'text' ? '#ffffff' : 'var(--text-secondary, #d4d4d8)',
                   border: 'none',
                   cursor: 'pointer',
                 }}
@@ -986,8 +986,8 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 style={{
                   padding: '4px 8px',
                   fontSize: 11,
-                  background: viewMode === 'preview' ? 'rgba(99, 102, 241, 0.25)' : 'none',
-                  color: viewMode === 'preview' ? '#a5b4fc' : 'var(--text-secondary, #cbd5e1)',
+                  background: viewMode === 'preview' ? 'rgba(255, 255, 255, 0.15)' : 'none',
+                  color: viewMode === 'preview' ? '#ffffff' : 'var(--text-secondary, #d4d4d8)',
                   border: 'none',
                   cursor: 'pointer',
                 }}
@@ -1005,13 +1005,13 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
             style={{
               width: 140,
               borderRight: '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.08))',
-              background: 'rgba(10, 15, 28, 0.5)',
+              background: 'rgba(10, 10, 10, 0.5)',
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
             }}
           >
-            <div style={{ padding: '8px 10px', fontSize: 11, color: 'var(--text-muted, #94a3b8)', borderBottom: '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.05))', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '8px 10px', fontSize: 11, color: 'var(--text-muted, #71717a)', borderBottom: '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.05))', fontWeight: 600, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>PAGES ({filteredSummaries.length})</span>
               {totalWindows > 1 && (
                 <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
@@ -1019,7 +1019,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                     type="button"
                     disabled={pageWindowIndex === 0}
                     onClick={() => setPageWindowIndex(w => Math.max(0, w - 1))}
-                    style={{ background: 'none', border: 'none', color: pageWindowIndex === 0 ? '#475569' : '#94a3b8', cursor: pageWindowIndex === 0 ? 'not-allowed' : 'pointer', padding: '0 2px' }}
+                    style={{ background: 'none', border: 'none', color: pageWindowIndex === 0 ? '#52525b' : '#a1a1aa', cursor: pageWindowIndex === 0 ? 'not-allowed' : 'pointer', padding: '0 2px' }}
                     title="Previous 50 pages"
                   >
                     ◀
@@ -1029,7 +1029,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                     type="button"
                     disabled={pageWindowIndex >= totalWindows - 1}
                     onClick={() => setPageWindowIndex(w => Math.min(totalWindows - 1, w + 1))}
-                    style={{ background: 'none', border: 'none', color: pageWindowIndex >= totalWindows - 1 ? '#475569' : '#94a3b8', cursor: pageWindowIndex >= totalWindows - 1 ? 'not-allowed' : 'pointer', padding: '0 2px' }}
+                    style={{ background: 'none', border: 'none', color: pageWindowIndex >= totalWindows - 1 ? '#52525b' : '#a1a1aa', cursor: pageWindowIndex >= totalWindows - 1 ? 'not-allowed' : 'pointer', padding: '0 2px' }}
                     title="Next 50 pages"
                   >
                     ▶
@@ -1045,20 +1045,20 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 const isEmpty = p.method === 'empty';
 
                 let badgeColor = 'rgba(255, 255, 255, 0.05)';
-                let textColor = '#cbd5e1';
+                let textColor = '#d4d4d8';
                 let border = '1px solid transparent';
 
                 if (isSelected) {
-                  badgeColor = 'rgba(99, 102, 241, 0.3)';
+                  badgeColor = 'rgba(255, 255, 255, 0.2)';
                   textColor = '#fff';
-                  border = '1px solid #818cf8';
+                  border = '1px solid #ffffff';
                 } else if (isUnreviewed) {
-                  badgeColor = 'rgba(234, 179, 8, 0.12)';
-                  textColor = '#fde047';
-                  border = '1px solid rgba(234, 179, 8, 0.25)';
+                  badgeColor = 'rgba(255, 255, 255, 0.08)';
+                  textColor = '#e4e4e7';
+                  border = '1px solid rgba(255, 255, 255, 0.2)';
                 } else if (isEmpty) {
-                  badgeColor = 'rgba(239, 68, 68, 0.12)';
-                  textColor = '#fca5a5';
+                  badgeColor = 'rgba(255, 255, 255, 0.04)';
+                  textColor = '#a1a1aa';
                 }
 
                 return (
@@ -1097,7 +1097,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
               style={{
                 flex: viewMode === 'split' ? '1 1 50%' : '1 1 100%',
                 borderRight: viewMode === 'split' ? '1px solid var(--v-glass-border, rgba(255, 255, 255, 0.08))' : 'none',
-                background: '#070a12',
+                background: '#000000',
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
@@ -1112,7 +1112,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   fontSize: 12,
-                  color: 'var(--text-muted, #94a3b8)',
+                  color: 'var(--text-muted, #71717a)',
                 }}
               >
                 <span>Original PDF Rendering — Page {selectedPageNum}</span>
@@ -1124,7 +1124,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     borderRadius: 6,
                     padding: '2px 8px',
-                    color: 'var(--text-secondary, #cbd5e1)',
+                    color: 'var(--text-secondary, #d4d4d8)',
                     fontSize: 11,
                     cursor: 'pointer',
                     display: 'inline-flex',
@@ -1146,11 +1146,11 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                   alignItems: imageFit === 'contain' ? 'center' : 'flex-start',
                   justifyContent: 'center',
                   padding: 16,
-                  background: '#020617',
+                  background: '#000000',
                 }}
               >
                 {loadingPreview ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: 'var(--text-muted, #94a3b8)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: 'var(--text-muted, #71717a)' }}>
                     <Loader2 size={24} className="animate-spin" />
                     <span style={{ fontSize: 13 }}>Loading page preview...</span>
                   </div>
@@ -1170,7 +1170,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                     }}
                   />
                 ) : (
-                  <div style={{ textAlign: 'center', color: 'var(--text-muted, #94a3b8)', padding: 32 }}>
+                  <div style={{ textAlign: 'center', color: 'var(--text-muted, #71717a)', padding: 32 }}>
                     <p style={{ margin: '0 0 6px', fontSize: 14 }}>Page {selectedPageNum} preview is not rendered yet.</p>
                     <span style={{ fontSize: 12, opacity: 0.7 }}>Click below to render the original PDF page view on-demand.</span>
                     <div style={{ marginTop: 12 }}>
@@ -1220,8 +1220,8 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                     <>
                       <span
                         style={{
-                          background: currentPage.method === 'native' ? 'rgba(34, 197, 94, 0.15)' : currentPage.method === 'ocr' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          color: currentPage.method === 'native' ? '#86efac' : currentPage.method === 'ocr' ? '#7dd3fc' : '#fca5a5',
+                          background: currentPage.method === 'native' ? 'rgba(255, 255, 255, 0.15)' : currentPage.method === 'ocr' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                          color: currentPage.method === 'native' ? '#ffffff' : currentPage.method === 'ocr' ? '#d4d4d8' : '#a1a1aa',
                           borderRadius: 6,
                           padding: '2px 8px',
                           fontSize: 11,
@@ -1231,15 +1231,15 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                         {currentPage.method === 'native' ? 'Native text' : currentPage.method === 'ocr' ? `OCR (${currentPage.confidence ? `${currentPage.confidence.toFixed(0)}%` : 'est'})` : 'Empty / Unreadable'}
                       </span>
                       {currentPage.reviewedByUser ? (
-                        <span style={{ color: '#4ade80', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
+                        <span style={{ color: '#ffffff', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
                           <CheckCircle2 size={12} /> Visually Reviewed
                         </span>
                       ) : currentPage.requiresReview ? (
-                        <span style={{ color: '#facc15', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
+                        <span style={{ color: '#d4d4d8', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
                           <AlertTriangle size={12} /> Needs Visual Review
                         </span>
                       ) : (
-                        <span style={{ color: '#86efac', fontSize: 11 }}>Clean</span>
+                        <span style={{ color: '#a1a1aa', fontSize: 11 }}>Clean</span>
                       )}
                     </>
                   )}
@@ -1254,7 +1254,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                       border: '1px solid rgba(255, 255, 255, 0.1)',
                       borderRadius: 6,
                       padding: '4px 8px',
-                      color: 'var(--text-secondary, #cbd5e1)',
+                      color: 'var(--text-secondary, #d4d4d8)',
                       fontSize: 11,
                       cursor: 'pointer',
                       display: 'inline-flex',
@@ -1263,18 +1263,18 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                     }}
                     title="Copy full page text"
                   >
-                    {copied ? <Check size={12} color="#4ade80" /> : <Copy size={12} />}
+                    {copied ? <Check size={12} color="#ffffff" /> : <Copy size={12} />}
                     {copied ? 'Copied!' : 'Copy'}
                   </button>
                   <button
                     type="button"
                     onClick={togglePageVoice}
                     style={{
-                      background: isSpeakingPage ? 'rgba(168, 85, 247, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                      border: `1px solid ${isSpeakingPage ? 'rgba(168, 85, 247, 0.4)' : 'rgba(255, 255, 255, 0.1)'}`,
+                      background: isSpeakingPage ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                      border: `1px solid ${isSpeakingPage ? 'rgba(255, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.1)'}`,
                       borderRadius: 6,
                       padding: '4px 8px',
-                      color: isSpeakingPage ? '#c084fc' : 'var(--text-secondary, #cbd5e1)',
+                      color: isSpeakingPage ? '#ffffff' : 'var(--text-secondary, #d4d4d8)',
                       fontSize: 11,
                       cursor: 'pointer',
                       display: 'inline-flex',
@@ -1284,10 +1284,10 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                     title={isSpeakingPage ? 'Stop voice reading' : 'Read page aloud (Voice)'}
                     aria-label="Voice reading"
                   >
-                    {isSpeakingPage ? <VolumeX size={12} color="#f87171" /> : <Volume2 size={12} />}
+                    {isSpeakingPage ? <VolumeX size={12} color="#ffffff" /> : <Volume2 size={12} />}
                     <span>{isSpeakingPage ? 'Stop' : 'Voice'}</span>
                   </button>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)' }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted, #71717a)' }}>
                     {editedText.length} chars · {editedText.trim() ? editedText.trim().split(/\s+/).length : 0} words
                   </span>
                 </div>
@@ -1298,16 +1298,16 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                 <div
                   style={{
                     padding: '8px 16px',
-                    background: 'rgba(234, 179, 8, 0.1)',
-                    borderBottom: '1px solid rgba(234, 179, 8, 0.2)',
-                    color: '#fef08a',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#ffffff',
                     fontSize: 12,
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: 8,
                   }}
                 >
-                  <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1, color: '#facc15' }} />
+                  <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1, color: '#ffffff' }} />
                   <div>
                     {currentPage.warnings.map((w, idx) => (
                       <div key={idx}>{w}</div>
@@ -1319,7 +1319,7 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
               {/* Text Editor Area */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
                 {loadingPage ? (
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted, #94a3b8)' }}>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted, #71717a)' }}>
                     <Loader2 size={24} className="animate-spin" />
                   </div>
                 ) : (
@@ -1380,8 +1380,8 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                       gap: 6,
                       alignItems: 'center',
                       cursor: reviewingPage ? 'wait' : 'pointer',
-                      border: currentPage?.reviewedByUser ? '1px solid #4ade80' : undefined,
-                      color: currentPage?.reviewedByUser ? '#4ade80' : undefined,
+                      border: currentPage?.reviewedByUser ? '1px solid #ffffff' : undefined,
+                      color: currentPage?.reviewedByUser ? '#ffffff' : undefined,
                     }}
                     title={!editedText.trim() ? 'Approve this blank or skipped page' : 'Approve this page against the visual PDF'}
                   >
@@ -1401,9 +1401,9 @@ export function BookReviewModal({ book, isOpen, onClose, onBookUpdated }: BookRe
                       gap: 6,
                       alignItems: 'center',
                       cursor: approvingAll ? 'wait' : 'pointer',
-                      background: currentBook?.extractionStatus === 'completed' ? 'rgba(34, 197, 94, 0.2)' : undefined,
-                      borderColor: currentBook?.extractionStatus === 'completed' ? '#4ade80' : undefined,
-                      color: currentBook?.extractionStatus === 'completed' ? '#86efac' : undefined,
+                      background: currentBook?.extractionStatus === 'completed' ? 'rgba(255, 255, 255, 0.15)' : undefined,
+                      borderColor: currentBook?.extractionStatus === 'completed' ? '#ffffff' : undefined,
+                      color: currentBook?.extractionStatus === 'completed' ? '#ffffff' : undefined,
                     }}
                     title="Approve all extracted pages to load or generate the study plan"
                   >

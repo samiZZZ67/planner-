@@ -546,20 +546,20 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
 
       {/* Persistent visible feedback banners */}
       {notice && (
-        <div className="v-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderColor: 'rgba(74, 222, 128, 0.45)', background: 'rgba(34, 197, 94, 0.12)' }}>
-          <span style={{ color: '#86efac', fontSize: 13 }}>{notice}</span>
+        <div className="v-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderColor: 'rgba(255, 255, 255, 0.3)', background: 'rgba(255, 255, 255, 0.08)' }}>
+          <span style={{ color: '#ffffff', fontSize: 13 }}>{notice}</span>
           <button type="button" onClick={() => setNotice('')} className="v-circle-btn" style={{ width: 24, height: 24 }} aria-label="Dismiss message"><X size={13} /></button>
         </div>
       )}
       {error && (
-        <div className="v-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderColor: 'rgba(248, 113, 113, 0.45)', background: 'rgba(239, 68, 68, 0.12)' }}>
-          <span style={{ color: '#fca5a5', fontSize: 13 }}>{error}</span>
+        <div className="v-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderColor: 'rgba(255, 255, 255, 0.3)', background: 'rgba(255, 255, 255, 0.08)' }}>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{error}</span>
           <button type="button" onClick={() => setError('')} className="v-circle-btn" style={{ width: 24, height: 24 }} aria-label="Dismiss error"><X size={13} /></button>
         </div>
       )}
 
-      <div className="v-card" style={{ padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start', borderColor: 'rgba(251,191,36,.45)' }}>
-        <TriangleAlert size={19} color="#fbbf24" style={{ flexShrink: 0, marginTop: 2 }} />
+      <div className="v-card" style={{ padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start', borderColor: 'var(--v-glass-border)' }}>
+        <TriangleAlert size={19} color="#ffffff" style={{ flexShrink: 0, marginTop: 2 }} />
         <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
           <strong style={{ color: 'var(--text-primary)' }}>Daily Telegram lessons run automatically.</strong> Each post includes the original reading, a summary, concepts, definitions, an illustrative example, revision questions, and a page image. Scanned or uncertain right-to-left pages pause for a quick visual review before publishing.
         </div>
@@ -611,9 +611,9 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                 fontSize: 12,
                 padding: '8px 12px',
                 borderRadius: 8,
-                background: 'rgba(59, 130, 246, 0.1)',
-                border: '1px solid rgba(59, 130, 246, 0.25)',
-                color: '#93c5fd',
+                background: 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
@@ -629,8 +629,8 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
         <button className="v-pill-btn" type="submit" disabled={isUploading} style={{ minHeight: 44, display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 8, cursor: isUploading ? 'wait' : 'pointer' }}>
           <FileUp size={17} /> {isUploading ? 'Saving PDF…' : 'Queue daily Telegram delivery'}
         </button>
-        {notice && <p role="status" style={{ margin: 0, color: '#86efac', fontSize: 13 }}>{notice}</p>}
-        {error && <p role="alert" style={{ margin: 0, color: '#fca5a5', fontSize: 13 }}>{error}</p>}
+        {notice && <p role="status" style={{ margin: 0, color: '#ffffff', fontSize: 13 }}>{notice}</p>}
+        {error && <p role="alert" style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>{error}</p>}
       </form>
 
       <div className="v-card" style={{ padding: 18, display: 'grid', gap: 14 }}>
@@ -639,7 +639,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
           <article key={book.id} style={{ padding: 16, borderRadius: 16, border: '1px solid var(--v-glass-border)', display: 'grid', gap: 14, marginBottom: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
               <div><strong>{book.title}</strong><div style={{ color: 'var(--text-muted)', fontSize: 13 }}>{book.author}</div></div>
-              <span style={{ fontSize: 12, color: book.automationStatus === 'failed' || book.extractionStatus === 'failed' ? '#fca5a5' : book.automationStatus === 'ready' ? '#86efac' : '#fbbf24' }}>{book.automationStatus === 'processing' ? 'Preparing daily posts…' : book.automationStatus === 'needs_review' ? 'Waiting for page review' : book.automationStatus === 'failed' ? 'Automation needs attention' : book.automationStatus === 'ready' ? 'Daily Telegram posts active' : 'Daily Telegram posts queued'}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{book.automationStatus === 'processing' ? 'Preparing daily posts…' : book.automationStatus === 'needs_review' ? 'Waiting for page review' : book.automationStatus === 'failed' ? 'Automation needs attention' : book.automationStatus === 'ready' ? 'Daily Telegram posts active' : 'Daily Telegram posts queued'}</span>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <button
@@ -661,7 +661,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
               </button>
               <button type="button" className="v-pill-btn" aria-expanded={!collapsedBooks.has(book.id)} onClick={() => setCollapsedBooks(current => { const next = new Set(current); if (next.has(book.id)) next.delete(book.id); else next.add(book.id); return next; })} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center' }}>{collapsedBooks.has(book.id) ? <><ChevronDown size={15} /> Expand</> : <><ChevronUp size={15} /> Collapse</>}</button>
               <button type="button" className="v-pill-btn" onClick={() => beginEdit(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center' }}><Pencil size={14} /> Edit</button>
-              <button type="button" className="v-pill-btn" disabled={deletingBookId === book.id} onClick={() => void removeBook(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center', color: '#fca5a5', cursor: deletingBookId === book.id ? 'wait' : 'pointer' }}>
+              <button type="button" className="v-pill-btn" disabled={deletingBookId === book.id} onClick={() => void removeBook(book)} style={{ padding: '7px 10px', display: 'inline-flex', gap: 6, alignItems: 'center', color: 'var(--text-secondary)', cursor: deletingBookId === book.id ? 'wait' : 'pointer' }}>
                 <Trash2 size={14} /> {deletingBookId === book.id ? 'Deleting…' : 'Delete'}
               </button>
             </div>
@@ -694,11 +694,11 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                       <span style={{ color: 'var(--text-muted)' }}> (pp. {book.startPage}–{book.endPage})</span>
                     </div>
                     <div style={{ color: 'var(--text-secondary)' }}>
-                      <span style={{ color: '#4ade80', fontWeight: 600 }}>{pagesRead} pages sent</span>
+                      <span style={{ color: '#ffffff', fontWeight: 600 }}>{pagesRead} pages sent</span>
                       {' · '}
                       <span>{remainingPages} pages remaining</span>
                       {' · '}
-                      <span style={{ color: '#60a5fa', fontWeight: 700 }}>{progressPct}%</span>
+                      <span style={{ color: '#ffffff', fontWeight: 700 }}>{progressPct}%</span>
                     </div>
                   </div>
 
@@ -709,7 +709,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                         height: '100%',
                         width: `${progressPct}%`,
                         borderRadius: 999,
-                        background: 'linear-gradient(90deg, #3b82f6, #10b981)',
+                        background: '#ffffff',
                         transition: 'width 0.3s ease',
                       }}
                     />
@@ -723,7 +723,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                         <strong style={{ color: 'var(--text-primary)' }}>
                           Day {nextPending.dayNumber}{nextPending.sectionNumber ? ` · Part ${nextPending.sectionNumber}` : ''}
                         </strong>
-                        <span style={{ color: 'var(--accent-color, #60a5fa)' }}> (pp. {nextPending.startPdfPage}–{nextPending.endPdfPage})</span>
+                        <span style={{ color: 'var(--text-primary)' }}> (pp. {nextPending.startPdfPage}–{nextPending.endPdfPage})</span>
                         <span style={{ color: 'var(--text-muted)' }}> · Scheduled: {nextPending.scheduledDate} {nextPending.postingTime || book.postingTime}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -733,8 +733,8 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                             padding: '2px 7px',
                             borderRadius: 6,
                             fontWeight: 600,
-                            background: nextPending.deliveryStatus === 'failed' ? 'rgba(239, 68, 68, 0.2)' : nextPending.status === 'approved' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                            color: nextPending.deliveryStatus === 'failed' ? '#fca5a5' : nextPending.status === 'approved' ? '#93c5fd' : '#fcd34d',
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            color: '#ffffff',
                           }}
                         >
                           {nextPending.deliveryStatus === 'failed' ? 'Failed' : nextPending.status === 'approved' ? 'Scheduled' : 'Draft'}
@@ -747,7 +747,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                       </div>
                     </div>
                   ) : (
-                    <div style={{ fontSize: 12, color: '#4ade80', fontWeight: 600 }}>
+                    <div style={{ fontSize: 12, color: '#ffffff', fontWeight: 600 }}>
                       ✓ All scheduled sections for this book have been completed and delivered to Telegram.
                     </div>
                   )}
@@ -780,9 +780,9 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                       fontSize: 12,
                       padding: '7px 11px',
                       borderRadius: 8,
-                      background: 'rgba(59, 130, 246, 0.1)',
-                      border: '1px solid rgba(59, 130, 246, 0.25)',
-                      color: '#93c5fd',
+                      background: 'rgba(255, 255, 255, 0.06)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#ffffff',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
@@ -816,9 +816,9 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                   onClick={cancelExtraction}
                   style={{
                     padding: '8px 12px',
-                    background: 'rgba(239, 68, 68, 0.2)',
-                    borderColor: 'rgba(239, 68, 68, 0.45)',
-                    color: '#fca5a5',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    borderColor: 'rgba(255, 255, 255, 0.25)',
+                    color: 'var(--text-secondary)',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 6,
@@ -857,7 +857,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                       setError(err?.message || 'Failed to approve pages.');
                     }
                   }}
-                  style={{ padding: '8px 14px', display: 'inline-flex', gap: 6, alignItems: 'center', fontWeight: 600, color: '#86efac', borderColor: '#4ade80' }}
+                  style={{ padding: '8px 14px', display: 'inline-flex', gap: 6, alignItems: 'center', fontWeight: 600, color: '#ffffff', borderColor: '#ffffff' }}
                   title="Approve all extracted pages and enable reading plan generation / loading"
                 >
                   <CheckCircle2 size={14} /> Approve Extracted Content
@@ -885,9 +885,9 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                     onClick={cancelPlanGeneration}
                     style={{
                       padding: '8px 12px',
-                      background: 'rgba(239, 68, 68, 0.2)',
-                      borderColor: 'rgba(239, 68, 68, 0.45)',
-                      color: '#fca5a5',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      borderColor: 'rgba(255, 255, 255, 0.25)',
+                      color: 'var(--text-secondary)',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 6,

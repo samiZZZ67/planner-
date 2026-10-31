@@ -83,7 +83,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
           <button
             onClick={() => sync.triggerSync()}
             className="v-pill-btn animate-pulse"
-            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, borderColor: '#f87171', color: '#f87171', gap: 4 }}
+            style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, borderColor: 'rgba(255, 255, 255, 0.4)', color: 'var(--text-primary)', gap: 4 }}
             title={sync.errorMessage || "Save error — click to retry"}
           >
             <AlertTriangle size={12} />
@@ -103,14 +103,14 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
     switch (sync.status) {
       case 'offline':
         return (
-          <div className="v-pill-btn" style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: '#f59e0b', gap: 4 }}>
+          <div className="v-pill-btn" style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: 'var(--text-muted)', gap: 4 }}>
             <WifiOff size={12} />
             <span>Offline (unsaved locally)</span>
           </div>
         );
       case 'syncing':
         return (
-          <div className="v-pill-btn" style={{ padding: '6px 14px', fontSize: 11, minHeight: 34, color: 'var(--accent-color)', gap: 5 }}>
+          <div className="v-pill-btn" style={{ padding: '6px 14px', fontSize: 11, minHeight: 34, color: 'var(--text-primary)', gap: 5 }}>
             <RefreshCw size={12} className="animate-spin" />
             <span>Saving...</span>
           </div>
@@ -120,7 +120,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div
               className="v-pill-btn"
-              style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.4)', gap: 4 }}
+              style={{ padding: '6px 12px', fontSize: 11, minHeight: 34, color: 'var(--text-secondary)', borderColor: 'var(--v-glass-border)', gap: 4 }}
               title="Automatic save in 2 minutes"
             >
               <Clock size={12} />
@@ -146,7 +146,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
             style={{ padding: '6px 14px', fontSize: 11, minHeight: 34, gap: 5 }}
             title={sync.lastSyncedAt ? `Last saved: ${formatTime(sync.lastSyncedAt)}` : 'Saved locally & synced'}
           >
-            <CheckCircle2 size={12} style={{ color: '#22c55e' }} />
+            <CheckCircle2 size={12} style={{ color: 'var(--text-primary)' }} />
             <span>Saved</span>
           </div>
         );
@@ -212,8 +212,8 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
           style={{
             padding: '6px 14px 6px 10px',
             minHeight: 38,
-            borderColor: isFocus ? '#38bdf8' : '#22c55e',
-            background: isFocus ? 'rgba(56, 189, 248, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+            borderColor: isFocus ? 'var(--v-glass-border-bright)' : 'var(--v-glass-border)',
+            background: isFocus ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.06)',
           }}
         >
           <div
@@ -221,7 +221,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
               width: 8,
               height: 8,
               borderRadius: '50%',
-              background: isFocus ? '#38bdf8' : '#22c55e',
+              background: isFocus ? '#ffffff' : '#a1a1aa',
               animation: 'timerPulse 1.4s infinite',
             }}
           />
@@ -243,7 +243,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
               fontFamily: 'monospace',
               fontSize: 13,
               fontWeight: 800,
-              color: isFocus ? '#38bdf8' : '#22c55e',
+              color: isFocus ? '#ffffff' : '#d4d4d8',
             }}
           >
             {isFocus ? '🎯' : '☕'} {formattedCountdown}
@@ -271,7 +271,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
             <button
               onClick={stopTimer}
               className="v-circle-btn"
-              style={{ width: 26, height: 26, color: '#f87171' }}
+              style={{ width: 26, height: 26, color: 'var(--text-primary)' }}
               aria-label="Stop & Log Time"
             >
               <Square size={11} />
@@ -299,7 +299,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
           aria-label="Toggle theme"
           title={theme === 'dark' ? 'Switch to White Glass' : 'Switch to Dark Glass'}
         >
-          {theme === 'dark' ? <Sun size={15} style={{ color: '#f59e0b' }} /> : <Moon size={15} style={{ color: '#38bdf8' }} />}
+          {theme === 'dark' ? <Sun size={15} style={{ color: '#ffffff' }} /> : <Moon size={15} style={{ color: '#000000' }} />}
         </button>
       </div>
     </header>

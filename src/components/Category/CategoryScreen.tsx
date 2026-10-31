@@ -20,15 +20,15 @@ interface CategoryScreenProps {
 }
 
 const PRIORITY_COLORS: Record<PriorityLevel, string> = {
-  Low: '#22c55e',
-  Medium: '#f59e0b',
-  High: '#ef4444',
+  Low: '#71717a',
+  Medium: '#a1a1aa',
+  High: '#ffffff',
 };
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
   not_started: 'var(--text-muted)',
-  in_progress: '#38bdf8',
-  completed: '#22c55e',
+  in_progress: '#ffffff',
+  completed: '#d4d4d8',
 };
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -128,10 +128,10 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
   const [showNewSection, setShowNewSection] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
   const [newSectionIcon, setNewSectionIcon] = useState('📁');
-  const [newSectionColor, setNewSectionColor] = useState('#6366f1');
+  const [newSectionColor, setNewSectionColor] = useState('#ffffff');
 
   const ICON_OPTIONS = ['📁', '⚡', '📚', '🏃', '🌙', '🎮', '💡', '🔬', '🎨', '🏋️', '💰', '🔧'];
-  const COLOR_OPTIONS = ['#6366f1', '#f59e0b', '#3b82f6', '#10b981', '#a855f7', '#ef4444', '#22c55e', '#38bdf8', '#f97316', '#64748b'];
+  const COLOR_OPTIONS = ['#ffffff', '#e4e4e7', '#d4d4d8', '#a1a1aa', '#71717a', '#52525b', '#3f3f46', '#27272a', '#18181b', '#000000'];
 
   const load = async () => {
     const secs = await db.sections.filter(s => !s.deleted).toArray();
@@ -607,7 +607,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                   <span>•</span>
                   <span>{remainingCount} remaining</span>
                   <span>•</span>
-                  <span style={{ color: remainingMinutes > 0 ? 'var(--accent-color)' : '#22c55e', fontWeight: 600 }}>
+                  <span style={{ color: remainingMinutes > 0 ? 'var(--accent-color)' : '#d4d4d8', fontWeight: 600 }}>
                     {remHrs > 0 ? `${remHrs}h ` : ''}{remMins}m focus left
                   </span>
                 </div>
@@ -630,7 +630,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                   type="button"
                   onClick={e => { e.stopPropagation(); void withActionFeedback('Deleting category', () => deleteSection(sec.id), e.currentTarget); }}
                   className="v-circle-btn"
-                  style={{ width: 30, height: 30, color: '#f87171' }}
+                  style={{ width: 30, height: 30, color: 'var(--text-secondary)' }}
                   aria-label="Delete category"
                 >
                   <Trash2 size={13} />
@@ -766,8 +766,8 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                               width: 22,
                               height: 22,
                               borderRadius: 6,
-                              border: `2px solid ${task.isCompleted ? '#22c55e' : 'var(--v-glass-border)'}`,
-                              background: task.isCompleted ? 'rgba(34,197,94,0.2)' : 'transparent',
+                              border: `2px solid ${task.isCompleted ? '#ffffff' : 'var(--v-glass-border)'}`,
+                              background: task.isCompleted ? '#ffffff' : 'transparent',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -777,7 +777,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                             }}
                             aria-label="Toggle complete"
                           >
-                            {task.isCompleted && <Check size={13} color="#22c55e" />}
+                            {task.isCompleted && <Check size={13} color="#000000" />}
                           </button>
 
                           <div
@@ -853,7 +853,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                               type="button"
                               onClick={e => { e.stopPropagation(); void withActionFeedback('Deleting task', () => deleteTask(task.id), e.currentTarget); }}
                               className="v-circle-btn"
-                              style={{ width: 28, height: 28, color: '#f87171' }}
+                              style={{ width: 28, height: 28, color: 'var(--text-secondary)' }}
                               aria-label="Delete task"
                             >
                               <Trash2 size={12} />
@@ -970,7 +970,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                                 {task.result && (
                                   <div>
                                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RESULT</div>
-                                    <p className="font-system" style={{ fontSize: 13, color: '#22c55e', margin: 0 }}>{task.result}</p>
+                                    <p className="font-system" style={{ fontSize: 13, color: '#ffffff', margin: 0 }}>{task.result}</p>
                                   </div>
                                 )}
                                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>

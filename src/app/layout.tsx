@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0a0b12',
+  themeColor: '#000000',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -43,7 +43,7 @@ export default function RootLayout({
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
-      <body className="h-full overflow-x-hidden font-body antialiased selection:bg-purple-600 selection:text-white">
+      <body className="h-full overflow-x-hidden font-body antialiased selection:bg-white selection:text-black">
         {children}
       </body>
     </html>

@@ -280,12 +280,12 @@ function SingleBookDeliveryCard({
                 width: 34,
                 height: 34,
                 borderRadius: 10,
-                background: isCompleted ? 'rgba(34, 197, 94, 0.15)' : 'rgba(99, 102, 241, 0.15)',
-                border: `1px solid ${isCompleted ? 'rgba(34, 197, 94, 0.3)' : 'rgba(99, 102, 241, 0.3)'}`,
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: isCompleted ? '#86efac' : '#a5b4fc',
+                color: '#ffffff',
               }}
             >
               {isCompleted ? <CheckCircle2 size={18} /> : <BookOpen size={18} />}
@@ -297,7 +297,7 @@ function SingleBookDeliveryCard({
                   by {book.author || 'Unknown'}
                 </span>
               </div>
-              <div style={{ fontSize: 12, color: isCompleted ? '#86efac' : 'var(--text-muted)', marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: isCompleted ? '#ffffff' : 'var(--text-muted)', marginTop: 2 }}>
                 {scheduleInfo.statusText}
               </div>
             </div>
@@ -310,9 +310,9 @@ function SingleBookDeliveryCard({
                 padding: '3px 10px',
                 borderRadius: 999,
                 fontWeight: 600,
-                background: isCompleted ? 'rgba(34, 197, 94, 0.2)' : 'rgba(148, 163, 184, 0.2)',
-                color: isCompleted ? '#86efac' : '#94a3b8',
-                border: `1px solid ${isCompleted ? 'rgba(34, 197, 94, 0.35)' : 'rgba(148, 163, 184, 0.3)'}`,
+                background: 'rgba(255, 255, 255, 0.1)',
+                color: isCompleted ? '#ffffff' : 'var(--text-muted)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
               }}
             >
               {isCompleted ? 'Completed' : 'No Schedule'}
@@ -341,45 +341,45 @@ function SingleBookDeliveryCard({
   const statusConfig = {
     scheduled: {
       label: countdown.isZero ? (countdown.isOverdue ? 'Overdue' : 'Due Now') : 'Scheduled',
-      bg: countdown.isZero ? 'rgba(245, 158, 11, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-      color: countdown.isZero ? '#fcd34d' : '#93c5fd',
-      border: countdown.isZero ? 'rgba(245, 158, 11, 0.4)' : 'rgba(59, 130, 246, 0.35)',
+      bg: 'rgba(255, 255, 255, 0.1)',
+      color: '#ffffff',
+      border: 'rgba(255, 255, 255, 0.25)',
     },
     sending: {
       label: 'Sending Now…',
-      bg: 'rgba(168, 85, 247, 0.25)',
-      color: '#d8b4fe',
-      border: 'rgba(168, 85, 247, 0.45)',
+      bg: 'rgba(255, 255, 255, 0.15)',
+      color: '#ffffff',
+      border: 'rgba(255, 255, 255, 0.35)',
     },
     sent: {
       label: 'Sent to Telegram',
-      bg: 'rgba(34, 197, 94, 0.2)',
-      color: '#86efac',
-      border: 'rgba(34, 197, 94, 0.35)',
+      bg: 'rgba(255, 255, 255, 0.1)',
+      color: '#ffffff',
+      border: 'rgba(255, 255, 255, 0.25)',
     },
     failed: {
       label: 'Delivery Failed',
-      bg: 'rgba(239, 68, 68, 0.2)',
-      color: '#fca5a5',
-      border: 'rgba(239, 68, 68, 0.4)',
+      bg: 'rgba(255, 255, 255, 0.08)',
+      color: 'var(--text-secondary)',
+      border: 'rgba(255, 255, 255, 0.2)',
     },
     cancelled: {
       label: 'Cancelled',
-      bg: 'rgba(148, 163, 184, 0.2)',
-      color: '#cbd5e1',
-      border: 'rgba(148, 163, 184, 0.3)',
+      bg: 'rgba(255, 255, 255, 0.06)',
+      color: 'var(--text-muted)',
+      border: 'rgba(255, 255, 255, 0.15)',
     },
     overdue: {
       label: 'Overdue · Awaiting Dispatch',
-      bg: 'rgba(245, 158, 11, 0.25)',
-      color: '#fbbf24',
-      border: 'rgba(245, 158, 11, 0.45)',
+      bg: 'rgba(255, 255, 255, 0.12)',
+      color: '#ffffff',
+      border: 'rgba(255, 255, 255, 0.3)',
     },
     draft: {
       label: 'Draft · Not Queued',
-      bg: 'rgba(148, 163, 184, 0.2)',
-      color: '#94a3b8',
-      border: 'rgba(148, 163, 184, 0.3)',
+      bg: 'rgba(255, 255, 255, 0.06)',
+      color: 'var(--text-muted)',
+      border: 'rgba(255, 255, 255, 0.15)',
     },
   }[nextDelivery.status];
 
@@ -389,9 +389,9 @@ function SingleBookDeliveryCard({
       style={{
         padding: '18px 20px',
         borderRadius: 16,
-        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.45), rgba(15, 23, 42, 0.65))',
-        border: `1px solid ${isSubMinute ? 'rgba(96, 165, 250, 0.6)' : isUrgent ? 'rgba(245, 158, 11, 0.4)' : 'var(--v-glass-border)'}`,
-        boxShadow: isSubMinute ? '0 0 20px rgba(59, 130, 246, 0.2)' : 'none',
+        background: 'var(--v-glass-bg-subtle)',
+        border: `1px solid ${isSubMinute ? '#ffffff' : isUrgent ? 'rgba(255, 255, 255, 0.4)' : 'var(--v-glass-border)'}`,
+        boxShadow: isSubMinute ? '0 0 20px rgba(255, 255, 255, 0.15)' : 'none',
         display: 'grid',
         gap: 14,
         position: 'relative',
@@ -408,12 +408,12 @@ function SingleBookDeliveryCard({
               width: 36,
               height: 36,
               borderRadius: 10,
-              background: isUrgent ? 'rgba(245, 158, 11, 0.2)' : 'rgba(99, 102, 241, 0.2)',
-              border: `1px solid ${isUrgent ? 'rgba(245, 158, 11, 0.4)' : 'rgba(99, 102, 241, 0.4)'}`,
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.25)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: isUrgent ? '#fbbf24' : '#a5b4fc',
+              color: '#ffffff',
             }}
           >
             <AlarmClock
@@ -569,15 +569,15 @@ function SingleBookDeliveryCard({
                 lineHeight: 1,
                 padding: '6px 10px',
                 borderRadius: 8,
-                background: isSubMinute ? 'rgba(59, 130, 246, 0.25)' : 'rgba(255, 255, 255, 0.06)',
-                color: isSubMinute ? '#93c5fd' : '#f8fafc',
-                border: isSubMinute ? '1px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.1)',
+                background: isSubMinute ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                color: '#ffffff',
+                border: isSubMinute ? '1px solid #ffffff' : '1px solid rgba(255, 255, 255, 0.1)',
                 transition: 'all 0.2s ease',
               }}
             >
               {countdown.digits.seconds}
             </span>
-            <span style={{ fontSize: 10, color: isSubMinute ? '#93c5fd' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <span style={{ fontSize: 10, color: isSubMinute ? '#ffffff' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Seconds
             </span>
           </div>
@@ -590,7 +590,7 @@ function SingleBookDeliveryCard({
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             Next delivery:{' '}
-            <strong style={{ color: '#93c5fd' }}>
+            <strong style={{ color: '#ffffff' }}>
               {nextDelivery.scheduledDate} at {nextDelivery.formattedTime12h}
             </strong>
           </div>
@@ -614,7 +614,7 @@ function SingleBookDeliveryCard({
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ color: 'var(--text-muted)' }}>Next section:</span>
-          <strong style={{ color: 'var(--accent-color, #60a5fa)' }}>
+          <strong style={{ color: 'var(--text-primary)' }}>
             {nextDelivery.dayNumber ? `Day ${nextDelivery.dayNumber}` : ''}
             {nextDelivery.sectionNumber ? ` · Part ${nextDelivery.sectionNumber}` : ''}{' '}
             (pp. {nextDelivery.startPdfPage}–{nextDelivery.endPdfPage})
@@ -724,7 +724,7 @@ function SingleBookDeliveryCard({
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
-                color: '#fca5a5',
+                color: 'var(--text-secondary)',
               }}
             >
               {cancellingDelivery ? (
@@ -811,9 +811,9 @@ function SingleBookDeliveryCard({
                 fontSize: 12,
                 padding: '6px 12px',
                 borderRadius: 8,
-                background: 'rgba(59, 130, 246, 0.15)',
-                border: '1px solid rgba(59, 130, 246, 0.3)',
-                color: '#93c5fd',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                color: '#ffffff',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
@@ -920,12 +920,12 @@ export function LiveBookDeliveryCountdown({
               width: 40,
               height: 40,
               borderRadius: 12,
-              background: 'rgba(99, 102, 241, 0.15)',
-              border: '1px solid rgba(99, 102, 241, 0.3)',
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#a5b4fc',
+              color: '#ffffff',
             }}
           >
             <AlarmClock size={20} />
@@ -948,7 +948,7 @@ export function LiveBookDeliveryCountdown({
       {/* Global Header Bar for Scheduled Deliveries */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <AlarmClock size={16} color="var(--accent-color, #60a5fa)" />
+          <AlarmClock size={16} color="var(--text-primary)" />
           <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.5, color: 'var(--text-primary)' }}>
             SCHEDULED BOOK DELIVERIES ({books.length} {books.length === 1 ? 'Book' : 'Books'})
           </span>
@@ -962,7 +962,7 @@ export function LiveBookDeliveryCountdown({
           title={soundEnabled ? 'Alarm chime enabled (click to mute)' : 'Alarm chime muted (click to enable)'}
           aria-label={soundEnabled ? 'Mute alarm chime' : 'Enable alarm chime'}
         >
-          {soundEnabled ? <Volume2 size={13} color="#60a5fa" /> : <VolumeX size={13} color="var(--text-muted)" />}
+          {soundEnabled ? <Volume2 size={13} color="#ffffff" /> : <VolumeX size={13} color="var(--text-muted)" />}
         </button>
       </div>
 
@@ -972,9 +972,9 @@ export function LiveBookDeliveryCountdown({
           style={{
             padding: '8px 12px',
             borderRadius: 8,
-            background: 'rgba(34, 197, 94, 0.15)',
-            border: '1px solid rgba(34, 197, 94, 0.35)',
-            color: '#86efac',
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.25)',
+            color: '#ffffff',
             fontSize: 12,
             display: 'flex',
             alignItems: 'center',
@@ -982,7 +982,7 @@ export function LiveBookDeliveryCountdown({
           }}
         >
           <span>{actionNotice}</span>
-          <button type="button" onClick={() => setActionNotice('')} style={{ background: 'none', border: 'none', color: '#86efac', cursor: 'pointer' }}>
+          <button type="button" onClick={() => setActionNotice('')} style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer' }}>
             <X size={12} />
           </button>
         </div>
@@ -992,9 +992,9 @@ export function LiveBookDeliveryCountdown({
           style={{
             padding: '8px 12px',
             borderRadius: 8,
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.35)',
-            color: '#fca5a5',
+            background: 'rgba(255, 255, 255, 0.08)',
+            border: '1px solid rgba(255, 255, 255, 0.25)',
+            color: 'var(--text-secondary)',
             fontSize: 12,
             display: 'flex',
             alignItems: 'center',
@@ -1002,7 +1002,7 @@ export function LiveBookDeliveryCountdown({
           }}
         >
           <span>{actionError}</span>
-          <button type="button" onClick={() => setActionError('')} style={{ background: 'none', border: 'none', color: '#fca5a5', cursor: 'pointer' }}>
+          <button type="button" onClick={() => setActionError('')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
             <X size={12} />
           </button>
         </div>

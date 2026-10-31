@@ -56,26 +56,26 @@ export interface StrategyColor {
 }
 
 export const STRATEGY_COLORS: StrategyColor[] = [
-  { id: 'crimson', label: 'Red', darkHex: '#f87171', lightHex: '#b91c1c' },
-  { id: 'amber', label: 'Orange', darkHex: '#fbbf24', lightHex: '#b45309' },
-  { id: 'yellow', label: 'Yellow', darkHex: '#fde047', lightHex: '#854d0e' },
-  { id: 'emerald', label: 'Green', darkHex: '#34d399', lightHex: '#047857' },
-  { id: 'cyan', label: 'Cyan', darkHex: '#22d3ee', lightHex: '#0e7490' },
-  { id: 'blue', label: 'Blue', darkHex: '#60a5fa', lightHex: '#1d4ed8' },
-  { id: 'purple', label: 'Purple', darkHex: '#c084fc', lightHex: '#7e22ce' },
-  { id: 'pink', label: 'Pink', darkHex: '#f472b6', lightHex: '#be185d' },
+  { id: 'white', label: 'White', darkHex: '#ffffff', lightHex: '#000000' },
+  { id: 'silver', label: 'Silver', darkHex: '#f4f4f5', lightHex: '#18181b' },
+  { id: 'light-gray', label: 'Light Gray', darkHex: '#e4e4e7', lightHex: '#27272a' },
+  { id: 'gray', label: 'Gray', darkHex: '#d4d4d8', lightHex: '#3f3f46' },
+  { id: 'neutral-light', label: 'Neutral Light', darkHex: '#d4d4d8', lightHex: '#52525b' },
+  { id: 'neutral', label: 'Neutral', darkHex: '#a1a1aa', lightHex: '#52525b' },
+  { id: 'medium-gray', label: 'Medium Gray', darkHex: '#8e8e93', lightHex: '#71717a' },
+  { id: 'charcoal', label: 'Charcoal', darkHex: '#71717a', lightHex: '#a1a1aa' },
 ];
 
-// Presets for section colors
+// Presets for section colors (Clean Black & White / Grayscale)
 export const PRESET_SECTION_COLORS = [
-  { name: 'Purple', dark: '#a855f7', light: '#7e22ce' },
-  { name: 'Amber', dark: '#f59e0b', light: '#b45309' },
-  { name: 'Blue', dark: '#3b82f6', light: '#1d4ed8' },
-  { name: 'Emerald', dark: '#10b981', light: '#047857' },
-  { name: 'Indigo', dark: '#6366f1', light: '#4338ca' },
-  { name: 'Rose', dark: '#f43f5e', light: '#be123c' },
-  { name: 'Cyan', dark: '#06b6d4', light: '#0e7490' },
-  { name: 'Slate', dark: '#94a3b8', light: '#475569' },
+  { name: 'White', dark: '#ffffff', light: '#000000' },
+  { name: 'Silver', dark: '#f4f4f5', light: '#18181b' },
+  { name: 'Light Gray', dark: '#e4e4e7', light: '#27272a' },
+  { name: 'Gray', dark: '#d4d4d8', light: '#3f3f46' },
+  { name: 'Neutral Light', dark: '#d4d4d8', light: '#52525b' },
+  { name: 'Neutral', dark: '#a1a1aa', light: '#52525b' },
+  { name: 'Medium Gray', dark: '#8e8e93', light: '#71717a' },
+  { name: 'Charcoal', dark: '#71717a', light: '#a1a1aa' },
 ];
 
 export const SECTION_COLORS = PRESET_SECTION_COLORS.map(c => c.dark);

@@ -117,8 +117,8 @@ export function TelegramQuickSend({
             gap: 6,
             width: '100%',
             justifyContent: 'center',
-            background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.18), rgba(59, 130, 246, 0.18))',
-            borderColor: 'rgba(234, 179, 8, 0.45)',
+            background: 'var(--v-glass-bg-subtle)',
+            borderColor: 'var(--v-glass-border)',
             color: 'var(--text-primary)',
             fontWeight: 600,
           }}
@@ -209,8 +209,8 @@ export function TelegramQuickSend({
           <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{text.length}/{media ? 1024 : 3500} characters · Ctrl+Enter to send</span>
           <button type="button" onClick={() => void sendMessage()} disabled={(!text.trim() && !media) || sending} className="v-pill-btn v-pill-btn-primary" style={{ padding: '7px 14px', minHeight: 36, fontSize: 12 }}><Send size={13} />{sending ? 'Sending…' : media?.type.startsWith('image/') ? 'Send image' : media ? 'Send voice' : 'Send'}</button>
         </div>
-        {notice && <p role="status" style={{ margin: 0, color: '#22c55e', fontSize: 12 }}>{notice}</p>}
-        {error && <p role="alert" style={{ margin: 0, color: '#f87171', fontSize: 12 }}>{error}</p>}
+        {notice && <p role="status" style={{ margin: 0, color: 'var(--text-primary)', fontSize: 12 }}>{notice}</p>}
+        {error && <p role="alert" style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 12 }}>{error}</p>}
       </section>}
       {showTrigger && <button
         type="button"

@@ -204,7 +204,7 @@ export function useTimer() {
       taskId: string,
       taskTitle: string,
       durationOrColor: number | string = 25,
-      sectionColorParam = '#38bdf8'
+      sectionColorParam = '#ffffff'
     ) => {
       let durationMinutes = 25;
       let sectionColor = sectionColorParam;

@@ -273,7 +273,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
         </div>
         <div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>COMPLETED</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#22c55e', marginTop: 2 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#ffffff', marginTop: 2 }}>
             {completedTasksCount} <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>({completionPct}%)</span>
           </div>
         </div>
@@ -285,7 +285,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
         </div>
         <div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>STATUS</div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: wordCount >= 100 ? '#22c55e' : '#f59e0b', marginTop: 4 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginTop: 4 }}>
             {wordCount >= 100 ? '✅ Plan Defined' : '⚠️ Prompt Incomplete'}
           </div>
         </div>
@@ -313,9 +313,9 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
                 borderRadius: 9999,
                 fontSize: 12,
                 fontWeight: 700,
-                border: `1.5px solid ${isWordCountValid ? '#22c55e' : '#f59e0b'}`,
-                background: isWordCountValid ? 'rgba(34, 197, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                color: isWordCountValid ? '#22c55e' : '#f59e0b',
+                border: `1.5px solid ${isWordCountValid ? 'rgba(255, 255, 255, 0.4)' : 'rgba(255, 255, 255, 0.15)'}`,
+                background: isWordCountValid ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                color: isWordCountValid ? '#ffffff' : 'var(--text-muted)',
                 transition: 'all 0.2s',
               }}
             >
@@ -360,7 +360,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
             {/* Main Goals */}
             <div>
               <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <Target size={13} color="#22c55e" /> Main Goals & High Priorities
+                <Target size={13} color="var(--text-primary)" /> Main Goals & High Priorities
               </label>
               <textarea
                 value={goals}
@@ -375,7 +375,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
             {/* Constraints & Non-negotiables */}
             <div>
               <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <ShieldAlert size={13} color="#f59e0b" /> Constraints & Expected Outcomes
+                <ShieldAlert size={13} color="var(--text-primary)" /> Constraints & Expected Outcomes
               </label>
               <textarea
                 value={outcomes}
@@ -394,13 +394,13 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
               style={{
                 padding: '12px 16px',
                 borderRadius: 12,
-                background: 'rgba(239, 68, 68, 0.12)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
                 fontSize: 13,
-                color: '#ef4444',
+                color: 'var(--text-primary)',
               }}
             >
               <AlertCircle size={16} style={{ flexShrink: 0 }} />
@@ -506,7 +506,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
                       ({w.wordCount} words)
                     </span>
                   </div>
-                  <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>
                     {w.completionPercentage !== undefined ? `${w.completionPercentage}% completed` : 'Saved'}
                   </span>
                 </div>

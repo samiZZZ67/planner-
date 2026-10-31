@@ -474,7 +474,7 @@ export function handleFallbackNaturalLanguage(
           type: 'create_section',
           params: {
             name: catName,
-            color: '#8b5cf6',
+            color: '#ffffff',
             icon: '🎨',
           },
         },

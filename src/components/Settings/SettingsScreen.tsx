@@ -102,9 +102,9 @@ export function SettingsScreen({
           className="v-card"
           style={{
             padding: '12px 18px',
-            background: 'rgba(34, 197, 94, 0.15)',
-            borderColor: 'rgba(34, 197, 94, 0.35)',
-            color: '#22c55e',
+            background: 'rgba(255, 255, 255, 0.08)',
+            borderColor: 'rgba(255, 255, 255, 0.25)',
+            color: '#ffffff',
             fontSize: 13,
             fontWeight: 600,
             display: 'flex',
@@ -177,12 +177,12 @@ export function SettingsScreen({
           >
             {theme === 'dark' ? (
               <>
-                <Sun size={15} style={{ color: '#f59e0b' }} />
+                <Sun size={15} style={{ color: '#ffffff' }} />
                 <span>Switch to White Glass</span>
               </>
             ) : (
               <>
-                <Moon size={15} style={{ color: '#38bdf8' }} />
+                <Moon size={15} style={{ color: '#000000' }} />
                 <span>Switch to Dark Glass</span>
               </>
             )}
@@ -213,16 +213,12 @@ export function SettingsScreen({
               borderRadius: 6,
               background:
                 notifStatus === 'granted'
-                  ? 'rgba(34, 197, 94, 0.2)'
-                  : notifStatus === 'denied'
-                  ? 'rgba(239, 68, 68, 0.2)'
-                  : 'rgba(56, 189, 248, 0.2)',
+                  ? 'rgba(255, 255, 255, 0.15)'
+                  : 'rgba(255, 255, 255, 0.06)',
               color:
                 notifStatus === 'granted'
-                  ? '#22c55e'
-                  : notifStatus === 'denied'
-                  ? '#ef4444'
-                  : 'var(--accent-color)',
+                  ? '#ffffff'
+                  : 'var(--text-muted)',
             }}
           >
             {notifStatus === 'granted'
@@ -291,8 +287,8 @@ export function SettingsScreen({
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
             TELEGRAM AUTOMATION & DAILY BRIEFS
           </div>
-          <span style={{ fontSize: 11, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+          <span style={{ fontSize: 11, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ffffff', display: 'inline-block' }} />
             Active (UTC+3 / EAT)
           </span>
         </div>
@@ -328,8 +324,8 @@ export function SettingsScreen({
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
             ETHIOPIAN CALENDAR & HABESHA CLOCK SYSTEM
           </div>
-          <span style={{ fontSize: 11, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#38bdf8', display: 'inline-block' }} />
+          <span style={{ fontSize: 11, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ffffff', display: 'inline-block' }} />
             Africa/Addis_Ababa (UTC+3)
           </span>
         </div>
@@ -435,7 +431,7 @@ export function SettingsScreen({
               type="button"
               onClick={onLogout}
               className="v-pill-btn"
-              style={{ padding: '8px 18px', fontSize: 13, color: '#f87171' }}
+              style={{ padding: '8px 18px', fontSize: 13, color: 'var(--text-secondary)' }}
             >
               <LogOut size={14} />
               <span>Sign Out</span>
@@ -484,7 +480,7 @@ export function SettingsScreen({
         </div>
 
         {importError && (
-          <div style={{ fontSize: 12, color: '#f87171' }}>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
             {importError}
           </div>
         )}
@@ -619,7 +615,7 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
                 style={{
                   fontSize: 11,
                   fontWeight: 600,
-                  color: p.configured ? '#22c55e' : 'var(--text-muted)',
+                  color: p.configured ? '#ffffff' : 'var(--text-muted)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
@@ -668,7 +664,7 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
             )}
 
             {p.isRateLimited && (
-              <span style={{ fontSize: 11, color: '#f59e0b' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 ⏳ Rate limit cooldown active
               </span>
             )}

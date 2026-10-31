@@ -55,8 +55,8 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
             pointerEvents: 'auto',
             marginBottom: 8,
             padding: '8px 16px',
-            background: isFocus ? 'rgba(56, 189, 248, 0.2)' : 'rgba(34, 197, 94, 0.2)',
-            borderColor: isFocus ? '#38bdf8' : '#22c55e',
+            background: isFocus ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+            borderColor: isFocus ? 'var(--v-glass-border-bright)' : 'var(--v-glass-border)',
             display: 'flex',
             alignItems: 'center',
             gap: 10,
@@ -69,7 +69,7 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
               width: 8,
               height: 8,
               borderRadius: '50%',
-              background: isFocus ? '#38bdf8' : '#22c55e',
+              background: isFocus ? '#ffffff' : '#a1a1aa',
               animation: 'timerPulse 1.4s infinite',
               flexShrink: 0,
             }}
@@ -92,7 +92,7 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
               fontFamily: 'monospace',
               fontSize: 13,
               fontWeight: 800,
-              color: isFocus ? '#38bdf8' : '#22c55e',
+              color: isFocus ? '#ffffff' : '#d4d4d8',
               flexShrink: 0,
             }}
           >
@@ -124,7 +124,7 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
               type="button"
               onClick={stopTimer}
               className="v-circle-btn"
-              style={{ width: 28, height: 28, color: '#f87171' }}
+              style={{ width: 28, height: 28, color: 'var(--text-primary)' }}
               aria-label="Stop Pomodoro"
             >
               <Square size={12} />

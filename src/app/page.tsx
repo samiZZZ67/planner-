@@ -350,7 +350,7 @@ export default function SamsSpaceApp() {
   }
 
   return (
-    <div className="min-h-screen relative flex flex-col items-center justify-start overflow-x-hidden selection:bg-sky-500/30 selection:text-white">
+    <div className="min-h-screen relative flex flex-col items-center justify-start overflow-x-hidden selection:bg-white selection:text-black">
       <ActionFeedbackHost />
       {/* ── 1. Room Backdrop ── */}
       <div className="vision-room-bg" />

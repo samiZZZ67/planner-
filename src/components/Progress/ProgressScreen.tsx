@@ -121,10 +121,10 @@ export function ProgressScreen({ sections, isPhone }: ProgressScreenProps) {
   };
 
   const summaryCards = [
-    { key: 'hours', label: 'Hours Spent', value: `${summary.hours}h`, prev: prevSummary.hours, icon: <Clock size={16} />, color: 'rgba(139,92,246,0.8)' },
-    { key: 'tasks', label: 'Tasks Done', value: summary.tasks, prev: prevSummary.tasks, icon: <CheckCircle2 size={16} />, color: 'rgba(99,102,241,0.8)' },
-    { key: 'completion', label: 'Completion', value: `${summary.completion}%`, prev: prevSummary.completion, icon: <Target size={16} />, color: 'rgba(34,197,94,0.8)' },
-    { key: 'streak', label: 'Day Streak', value: `${summary.streak} 🔥`, prev: prevSummary.streak, icon: <Flame size={16} />, color: 'rgba(234,179,8,0.8)' },
+    { key: 'hours', label: 'Hours Spent', value: `${summary.hours}h`, prev: prevSummary.hours, icon: <Clock size={16} />, color: 'rgba(255,255,255,0.9)' },
+    { key: 'tasks', label: 'Tasks Done', value: summary.tasks, prev: prevSummary.tasks, icon: <CheckCircle2 size={16} />, color: 'rgba(255,255,255,0.9)' },
+    { key: 'completion', label: 'Completion', value: `${summary.completion}%`, prev: prevSummary.completion, icon: <Target size={16} />, color: 'rgba(255,255,255,0.9)' },
+    { key: 'streak', label: 'Day Streak', value: `${summary.streak} 🔥`, prev: prevSummary.streak, icon: <Flame size={16} />, color: 'rgba(255,255,255,0.9)' },
   ];
 
   const getMainData = () => {
@@ -150,7 +150,7 @@ export function ProgressScreen({ sections, isPhone }: ProgressScreenProps) {
           {([7, 28, 90] as Range[]).map(r => (
             <button key={r} onClick={() => setRange(r)}
               className="g-btn"
-              style={{ padding: '7px 14px', fontSize: 12, background: range === r ? 'rgba(139,92,246,0.2)' : 'var(--glass-bg)', borderColor: range === r ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.07)', color: range === r ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.4)' }}>
+              style={{ padding: '7px 14px', fontSize: 12, background: range === r ? 'rgba(255,255,255,0.15)' : 'var(--glass-bg)', borderColor: range === r ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.07)', color: range === r ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.4)' }}>
               {r}d
             </button>
           ))}
@@ -164,14 +164,14 @@ export function ProgressScreen({ sections, isPhone }: ProgressScreenProps) {
           return (
             <button key={card.key} onClick={() => setMainChart(card.key as MainChart)}
               className="g-card"
-              style={{ padding: '16px', textAlign: 'left', cursor: 'pointer', border: `1px solid ${mainChart === card.key ? 'rgba(139,92,246,0.35)' : 'rgba(255,255,255,0.07)'}`, background: mainChart === card.key ? 'rgba(139,92,246,0.06)' : 'var(--glass-bg)' }}>
+              style={{ padding: '16px', textAlign: 'left', cursor: 'pointer', border: `1px solid ${mainChart === card.key ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.07)'}`, background: mainChart === card.key ? 'rgba(255,255,255,0.06)' : 'var(--glass-bg)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                 <div style={{ color: card.color }}>{card.icon}</div>
                 <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 600, letterSpacing: '0.06em' }}>{card.label.toUpperCase()}</span>
               </div>
               <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'monospace', color: 'rgba(255,255,255,0.9)' }}>{card.value}</div>
               {d && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: 10, color: d.up ? 'rgba(34,197,94,0.8)' : 'rgba(239,68,68,0.8)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: 10, color: d.up ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)' }}>
                   {d.up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
                   <span>{d.up ? '+' : ''}{d.pct}% vs prev period</span>
                 </div>
@@ -185,10 +185,10 @@ export function ProgressScreen({ sections, isPhone }: ProgressScreenProps) {
       <div className="g-card" style={{ padding: '20px 16px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Activity size={14} style={{ color: 'rgba(139,92,246,0.8)' }} />
+            <Activity size={14} style={{ color: '#ffffff' }} />
             <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{mainLabel} — {range}-day view</span>
           </div>
-          <button onClick={() => setCumulative(!cumulative)} className="g-btn" style={{ padding: '5px 12px', fontSize: 11, borderColor: cumulative ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.07)', color: cumulative ? 'rgba(139,92,246,0.9)' : 'rgba(255,255,255,0.4)' }}>
+          <button onClick={() => setCumulative(!cumulative)} className="g-btn" style={{ padding: '5px 12px', fontSize: 11, borderColor: cumulative ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.07)', color: cumulative ? '#ffffff' : 'rgba(255,255,255,0.4)' }}>
             {cumulative ? '📈 Cumulative' : '📊 Daily'}
           </button>
         </div>
@@ -196,15 +196,15 @@ export function ProgressScreen({ sections, isPhone }: ProgressScreenProps) {
           <AreaChart data={data}>
             <defs>
               <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="rgba(139,92,246,0.4)" />
-                <stop offset="95%" stopColor="rgba(139,92,246,0)" />
+                <stop offset="5%" stopColor="rgba(255,255,255,0.3)" />
+                <stop offset="95%" stopColor="rgba(255,255,255,0)" />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="2 4" stroke={gridColor} />
             <XAxis dataKey="date" tick={axisStyle} axisLine={{ stroke: gridColor }} tickLine={false} />
             <YAxis tick={axisStyle} axisLine={false} tickLine={false} />
             <Tooltip content={<GlassTooltip />} />
-            <Area type="monotone" dataKey={mainKey} name={mainLabel} stroke="rgba(139,92,246,0.9)" strokeWidth={2} fill="url(#grad1)" dot={false} activeDot={{ r: 4, fill: '#8b5cf6' }} />
+            <Area type="monotone" dataKey={mainKey} name={mainLabel} stroke="#ffffff" strokeWidth={2} fill="url(#grad1)" dot={false} activeDot={{ r: 4, fill: '#ffffff' }} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -214,7 +214,7 @@ export function ProgressScreen({ sections, isPhone }: ProgressScreenProps) {
         {/* Estimated vs Actual */}
         <div className="g-card" style={{ padding: '18px 14px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-            <BarChart3 size={13} style={{ color: 'rgba(99,102,241,0.7)' }} />
+            <BarChart3 size={13} style={{ color: '#ffffff' }} />
             <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.5)' }}>ESTIMATED VS ACTUAL HOURS</span>
           </div>
           <ResponsiveContainer width="100%" height={isPhone ? 160 : 200}>
@@ -224,8 +224,8 @@ export function ProgressScreen({ sections, isPhone }: ProgressScreenProps) {
               <YAxis tick={axisStyle} axisLine={false} tickLine={false} />
               <Tooltip content={<GlassTooltip />} />
               <Legend wrapperStyle={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }} />
-              <Bar dataKey="estimated" name="Estimated" fill="rgba(99,102,241,0.35)" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="actual" name="Actual" fill="rgba(139,92,246,0.6)" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="estimated" name="Estimated" fill="rgba(255,255,255,0.25)" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="actual" name="Actual" fill="rgba(255,255,255,0.65)" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -233,7 +233,7 @@ export function ProgressScreen({ sections, isPhone }: ProgressScreenProps) {
         {/* Section Donut */}
         <div className="g-card" style={{ padding: '18px 14px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-            <PieIcon size={13} style={{ color: 'rgba(34,197,94,0.7)' }} />
+            <PieIcon size={13} style={{ color: '#ffffff' }} />
             <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.5)' }}>TIME BY SECTION</span>
           </div>
           {sectionData.length === 0 ? (

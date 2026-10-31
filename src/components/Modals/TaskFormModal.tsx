@@ -508,14 +508,14 @@ export function TaskFormModal({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   borderRadius: 12,
-                  borderColor: mustDo ? 'rgba(234,179,8,0.5)' : 'rgba(255,255,255,0.08)',
-                  background: mustDo ? 'rgba(234,179,8,0.1)' : 'var(--glass-bg-light)',
-                  color: mustDo ? 'rgba(234,179,8,0.95)' : 'var(--text-muted)',
+                  borderColor: mustDo ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.08)',
+                  background: mustDo ? 'rgba(255,255,255,0.12)' : 'var(--glass-bg-light)',
+                  color: mustDo ? '#ffffff' : 'var(--text-muted)',
                 }}
                 aria-pressed={mustDo}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                  <Star size={14} style={{ color: mustDo ? '#eab308' : 'currentColor', fill: mustDo ? '#eab308' : 'none' }} />
+                  <Star size={14} style={{ color: mustDo ? '#ffffff' : 'currentColor', fill: mustDo ? '#ffffff' : 'none' }} />
                   <span>{mustDo ? 'Must-Do' : 'Normal'}</span>
                 </div>
                 <span style={{ fontSize: 10, opacity: 0.6 }}>Max 3</span>
@@ -585,7 +585,7 @@ export function TaskFormModal({
                 </button>
                 <button
                   type="button"
-                  onClick={() => executeCommand('hiliteColor', '#fde047')}
+                  onClick={() => executeCommand('hiliteColor', '#52525b')}
                   className="g-icon-btn"
                   style={{ width: 24, height: 24, border: 'none', background: 'transparent' }}
                   title="Highlight"

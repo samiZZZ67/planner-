@@ -248,13 +248,13 @@ function QuizContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0b12] text-white flex flex-col items-center justify-center p-6">
-        <div className="w-16 h-16 rounded-2xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center mb-4 animate-pulse">
-          <BookOpen className="w-8 h-8 text-purple-400" />
+      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6">
+        <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center mb-4 animate-pulse">
+          <BookOpen className="w-8 h-8 text-white" />
         </div>
         <h2 className="text-xl font-bold mb-2">Loading Practice Quiz...</h2>
         <p className="text-sm text-gray-400 flex items-center gap-2">
-          <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+          <Loader2 className="w-4 h-4 animate-spin text-white" />
           Retrieving book pages and questions
         </p>
       </div>
@@ -263,26 +263,26 @@ function QuizContent() {
 
   if (error || !book || !assignment || questions.length === 0) {
     return (
-      <div className="min-h-screen bg-[#0a0b12] text-white flex flex-col items-center justify-center p-6">
-        <div className="max-w-md w-full bg-gray-900/80 border border-red-500/30 rounded-2xl p-6 text-center shadow-xl">
-          <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-7 h-7 text-red-400" />
+      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6">
+        <div className="max-w-md w-full bg-neutral-900 border border-neutral-700 rounded-2xl p-6 text-center shadow-xl">
+          <div className="w-14 h-14 rounded-full bg-white/10 border border-white/20 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-7 h-7 text-neutral-300" />
           </div>
-          <h2 className="text-lg font-bold text-red-400 mb-2">Quiz Unavailable</h2>
+          <h2 className="text-lg font-bold text-white mb-2">Quiz Unavailable</h2>
           <p className="text-sm text-gray-300 mb-6">
             {error || 'No practice questions are available for this section yet.'}
           </p>
           <div className="flex flex-col gap-3">
             <button
               onClick={() => window.location.reload()}
-              className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-medium transition"
+              className="w-full py-2.5 px-4 bg-white hover:bg-neutral-200 text-black rounded-xl font-medium transition"
             >
               Try Reloading
             </button>
             <button
               type="button"
               onClick={handleExitQuiz}
-              className="w-full py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl font-medium transition text-center"
+              className="w-full py-2.5 px-4 bg-neutral-800 hover:bg-neutral-700 text-gray-300 rounded-xl font-medium transition text-center"
             >
               Back to Book Planner
             </button>
@@ -293,30 +293,30 @@ function QuizContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0b12] text-gray-100 selection:bg-purple-600 selection:text-white pb-24">
+    <div className="min-h-screen bg-black text-gray-100 selection:bg-white selection:text-black pb-24">
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-[#0e101b]/90 backdrop-blur-md border-b border-gray-800 px-4 py-3">
+      <header className="sticky top-0 z-40 bg-neutral-900/90 backdrop-blur-md border-b border-neutral-800 px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <button
             type="button"
             onClick={handleExitQuiz}
-            className="flex items-center gap-2 text-xs font-semibold text-gray-400 hover:text-white transition py-1 px-2 rounded-lg hover:bg-gray-800/60"
+            className="flex items-center gap-2 text-xs font-semibold text-gray-400 hover:text-white transition py-1 px-2 rounded-lg hover:bg-neutral-800/60"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>NightPlanner</span>
           </button>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs px-2.5 py-1 rounded-full bg-purple-900/40 border border-purple-500/30 text-purple-300 font-medium">
+            <span className="text-xs px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-neutral-200 font-medium">
               Day {assignment.dayNumber} Practice
             </span>
-            <span className="text-xs px-2.5 py-1 rounded-full bg-blue-900/40 border border-blue-500/30 text-blue-300 font-medium">
+            <span className="text-xs px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-neutral-200 font-medium">
               PDF pp. {assignment.startPdfPage}–{assignment.endPdfPage}
             </span>
             <button
               type="button"
               onClick={handleExitQuiz}
-              className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-gray-400 hover:text-white transition ml-1"
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 text-gray-400 hover:text-white transition ml-1"
               title="Close Quiz (X)"
               aria-label="Close Quiz"
             >
@@ -329,10 +329,10 @@ function QuizContent() {
       {/* Main Container */}
       <main className="max-w-3xl mx-auto px-4 pt-6">
         {/* Book & Assignment Overview Card */}
-        <div className="bg-gradient-to-br from-gray-900/90 to-purple-950/20 border border-purple-900/40 rounded-2xl p-5 mb-6 shadow-xl">
+        <div className="bg-gradient-to-br from-neutral-900 to-neutral-950 border border-white/15 rounded-2xl p-5 mb-6 shadow-xl">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 text-xs font-medium text-purple-400 mb-1">
+              <div className="flex items-center gap-2 text-xs font-medium text-neutral-300 mb-1">
                 <BookMarked className="w-3.5 h-3.5" />
                 <span>Reading Assignment Quiz</span>
                 <span className="text-gray-500">·</span>
@@ -348,12 +348,12 @@ function QuizContent() {
           </div>
 
           {assignment.concepts && assignment.concepts.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-800/80 flex flex-wrap gap-2">
+            <div className="mt-4 pt-4 border-t border-neutral-800 flex flex-wrap gap-2">
               <span className="text-xs font-semibold text-gray-400 self-center mr-1">Concepts:</span>
               {assignment.concepts.map((c, i) => (
                 <span
                   key={i}
-                  className="text-xs px-2.5 py-1 rounded-md bg-gray-800/90 border border-gray-700/60 text-gray-200"
+                  className="text-xs px-2.5 py-1 rounded-md bg-neutral-800 border border-neutral-700 text-gray-200"
                 >
                   {c.title}
                 </span>
@@ -364,19 +364,19 @@ function QuizContent() {
 
         {/* Score Hero Banner (when submitted) */}
         {submitted && submissionResult && (
-          <div className="bg-gradient-to-br from-gray-900 via-gray-900/95 to-purple-950/40 border-2 border-purple-500/50 rounded-2xl p-6 mb-8 shadow-2xl text-center">
-            <div className="w-16 h-16 rounded-full bg-purple-500/20 border-2 border-purple-400 flex items-center justify-center mx-auto mb-3 shadow-inner">
-              <Award className="w-8 h-8 text-purple-300" />
+          <div className="bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-950 border-2 border-white/30 rounded-2xl p-6 mb-8 shadow-2xl text-center">
+            <div className="w-16 h-16 rounded-full bg-white/10 border-2 border-white flex items-center justify-center mx-auto mb-3 shadow-inner">
+              <Award className="w-8 h-8 text-white" />
             </div>
 
             <div className="text-4xl sm:text-5xl font-black text-white tracking-tight mb-1">
               {submissionResult.score}%
             </div>
-            <p className="text-sm font-medium text-purple-300 mb-2">
+            <p className="text-sm font-medium text-neutral-300 mb-2">
               {submissionResult.correctCount} of {submissionResult.totalQuestions} Questions Correct
             </p>
 
-            <div className="inline-block px-3 py-1 rounded-full text-xs font-semibold mb-4 bg-purple-950/60 border border-purple-500/30 text-purple-200">
+            <div className="inline-block px-3 py-1 rounded-full text-xs font-semibold mb-4 bg-white/10 border border-white/20 text-white">
               {submissionResult.score >= 80
                 ? '🌟 Outstanding Mastery!'
                 : submissionResult.score >= 60
@@ -387,14 +387,14 @@ function QuizContent() {
             <div className="flex items-center justify-center gap-3 mt-2">
               <button
                 onClick={handleRetake}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 text-sm font-medium text-gray-200 transition"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm font-medium text-gray-200 transition"
               >
-                <RotateCcw className="w-4 h-4 text-purple-400" />
+                <RotateCcw className="w-4 h-4 text-white" />
                 <span>Retake Quiz</span>
               </button>
               <Link
                 href="/"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-sm font-medium text-white transition shadow-lg shadow-purple-900/30"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white hover:bg-neutral-200 text-sm font-semibold text-black transition shadow-lg shadow-black/50"
               >
                 <span>Done</span>
                 <ChevronRight className="w-4 h-4" />
@@ -405,16 +405,16 @@ function QuizContent() {
 
         {/* Progress Tracker (when not submitted) */}
         {!submitted && (
-          <div className="bg-gray-900/70 border border-gray-800/80 rounded-xl p-4 mb-6">
+          <div className="bg-neutral-900/80 border border-neutral-800 rounded-xl p-4 mb-6">
             <div className="flex items-center justify-between text-xs font-medium text-gray-400 mb-2">
               <span>Your Progress</span>
               <span>
                 {answeredCount} of {totalCount} Answered ({progressPercent}%)
               </span>
             </div>
-            <div className="w-full bg-gray-800 rounded-full h-2.5 overflow-hidden">
+            <div className="w-full bg-neutral-800 rounded-full h-2.5 overflow-hidden">
               <div
-                className="bg-gradient-to-r from-purple-500 to-indigo-500 h-full rounded-full transition-all duration-300"
+                className="bg-gradient-to-r from-neutral-400 to-white h-full rounded-full transition-all duration-300"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -431,38 +431,32 @@ function QuizContent() {
             return (
               <div
                 key={q.id || qIndex}
-                className={`bg-gray-900/70 rounded-2xl p-5 sm:p-6 border transition-all ${
+                className={`bg-neutral-900/80 rounded-2xl p-5 sm:p-6 border transition-all ${
                   submitted
                     ? resultItem?.isCorrect
-                      ? 'border-emerald-500/40 bg-emerald-950/10'
-                      : 'border-red-500/40 bg-red-950/10'
+                      ? 'border-white/40 bg-white/5'
+                      : 'border-neutral-700 bg-neutral-900/60'
                     : isAnswered
-                    ? 'border-purple-600/40 bg-gray-900/90'
-                    : 'border-gray-800 hover:border-gray-700'
+                    ? 'border-white/30 bg-neutral-900'
+                    : 'border-neutral-800 hover:border-neutral-700'
                 }`}
               >
                 {/* Question Header Badges */}
                 <div className="flex items-center justify-between gap-2 mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-gray-800 text-gray-200">
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-md bg-neutral-800 text-gray-200">
                       Question {qIndex + 1}
                     </span>
                     <span
-                      className={`text-[11px] font-semibold uppercase px-2 py-0.5 rounded ${
-                        q.difficulty === 'hard'
-                          ? 'bg-red-950/50 text-red-300 border border-red-800/40'
-                          : q.difficulty === 'medium'
-                          ? 'bg-amber-950/50 text-amber-300 border border-amber-800/40'
-                          : 'bg-emerald-950/50 text-emerald-300 border border-emerald-800/40'
-                      }`}
+                      className="text-[11px] font-semibold uppercase px-2 py-0.5 rounded bg-white/10 text-neutral-200 border border-white/20"
                     >
                       {q.difficulty}
                     </span>
                   </div>
 
                   {q.sourcePdfPages && q.sourcePdfPages.length > 0 && (
-                    <span className="text-[11px] font-medium text-gray-400 flex items-center gap-1 bg-gray-800/60 px-2 py-0.5 rounded border border-gray-700/40">
-                      <FileText className="w-3 h-3 text-purple-400" />
+                    <span className="text-[11px] font-medium text-gray-400 flex items-center gap-1 bg-neutral-800 px-2 py-0.5 rounded border border-neutral-700">
+                      <FileText className="w-3 h-3 text-white" />
                       <span>PDF p. {q.sourcePdfPages.join(', ')}</span>
                     </span>
                   )}
@@ -480,22 +474,22 @@ function QuizContent() {
                     const letter = String.fromCharCode(65 + optIndex);
                     const isCorrectChoice = optIndex === q.correctOptionIndex;
 
-                    let optionBorder = 'border-gray-800 hover:border-gray-700 bg-gray-800/40';
-                    let badgeClass = 'bg-gray-800 text-gray-400 border-gray-700';
+                    let optionBorder = 'border-neutral-800 hover:border-neutral-700 bg-neutral-800/40';
+                    let badgeClass = 'bg-neutral-800 text-gray-400 border-neutral-700';
 
                     if (submitted) {
                       if (isCorrectChoice) {
-                        optionBorder = 'border-emerald-500 bg-emerald-950/30 text-emerald-200';
-                        badgeClass = 'bg-emerald-600 text-white border-emerald-500';
+                        optionBorder = 'border-white bg-white/15 text-white';
+                        badgeClass = 'bg-white text-black border-white';
                       } else if (isSelected && !isCorrectChoice) {
-                        optionBorder = 'border-red-500 bg-red-950/30 text-red-200';
-                        badgeClass = 'bg-red-600 text-white border-red-500';
+                        optionBorder = 'border-neutral-600 bg-neutral-900/40 text-neutral-400';
+                        badgeClass = 'bg-neutral-700 text-white border-neutral-600';
                       } else {
-                        optionBorder = 'border-gray-800/60 opacity-60 bg-gray-900/30';
+                        optionBorder = 'border-neutral-800/60 opacity-60 bg-neutral-900/30';
                       }
                     } else if (isSelected) {
-                      optionBorder = 'border-purple-500 bg-purple-950/30 text-white shadow-md shadow-purple-950/30';
-                      badgeClass = 'bg-purple-600 text-white border-purple-500';
+                      optionBorder = 'border-white bg-white/10 text-white shadow-md shadow-black/50';
+                      badgeClass = 'bg-white text-black border-white';
                     }
 
                     return (
@@ -517,10 +511,10 @@ function QuizContent() {
                         </span>
 
                         {submitted && isCorrectChoice && (
-                          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 self-center" />
+                          <CheckCircle2 className="w-5 h-5 text-white shrink-0 self-center" />
                         )}
                         {submitted && isSelected && !isCorrectChoice && (
-                          <XCircle className="w-5 h-5 text-red-400 shrink-0 self-center" />
+                          <XCircle className="w-5 h-5 text-neutral-400 shrink-0 self-center" />
                         )}
                       </button>
                     );
@@ -529,10 +523,10 @@ function QuizContent() {
 
                 {/* Grounded Explanation Box (After submission) */}
                 {submitted && (
-                  <div className="mt-4 pt-4 border-t border-gray-800">
-                    <div className="bg-gray-800/60 rounded-xl p-4 border border-gray-700/60">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-purple-300 mb-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                  <div className="mt-4 pt-4 border-t border-neutral-800">
+                    <div className="bg-neutral-800/60 rounded-xl p-4 border border-neutral-700/60">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-neutral-200 mb-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-white" />
                         <span>Book Explanation & Verification:</span>
                       </div>
                       <p className="text-sm text-gray-300 leading-relaxed mb-2">
@@ -540,8 +534,8 @@ function QuizContent() {
                       </p>
 
                       {q.definition && (
-                        <div className="mt-2 text-xs bg-gray-900/60 p-2.5 rounded-lg border border-gray-800">
-                          <span className="font-semibold text-purple-300">
+                        <div className="mt-2 text-xs bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
+                          <span className="font-semibold text-white">
                             {q.definition.term}:
                           </span>{' '}
                           <span className="text-gray-300">{q.definition.explanation}</span>
@@ -551,7 +545,7 @@ function QuizContent() {
                       {q.sourcePdfPages && q.sourcePdfPages.length > 0 && (
                         <div className="text-[11px] text-gray-400 mt-2 flex items-center gap-1">
                           <span>Verified against source:</span>
-                          <span className="text-purple-300 font-medium">
+                          <span className="text-neutral-200 font-medium">
                             {book.title} (PDF p. {q.sourcePdfPages.join(', ')})
                           </span>
                         </div>
@@ -566,7 +560,7 @@ function QuizContent() {
 
         {/* Submit Action Bar */}
         {!submitted && (
-          <div className="sticky bottom-4 mt-8 bg-gray-900/95 backdrop-blur-md border border-purple-500/30 rounded-2xl p-4 shadow-2xl flex items-center justify-between gap-4">
+          <div className="sticky bottom-4 mt-8 bg-neutral-900/95 backdrop-blur-md border border-white/20 rounded-2xl p-4 shadow-2xl flex items-center justify-between gap-4">
             <div className="text-xs text-gray-400">
               <span className="font-semibold text-white">{answeredCount}</span> of {totalCount} completed
             </div>
@@ -574,17 +568,17 @@ function QuizContent() {
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="py-2.5 px-6 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:bg-gray-800 text-white font-semibold text-sm transition shadow-lg shadow-purple-900/30 flex items-center gap-2"
+              className="py-2.5 px-6 rounded-xl bg-white hover:bg-neutral-200 disabled:bg-neutral-800 text-black font-semibold text-sm transition shadow-lg shadow-black/50 flex items-center gap-2"
             >
               {submitting ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin text-black" />
                   <span>Submitting...</span>
                 </>
               ) : (
                 <>
                   <span>Submit Quiz</span>
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-4 h-4 text-black" />
                 </>
               )}
             </button>
@@ -599,9 +593,9 @@ export default function DedicatedQuizPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#0a0b12] text-white flex items-center justify-center p-6">
-          <div className="flex items-center gap-3 text-sm text-gray-400">
-            <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+        <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+          <div className="flex items-center gap-3 text-sm text-neutral-400">
+            <Loader2 className="w-5 h-5 animate-spin text-white" />
             <span>Loading quiz interface...</span>
           </div>
         </div>

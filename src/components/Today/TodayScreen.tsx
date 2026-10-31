@@ -70,7 +70,7 @@ export function TodayScreen({ sections, onOpenManualTime, onPreviewImage, isPhon
     if (activeTimer && activeTimer.taskId !== task.id) {
       await handleStopTimer();
     }
-    await startTimer(task.id, task.title, sections.find(s => s.id === task.sectionId)?.color || '#8b5cf6');
+    await startTimer(task.id, task.title, sections.find(s => s.id === task.sectionId)?.color || '#ffffff');
     syncEngine.notifyLocalMutation();
   };
 
@@ -220,9 +220,9 @@ export function TodayScreen({ sections, onOpenManualTime, onPreviewImage, isPhon
                               fontWeight: 700,
                               padding: '2px 5px',
                               borderRadius: 4,
-                              border: isSelected ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
-                              background: isSelected ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.04)',
-                              color: isSelected ? '#38bdf8' : 'rgba(255, 255, 255, 0.45)',
+                              border: isSelected ? '1px solid #ffffff' : '1px solid rgba(255, 255, 255, 0.1)',
+                              background: isSelected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.04)',
+                              color: isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.45)',
                               cursor: 'pointer',
                               transition: 'all 0.15s',
                             }}
@@ -239,9 +239,9 @@ export function TodayScreen({ sections, onOpenManualTime, onPreviewImage, isPhon
                       {(['High', 'Medium', 'Low'] as PriorityLevel[]).map(lvl => {
                         const label = lvl === 'High' ? 'Hard' : lvl;
                         const isSelected = task.priority === lvl;
-                        const color = lvl === 'High' ? '#f87171' : lvl === 'Medium' ? '#fbbf24' : '#34d399';
-                        const bgColor = lvl === 'High' ? 'rgba(239,68,68,0.22)' : lvl === 'Medium' ? 'rgba(245,158,11,0.22)' : 'rgba(16,185,129,0.22)';
-                        const borderColor = lvl === 'High' ? 'rgba(239,68,68,0.55)' : lvl === 'Medium' ? 'rgba(245,158,11,0.55)' : 'rgba(16,185,129,0.55)';
+                        const color = lvl === 'High' ? '#ffffff' : lvl === 'Medium' ? '#d4d4d8' : '#a1a1aa';
+                        const bgColor = isSelected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.04)';
+                        const borderColor = isSelected ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.15)';
 
                         return (
                           <button

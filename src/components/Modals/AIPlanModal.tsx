@@ -419,13 +419,13 @@ export function AIPlanModal({
               style={{
                 padding: '12px 16px',
                 borderRadius: 12,
-                background: 'rgba(239, 68, 68, 0.12)',
-                border: '1px solid rgba(239, 68, 68, 0.4)',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
                 fontSize: 13,
-                color: '#ef4444',
+                color: 'var(--text-primary)',
               }}
             >
               <AlertTriangle size={16} style={{ flexShrink: 0 }} />
@@ -612,7 +612,7 @@ export function AIPlanModal({
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <ShieldCheck size={13} color="#22c55e" />
+                  <ShieldCheck size={13} color="var(--text-primary)" />
                   <span>Provider: <strong style={{ color: 'var(--text-primary)' }}>{planResult.provider}</strong></span>
                   <span>· {planResult.model}</span>
                 </div>
@@ -627,8 +627,8 @@ export function AIPlanModal({
                 className="v-card"
                 style={{
                   padding: '14px 16px',
-                  background: 'rgba(56, 189, 248, 0.05)',
-                  borderColor: 'rgba(56, 189, 248, 0.25)',
+                  background: 'var(--v-glass-bg-subtle)',
+                  borderColor: 'var(--v-glass-border)',
                 }}
               >
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-color)', letterSpacing: '0.04em', marginBottom: 4 }}>
@@ -645,14 +645,14 @@ export function AIPlanModal({
                   style={{
                     padding: '10px 14px',
                     borderRadius: 10,
-                    background: 'rgba(245, 158, 11, 0.1)',
-                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    background: 'var(--v-glass-bg-subtle)',
+                    border: '1px solid var(--v-glass-border)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 4,
                   }}
                 >
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <AlertTriangle size={12} /> POTENTIAL CONFLICTS RESOLVED
                   </div>
                   {planResult.conflicts.map((c, i) => (
@@ -744,7 +744,7 @@ export function AIPlanModal({
                         <span
                           className="v-status-badge"
                           style={{
-                            color: task.priority === 'High' ? '#ef4444' : task.priority === 'Low' ? '#22c55e' : '#f59e0b',
+                            color: task.priority === 'High' ? '#ffffff' : task.priority === 'Low' ? '#a1a1aa' : '#d4d4d8',
                             borderColor: 'transparent',
                             background: 'var(--v-glass-bg-subtle)',
                           }}

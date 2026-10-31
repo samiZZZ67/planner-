@@ -791,7 +791,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
         const newSec: Section = {
           id: `sec-${crypto.randomUUID().slice(0, 8)}`,
           name: params.name || 'New Category',
-          color: params.color || '#8b5cf6',
+          color: params.color || '#ffffff',
           icon: params.icon || '🎨',
           order: sections.length,
           dailyTargetMinutes: params.dailyTargetMinutes || null,
@@ -1957,14 +1957,14 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                           <button
                             type="button"
                             onClick={() => handleSaveRename(conv.id)}
-                            style={{ background: 'none', border: 'none', color: '#22c55e', cursor: 'pointer', padding: 2 }}
+                            style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer', padding: 2 }}
                           >
                             <Check size={12} />
                           </button>
                           <button
                             type="button"
                             onClick={() => setEditingConvId(null)}
-                            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 2 }}
+                            style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', padding: 2 }}
                           >
                             <X size={12} />
                           </button>
@@ -1984,7 +1984,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                                 setEditingTitle(conv.title);
                               }}
                               title="Rename chat"
-                              style={{ background: 'none', border: 'none', color: '#cbd5e1', cursor: 'pointer', padding: 2 }}
+                              style={{ background: 'none', border: 'none', color: '#d4d4d8', cursor: 'pointer', padding: 2 }}
                             >
                               <Edit2 size={11} />
                             </button>
@@ -1996,7 +1996,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                                 setConfirmDeleteConvId(conv.id);
                               }}
                               title="Delete chat"
-                              style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: 2 }}
+                              style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', padding: 2 }}
                             >
                               <Trash2 size={11} />
                             </button>
@@ -2014,12 +2014,12 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
               <div
                 style={{
                   padding: '12px',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  borderTop: '1px solid rgba(239, 68, 68, 0.4)',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  borderTop: '1px solid rgba(255, 255, 255, 0.2)',
                   fontSize: 11,
                 }}
               >
-                <div style={{ color: '#fca5a5', fontWeight: 600, marginBottom: 8 }}>
+                <div style={{ color: '#ffffff', fontWeight: 600, marginBottom: 8 }}>
                   Delete this conversation permanently?
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -2029,10 +2029,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                     style={{
                       flex: 1,
                       padding: '4px',
-                      background: '#ef4444',
+                      background: '#ffffff',
                       border: 'none',
                       borderRadius: 6,
-                      color: '#fff',
+                      color: '#000000',
                       fontSize: 11,
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -2141,10 +2141,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                 style={{
                   width: 32,
                   height: 32,
-                  color: isLiveCallActive ? '#38bdf8' : undefined,
-                  borderColor: isLiveCallActive ? 'rgba(56, 189, 248, 0.6)' : undefined,
-                  background: isLiveCallActive ? 'rgba(56, 189, 248, 0.2)' : undefined,
-                  boxShadow: isLiveCallActive ? '0 0 12px rgba(56, 189, 248, 0.4)' : undefined,
+                  color: isLiveCallActive ? '#ffffff' : undefined,
+                  borderColor: isLiveCallActive ? 'rgba(255, 255, 255, 0.6)' : undefined,
+                  background: isLiveCallActive ? 'rgba(255, 255, 255, 0.2)' : undefined,
+                  boxShadow: isLiveCallActive ? '0 0 12px rgba(255, 255, 255, 0.3)' : undefined,
                 }}
                 title={isLiveCallActive ? "End Live Voice Call" : "Start Live Voice Call (Hands-Free Duplex)"}
                 aria-label="Live Voice Call"
@@ -2160,9 +2160,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                 style={{
                   width: 32,
                   height: 32,
-                  color: isVoiceSettingsOpen ? '#c084fc' : undefined,
-                  borderColor: isVoiceSettingsOpen ? 'rgba(168, 85, 247, 0.4)' : undefined,
-                  background: isVoiceSettingsOpen ? 'rgba(168, 85, 247, 0.15)' : undefined,
+                  color: isVoiceSettingsOpen ? '#ffffff' : undefined,
+                  borderColor: isVoiceSettingsOpen ? 'rgba(255, 255, 255, 0.4)' : undefined,
+                  background: isVoiceSettingsOpen ? 'rgba(255, 255, 255, 0.15)' : undefined,
                 }}
                 title="Voice & Speech Settings"
                 aria-label="Voice & Speech Settings"
@@ -2214,7 +2214,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#c084fc' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#ffffff' }}>
                   <Sliders size={13} />
                   <span>Neural Voice Assistant Settings</span>
                 </div>
@@ -2346,11 +2346,11 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                           }
                         }}
                         style={{
-                          background: 'rgba(168, 85, 247, 0.2)',
-                          border: '1px solid rgba(168, 85, 247, 0.4)',
+                          background: 'rgba(255, 255, 255, 0.1)',
+                          border: '1px solid rgba(255, 255, 255, 0.3)',
                           borderRadius: 6,
                           padding: '3px 8px',
-                          color: '#c084fc',
+                          color: '#ffffff',
                           fontSize: 10.5,
                           fontWeight: 500,
                           cursor: 'pointer',
@@ -2376,7 +2376,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                       onChange={e => saveVoiceSettings(selectedVoiceProvider, selectedVoiceId, Number(e.target.value) || 1.0)}
                       style={{
                         background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
-                        border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                        border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(15, 23, 42, 0.18)'),
                         color: 'var(--text-primary)',
                         borderRadius: 6,
                         padding: '4px 6px',
@@ -2392,7 +2392,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-secondary)' }} title="Typed chat never speaks automatically to conserve ElevenLabs quota. Use the Listen button or Live Voice Call to speak.">
-                    <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+                    <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ffffff' }} />
                     <span>Typed chat: Silent (Quota protected)</span>
                   </div>
                 </div>
@@ -2415,11 +2415,11 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                         }
                       }}
                       style={{
-                        background: 'rgba(168, 85, 247, 0.2)',
-                        border: '1px solid rgba(168, 85, 247, 0.4)',
+                        background: 'rgba(255, 255, 255, 0.15)',
+                        border: '1px solid rgba(255, 255, 255, 0.3)',
                         borderRadius: 6,
                         padding: '4px 8px',
-                        color: '#c084fc',
+                        color: '#ffffff',
                         fontSize: 11,
                         cursor: 'pointer',
                         display: 'flex',
@@ -2438,11 +2438,11 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                     aria-label="Test audio playback"
                     disabled={speechLoadingId === 'sams-ai-voice-test' || isTestingVoice}
                     style={{
-                      background: isTestingVoice ? 'rgba(168, 85, 247, 0.3)' : 'linear-gradient(135deg, #a855f7, #6366f1)',
+                      background: isTestingVoice ? 'rgba(255, 255, 255, 0.2)' : '#ffffff',
                       border: 'none',
                       borderRadius: 6,
                       padding: '4px 10px',
-                      color: '#fff',
+                      color: isTestingVoice ? '#ffffff' : '#000000',
                       fontSize: 11,
                       fontWeight: 600,
                       cursor: isTestingVoice ? 'default' : 'pointer',
@@ -2475,8 +2475,8 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                     style={{
                       padding: '8px 10px',
                       borderRadius: 8,
-                      background: isConfigured ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
-                      border: '1px solid ' + (isConfigured ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'),
+                      background: isConfigured ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid ' + (isConfigured ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.15)'),
                       fontSize: 11,
                       display: 'flex',
                       flexDirection: 'column',
@@ -2484,7 +2484,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <strong style={{ color: isConfigured ? '#34d399' : '#fbbf24' }}>
+                      <strong style={{ color: isConfigured ? '#ffffff' : '#d4d4d8' }}>
                         {isConfigured ? `✓ ${currentProv?.name || 'Provider'} Active` : `⚠️ ${currentProv?.name || 'Provider'} Not Configured`}
                       </strong>
                       <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
@@ -2495,7 +2495,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                       {currentProv?.freeTierNote}
                     </span>
                     {currentProv?.setupDocs && !isConfigured && (
-                      <span style={{ color: '#fbbf24', fontSize: 10.5, marginTop: 2 }}>
+                      <span style={{ color: '#d4d4d8', fontSize: 10.5, marginTop: 2 }}>
                         {currentProv.setupDocs}
                       </span>
                     )}
@@ -2507,7 +2507,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                           <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 10.5 }}>
                             Key Rotation Pool ({currentProv.keyPool.activeKeys}/{currentProv.keyPool.totalKeys} Active)
                           </span>
-                          <span style={{ fontSize: 10, color: currentProv.keyPool.exhaustedKeys > 0 ? '#f87171' : '#34d399' }}>
+                          <span style={{ fontSize: 10, color: currentProv.keyPool.exhaustedKeys > 0 ? '#a1a1aa' : '#ffffff' }}>
                             {currentProv.keyPool.exhaustedKeys > 0
                               ? `${currentProv.keyPool.exhaustedKeys} in cooldown`
                               : 'All keys available'}
@@ -2518,10 +2518,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                             {currentProv.keyPool.keys.map((k: any) => {
                               const isKeyActive = k.status === 'active';
                               const statusColor = isKeyActive
-                                ? '#34d399'
+                                ? '#ffffff'
                                 : k.status === 'rate_limited'
-                                ? '#fbbf24'
-                                : '#f87171';
+                                ? '#d4d4d8'
+                                : '#a1a1aa';
                               return (
                                 <div
                                   key={k.index}
@@ -2575,9 +2575,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
               style={{
                 padding: '16px 20px',
                 background: isDark
-                  ? 'linear-gradient(180deg, rgba(20, 15, 38, 0.96), rgba(12, 10, 25, 0.98))'
-                  : 'linear-gradient(180deg, rgba(240, 245, 255, 0.96), rgba(230, 238, 252, 0.98))',
-                borderBottom: '1px solid ' + (isDark ? 'rgba(56, 189, 248, 0.3)' : 'rgba(56, 189, 248, 0.4)'),
+                  ? 'linear-gradient(180deg, rgba(20, 20, 20, 0.96), rgba(12, 12, 12, 0.98))'
+                  : 'linear-gradient(180deg, rgba(245, 245, 245, 0.96), rgba(235, 235, 235, 0.98))',
+                borderBottom: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.15)'),
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
@@ -2594,17 +2594,15 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                   borderRadius: '50%',
                   background:
                     callStatus === 'speaking'
-                      ? 'radial-gradient(circle, #38bdf8 0%, #6366f1 70%, #a855f7 100%)'
+                      ? 'radial-gradient(circle, #ffffff 0%, #71717a 70%, #27272a 100%)'
                       : isCallMuted
-                      ? 'radial-gradient(circle, #64748b 0%, #334155 100%)'
+                      ? 'radial-gradient(circle, #71717a 0%, #27272a 100%)'
                       : callStatus === 'thinking'
-                      ? 'radial-gradient(circle, #f59e0b 0%, #a855f7 70%, #6366f1 100%)'
-                      : 'radial-gradient(circle, #38bdf8 0%, #a855f7 60%, #4f46e5 100%)',
+                      ? 'radial-gradient(circle, #d4d4d8 0%, #71717a 70%, #27272a 100%)'
+                      : 'radial-gradient(circle, #e4e4e7 0%, #71717a 60%, #18181b 100%)',
                   boxShadow: isCallMuted
-                    ? '0 0 10px rgba(100, 116, 139, 0.3)'
-                    : callStatus === 'speaking'
-                    ? '0 0 35px rgba(56, 189, 248, 0.8), 0 0 50px rgba(168, 85, 247, 0.5)'
-                    : '0 0 30px rgba(168, 85, 247, 0.8), 0 0 45px rgba(56, 189, 248, 0.4)',
+                    ? '0 0 10px rgba(255, 255, 255, 0.1)'
+                    : '0 0 30px rgba(255, 255, 255, 0.4)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -2616,8 +2614,8 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
               </div>
 
               <div style={{ textAlign: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: isDark ? '#f1f5f9' : '#0f172a' }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: isCallMuted ? '#64748b' : '#22c55e', display: 'inline-block' }} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: isDark ? '#ffffff' : '#000000' }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: isCallMuted ? '#71717a' : '#ffffff', display: 'inline-block' }} />
                   <span>
                     {isCallMuted
                       ? 'Microphone Muted'
@@ -2628,7 +2626,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                       : 'Listening... (Speak naturally, silence auto-submits)'}
                   </span>
                 </div>
-                <div style={{ fontSize: 11.5, color: isDark ? '#cbd5e1' : '#475569', marginTop: 4, maxWidth: 420, fontStyle: 'italic', wordBreak: 'break-word' }}>
+                <div style={{ fontSize: 11.5, color: isDark ? '#d4d4d8' : '#52525b', marginTop: 4, maxWidth: 420, fontStyle: 'italic', wordBreak: 'break-word' }}>
                   {callSubtitle || 'Listening...'}
                 </div>
               </div>
@@ -2651,9 +2649,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                   }}
                   className="v-pill-btn"
                   style={{
-                    background: isCallMuted ? 'rgba(239, 68, 68, 0.25)' : 'var(--v-glass-bg-subtle)',
-                    borderColor: isCallMuted ? '#ef4444' : 'var(--v-glass-border-subtle)',
-                    color: isCallMuted ? '#f87171' : 'var(--text-primary)',
+                    background: isCallMuted ? 'rgba(255, 255, 255, 0.15)' : 'var(--v-glass-bg-subtle)',
+                    borderColor: isCallMuted ? '#ffffff' : 'var(--v-glass-border-subtle)',
+                    color: isCallMuted ? '#ffffff' : 'var(--text-primary)',
                     fontSize: 11.5,
                     padding: '5px 12px',
                     gap: 5,
@@ -2688,9 +2686,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                   onClick={stopLiveVoiceCall}
                   className="v-pill-btn"
                   style={{
-                    background: 'rgba(239, 68, 68, 0.2)',
-                    borderColor: 'rgba(239, 68, 68, 0.5)',
-                    color: '#f87171',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    borderColor: 'rgba(255, 255, 255, 0.3)',
+                    color: '#ffffff',
                     fontSize: 11.5,
                     padding: '5px 12px',
                     gap: 5,
@@ -2744,7 +2742,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
               type="button"
               onClick={() => handleSendMessage('Start the timer for 45 minutes.')}
               className="v-pill-btn"
-              style={{ padding: '4px 11px', fontSize: 11, whiteSpace: 'nowrap', gap: 4, borderColor: '#38bdf8', color: '#38bdf8' }}
+              style={{ padding: '4px 11px', fontSize: 11, whiteSpace: 'nowrap', gap: 4, borderColor: '#ffffff', color: '#ffffff' }}
             >
               ⚡ 45m Timer
             </button>
@@ -2780,7 +2778,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                 }}
               >
                 {/* Header Badge */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: msg.role === 'user' ? '#cbd5e1' : '#c084fc', padding: '0 4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: msg.role === 'user' ? '#d4d4d8' : '#ffffff', padding: '0 4px' }}>
                   {msg.role === 'user' ? (
                     <span>You</span>
                   ) : (
@@ -2791,14 +2789,14 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                           height: 14,
                           borderRadius: '50%',
                           overflow: 'hidden',
-                          border: '1px solid #c084fc',
+                          border: '1px solid #ffffff',
                         }}
                       >
                         <img src={profileAvatar} alt="Sam's AI" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       </div>
                       <span style={{ fontWeight: 600 }}>Sam’s AI</span>
                       {msg.provider && (
-                        <span style={{ fontSize: 9.5, color: '#94a3b8' }}>
+                        <span style={{ fontSize: 9.5, color: '#a1a1aa' }}>
                           · {msg.provider}
                         </span>
                       )}
@@ -2813,9 +2811,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                     padding: '10px 14px',
                     borderRadius: msg.role === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
                     background: msg.role === 'user'
-                      ? (isDark ? 'linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(99, 102, 241, 0.25))' : 'rgba(2, 132, 199, 0.12)')
+                      ? (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)')
                       : 'var(--v-glass-bg-card)',
-                    border: `1.5px solid ${msg.role === 'user' ? (isDark ? 'rgba(56, 189, 248, 0.5)' : 'rgba(2, 132, 199, 0.35)') : 'var(--v-glass-border)'}`,
+                    border: `1.5px solid ${msg.role === 'user' ? (isDark ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 0, 0, 0.25)') : 'var(--v-glass-border)'}`,
                     fontSize: 13,
                     lineHeight: 1.6,
                     color: 'var(--text-primary)',
@@ -2838,7 +2836,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                             display: 'flex',
                             alignItems: 'center',
                             gap: 4,
-                            color: isDark ? '#7dd3fc' : '#0284c7',
+                            color: isDark ? '#ffffff' : '#000000',
                           }}
                         >
                           {att.dataUrl ? (
@@ -2869,14 +2867,14 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                               style={{
                                 padding: '10px 14px',
                                 borderRadius: 10,
-                                background: 'rgba(239, 68, 68, 0.12)',
-                                border: '1.5px solid rgba(239, 68, 68, 0.5)',
+                                background: 'rgba(255, 255, 255, 0.08)',
+                                border: '1.5px solid rgba(255, 255, 255, 0.3)',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 gap: 8,
                               }}
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#ef4444' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#ffffff' }}>
                                 <AlertTriangle size={14} />
                                 Confirm Action Required
                               </div>
@@ -2892,9 +2890,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                                     padding: '5px 14px',
                                     fontSize: 11.5,
                                     fontWeight: 600,
-                                    background: '#ef4444',
-                                    borderColor: '#ef4444',
-                                    color: '#ffffff',
+                                    background: '#ffffff',
+                                    borderColor: '#ffffff',
+                                    color: '#000000',
                                   }}
                                 >
                                   Confirm & Execute
@@ -2918,13 +2916,13 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                               style={{
                                 padding: '8px 12px',
                                 borderRadius: 8,
-                                background: 'rgba(34, 197, 94, 0.1)',
-                                border: '1px solid rgba(34, 197, 94, 0.4)',
+                                background: 'rgba(255, 255, 255, 0.1)',
+                                border: '1px solid rgba(255, 255, 255, 0.3)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: 8,
                                 fontSize: 12,
-                                color: '#22c55e',
+                                color: '#ffffff',
                               }}
                             >
                               <CheckCircle2 size={14} style={{ flexShrink: 0 }} />
@@ -2952,13 +2950,13 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                               style={{
                                 padding: '8px 12px',
                                 borderRadius: 8,
-                                background: 'rgba(239, 68, 68, 0.1)',
-                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                background: 'rgba(255, 255, 255, 0.08)',
+                                border: '1px solid rgba(255, 255, 255, 0.2)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: 8,
                                 fontSize: 12,
-                                color: '#ef4444',
+                                color: '#ffffff',
                               }}
                             >
                               <AlertTriangle size={14} style={{ flexShrink: 0 }} />
@@ -2979,7 +2977,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                       {speechLoadingId === msg.id ? (
                         <span
                           style={{
-                            color: '#a855f7',
+                            color: '#ffffff',
                             fontSize: 11,
                             display: 'flex',
                             alignItems: 'center',
@@ -2998,10 +2996,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                             aria-label="Retry neural voice playback"
                             title="Stop voice playback"
                             style={{
-                              background: 'rgba(239, 68, 68, 0.15)',
-                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              background: 'rgba(255, 255, 255, 0.1)',
+                              border: '1px solid rgba(255, 255, 255, 0.2)',
                               borderRadius: 4,
-                              color: '#f87171',
+                              color: '#ffffff',
                               fontSize: 11,
                               cursor: 'pointer',
                               display: 'flex',
@@ -3023,10 +3021,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                             }}
                             title="Pause voice playback"
                             style={{
-                              background: 'rgba(168, 85, 247, 0.15)',
-                              border: '1px solid rgba(168, 85, 247, 0.3)',
+                              background: 'rgba(255, 255, 255, 0.1)',
+                              border: '1px solid rgba(255, 255, 255, 0.2)',
                               borderRadius: 4,
-                              color: '#c084fc',
+                              color: '#ffffff',
                               fontSize: 11,
                               cursor: 'pointer',
                               display: 'flex',
@@ -3051,10 +3049,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                             }}
                             title="Resume voice playback"
                             style={{
-                              background: 'rgba(168, 85, 247, 0.15)',
-                              border: '1px solid rgba(168, 85, 247, 0.3)',
+                              background: 'rgba(255, 255, 255, 0.1)',
+                              border: '1px solid rgba(255, 255, 255, 0.2)',
                               borderRadius: 4,
-                              color: '#c084fc',
+                              color: '#ffffff',
                               fontSize: 11,
                               cursor: 'pointer',
                               display: 'flex',
@@ -3071,10 +3069,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                             onClick={() => handleSpeakMessage(msg)}
                             title="Stop voice playback"
                             style={{
-                              background: 'rgba(239, 68, 68, 0.15)',
-                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              background: 'rgba(255, 255, 255, 0.1)',
+                              border: '1px solid rgba(255, 255, 255, 0.2)',
                               borderRadius: 4,
-                              color: '#f87171',
+                              color: '#ffffff',
                               fontSize: 11,
                               cursor: 'pointer',
                               display: 'flex',
@@ -3095,7 +3093,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                           style={{
                             background: 'none',
                             border: 'none',
-                            color: '#94a3b8',
+                            color: '#a1a1aa',
                             fontSize: 11,
                             cursor: 'pointer',
                             display: 'flex',
@@ -3121,7 +3119,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: '#94a3b8',
+                          color: '#a1a1aa',
                           fontSize: 11,
                           cursor: 'pointer',
                           display: 'flex',
@@ -3147,9 +3145,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                             }}
                             title="Retry this request"
                             style={{
-                              background: 'rgba(239, 68, 68, 0.15)',
-                              border: '1px solid rgba(239, 68, 68, 0.4)',
-                              color: '#fca5a5',
+                              background: 'rgba(255, 255, 255, 0.1)',
+                              border: '1px solid rgba(255, 255, 255, 0.2)',
+                              color: '#ffffff',
                               fontSize: 11,
                               cursor: 'pointer',
                               display: 'flex',
@@ -3197,9 +3195,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                       <div
                         style={{
                           fontSize: 11,
-                          color: '#eab308',
-                          background: 'rgba(234, 179, 8, 0.1)',
-                          border: '1px solid rgba(234, 179, 8, 0.3)',
+                          color: '#ffffff',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
                           borderRadius: 6,
                           padding: '4px 8px',
                           display: 'flex',
@@ -3217,9 +3215,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                       <div
                         style={{
                           fontSize: 11,
-                          color: '#f87171',
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          color: '#ffffff',
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
                           borderRadius: 6,
                           padding: '6px 8px',
                           display: 'flex',
@@ -3236,10 +3234,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                             type="button"
                             onClick={() => handleSpeakMessage(msg)}
                             style={{
-                              background: 'rgba(239, 68, 68, 0.2)',
-                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                              background: 'rgba(255, 255, 255, 0.15)',
+                              border: '1px solid rgba(255, 255, 255, 0.3)',
                               borderRadius: 4,
-                              color: '#fca5a5',
+                              color: '#ffffff',
                               padding: '2px 6px',
                               fontSize: 10.5,
                               cursor: 'pointer',
@@ -3296,9 +3294,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-color, #a855f7)' }} />
-                  <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#818cf8', animationDelay: '0.2s' }} />
-                  <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8', animationDelay: '0.4s' }} />
+                  <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#ffffff' }} />
+                  <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#d4d4d8', animationDelay: '0.2s' }} />
+                  <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#a1a1aa', animationDelay: '0.4s' }} />
                 </div>
                 <span style={{ fontStyle: 'normal', color: 'var(--text-secondary)', fontWeight: 500 }}>
                   {activityLabel || 'Thinking...'}
@@ -3321,10 +3319,10 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                     gap: 6,
                     padding: '4px 8px',
                     borderRadius: 6,
-                    background: 'rgba(168, 85, 247, 0.2)',
-                    border: '1px solid rgba(192, 132, 252, 0.35)',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
                     fontSize: 11,
-                    color: '#e2e8f0',
+                    color: '#ffffff',
                   }}
                 >
                   {file.dataUrl ? (
@@ -3338,7 +3336,7 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                   <button
                     type="button"
                     onClick={() => removeAttachment(idx)}
-                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 1 }}
+                    style={{ background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer', padding: 1 }}
                   >
                     <X size={12} />
                   </button>
@@ -3393,9 +3391,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                 width: 36,
                 height: 36,
                 flexShrink: 0,
-                background: isDictating ? 'rgba(239, 68, 68, 0.25)' : 'transparent',
-                borderColor: isDictating ? '#ef4444' : 'var(--v-glass-border)',
-                color: isDictating ? '#ef4444' : 'var(--text-muted)',
+                background: isDictating ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
+                borderColor: isDictating ? '#ffffff' : 'var(--v-glass-border)',
+                color: isDictating ? '#ffffff' : 'var(--text-muted)',
               }}
               title={isDictating ? "Stop voice dictation" : "Speak message with voice"}
               aria-label="Voice dictation"
@@ -3438,9 +3436,9 @@ export function AIChatPanel({ isOpen, onClose, currentDate, isPhone, theme }: AI
                 style={{
                   height: 38,
                   padding: '0 12px',
-                  background: 'rgba(239, 68, 68, 0.2)',
-                  borderColor: '#ef4444',
-                  color: '#ef4444',
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  borderColor: '#ffffff',
+                  color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 6,

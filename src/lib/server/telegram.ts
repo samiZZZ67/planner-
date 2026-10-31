@@ -216,10 +216,12 @@ export async function loadTelegramConfigFromDb(): Promise<void> {
         }
       }
 
-      if (dbToken || dbChatId) {
+      const envToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
+      const envChatId = process.env.TELEGRAM_CHAT_ID?.trim();
+      if (envToken || envChatId || dbToken || dbChatId) {
         runtimeTelegramConfig = {
-          botToken: dbToken || runtimeTelegramConfig.botToken || DEFAULT_TELEGRAM_BOT_TOKEN,
-          chatId: dbChatId || runtimeTelegramConfig.chatId || DEFAULT_TELEGRAM_CHAT_ID,
+          botToken: envToken || dbToken || runtimeTelegramConfig.botToken || DEFAULT_TELEGRAM_BOT_TOKEN,
+          chatId: envChatId || dbChatId || runtimeTelegramConfig.chatId || DEFAULT_TELEGRAM_CHAT_ID,
         };
       } else {
         const tokenToSeed = runtimeTelegramConfig.botToken || process.env.TELEGRAM_BOT_TOKEN?.trim() || DEFAULT_TELEGRAM_BOT_TOKEN;
@@ -304,12 +306,12 @@ export function envConfig() {
   }
 
   const token =
-    runtimeTelegramConfig.botToken ||
     process.env.TELEGRAM_BOT_TOKEN?.trim() ||
+    runtimeTelegramConfig.botToken ||
     DEFAULT_TELEGRAM_BOT_TOKEN;
   const chatId =
-    runtimeTelegramConfig.chatId ||
     process.env.TELEGRAM_CHAT_ID?.trim() ||
+    runtimeTelegramConfig.chatId ||
     DEFAULT_TELEGRAM_CHAT_ID;
   if (!token || !chatId) {
     throw new Error('Telegram is not configured. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID on the backend service.');

@@ -485,28 +485,28 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
       value: `${summary.hours}h`,
       sub: 'Total focused work',
       icon: <Clock size={20} />,
-      color: '#38bdf8',
+      color: '#ffffff',
     },
     {
       label: 'TASKS COMPLETED',
       value: summary.tasks,
       sub: `${summary.completion}% completion rate`,
       icon: <CheckCircle2 size={20} />,
-      color: '#22c55e',
+      color: '#ffffff',
     },
     {
       label: 'POMODORO SESSIONS',
       value: `${summary.pomodoros} 🍅`,
       sub: '25m Focus blocks',
       icon: <Flame size={20} />,
-      color: '#f59e0b',
+      color: '#ffffff',
     },
     {
       label: 'PEAK FOCUS',
       value: `${summary.peakHours}h`,
       sub: summary.peakLabel ? `On ${summary.peakLabel}` : 'Best period',
       icon: <Target size={20} />,
-      color: '#a855f7',
+      color: '#ffffff',
     },
   ];
 
@@ -679,8 +679,8 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                 fontSize: 13,
                 fontWeight: 700,
                 gap: 6,
-                borderColor: '#f59e0b',
-                color: activeTab === 'ranking' && rankingSubTab === 'weekly' && isSectionOpen ? '#000' : '#f59e0b',
+                borderColor: '#ffffff',
+                color: activeTab === 'ranking' && rankingSubTab === 'weekly' && isSectionOpen ? '#000' : '#ffffff',
               }}
             >
               <Trophy size={14} />
@@ -697,8 +697,8 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                 fontSize: 13,
                 fontWeight: 700,
                 gap: 6,
-                borderColor: '#38bdf8',
-                color: activeTab === 'ranking' && rankingSubTab === 'daily' && isSectionOpen ? '#000' : '#38bdf8',
+                borderColor: '#ffffff',
+                color: activeTab === 'ranking' && rankingSubTab === 'daily' && isSectionOpen ? '#000' : '#ffffff',
               }}
             >
               <Medal size={14} />
@@ -766,19 +766,17 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 18,
-                border: `2px solid ${rankingSubTab === 'weekly' ? '#f59e0b' : '#38bdf8'}`,
-                boxShadow: rankingSubTab === 'weekly'
-                  ? '0 0 35px rgba(245, 158, 11, 0.25)'
-                  : '0 0 35px rgba(56, 189, 248, 0.25)',
+                border: '2px solid #ffffff',
+                boxShadow: '0 0 35px rgba(255, 255, 255, 0.15)',
               }}
             >
               {/* Ranking Header with Sub-Tabs */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   {rankingSubTab === 'weekly' ? (
-                    <Trophy size={26} style={{ color: '#f59e0b' }} />
+                    <Trophy size={26} style={{ color: '#ffffff' }} />
                   ) : (
-                    <Medal size={26} style={{ color: '#38bdf8' }} />
+                    <Medal size={26} style={{ color: '#ffffff' }} />
                   )}
                   <div>
                     <h2
@@ -880,7 +878,7 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                           borderRadius: 8,
                           background: 'var(--v-glass-bg-card)',
                           color: 'var(--text-primary)',
-                          border: '1.5px solid #38bdf8',
+                          border: '1.5px solid #ffffff',
                           fontSize: 12,
                           fontWeight: 700,
                           outline: 'none',
@@ -923,8 +921,8 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                         style={{
                           padding: '14px 18px',
                           borderRadius: 14,
-                          background: isTop3 ? 'rgba(245, 158, 11, 0.1)' : 'var(--v-glass-bg-subtle)',
-                          border: `1.5px solid ${isTop3 ? '#f59e0b' : 'var(--v-glass-border-subtle)'}`,
+                          background: isTop3 ? 'rgba(255, 255, 255, 0.08)' : 'var(--v-glass-bg-subtle)',
+                          border: `1.5px solid ${isTop3 ? '#ffffff' : 'var(--v-glass-border-subtle)'}`,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
@@ -949,21 +947,21 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                         {/* Rank Metrics */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: '#38bdf8', fontFamily: 'monospace' }}>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
                               {day.hours}h
                             </div>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Hours Taken</div>
                           </div>
 
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: '#22c55e', fontFamily: 'monospace' }}>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
                               {day.completedTasks} / {day.totalTasks} ({completionPct}%)
                             </div>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Tasks Done</div>
                           </div>
 
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: '#f59e0b', fontFamily: 'monospace' }}>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
                               {day.pomodoros} 🍅
                             </div>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sessions</div>
@@ -987,7 +985,7 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                             borderRadius: 12,
                           }}
                         >
-                          <Calendar size={28} style={{ color: '#38bdf8', margin: '0 auto 8px' }} />
+                          <Calendar size={28} style={{ color: '#ffffff', margin: '0 auto 8px' }} />
                           <div style={{ fontSize: 14, fontWeight: 700 }}>
                             No activity recorded to rank for this week
                           </div>
@@ -1010,8 +1008,8 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                           style={{
                             padding: '14px 18px',
                             borderRadius: 14,
-                            background: isTop3 ? 'rgba(56, 189, 248, 0.1)' : 'var(--v-glass-bg-subtle)',
-                            border: `1.5px solid ${isTop3 ? '#38bdf8' : 'var(--v-glass-border-subtle)'}`,
+                            background: isTop3 ? 'rgba(255, 255, 255, 0.08)' : 'var(--v-glass-bg-subtle)',
+                            border: `1.5px solid ${isTop3 ? '#ffffff' : 'var(--v-glass-border-subtle)'}`,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
@@ -1052,21 +1050,21 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                           {/* Rank Metrics */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                             <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: 16, fontWeight: 800, color: '#38bdf8', fontFamily: 'monospace' }}>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
                                 {day.hours}h
                               </div>
                               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Focus Time</div>
                             </div>
 
                             <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: 16, fontWeight: 800, color: '#22c55e', fontFamily: 'monospace' }}>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
                                 {day.completedTasks} / {day.totalTasks} ({completionPct}%)
                               </div>
                               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Tasks Done</div>
                             </div>
 
                             <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: 16, fontWeight: 800, color: '#f59e0b', fontFamily: 'monospace' }}>
+                              <div style={{ fontSize: 16, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
                                 {day.pomodoros} 🍅
                               </div>
                               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sessions</div>
@@ -1215,8 +1213,8 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                                 fontWeight: 700,
                                 padding: '2px 8px',
                                 borderRadius: 6,
-                                background: 'rgba(56, 189, 248, 0.15)',
-                                color: '#38bdf8',
+                                background: 'rgba(255, 255, 255, 0.1)',
+                                color: '#ffffff',
                               }}
                             >
                               {day.hours}h focus
@@ -1226,16 +1224,16 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
 
                         {/* Four Key Metrics Pills in Bar: shows completed/total task count and % */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 13, color: '#38bdf8', fontWeight: 700 }}>
+                          <span style={{ fontSize: 13, color: '#ffffff', fontWeight: 700 }}>
                             ⏱️ {day.hours}h
                           </span>
-                          <span style={{ fontSize: 13, color: '#22c55e', fontWeight: 700 }}>
+                          <span style={{ fontSize: 13, color: '#e4e4e7', fontWeight: 700 }}>
                             ✓ {day.completedTasks}/{day.totalTasks} ({completionPct}%)
                           </span>
-                          <span style={{ fontSize: 13, color: '#f59e0b', fontWeight: 700 }}>
+                          <span style={{ fontSize: 13, color: '#d4d4d8', fontWeight: 700 }}>
                             🍅 {day.pomodoros}
                           </span>
-                          <span style={{ fontSize: 13, color: '#a855f7', fontWeight: 700 }}>
+                          <span style={{ fontSize: 13, color: '#a1a1aa', fontWeight: 700 }}>
                             🎯 {day.peakTaskName}
                           </span>
 
@@ -1264,7 +1262,7 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                         >
                           {/* 1. Hours Taken */}
                           <div style={{ padding: '12px', borderRadius: 10, background: 'var(--v-glass-bg-subtle)' }}>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: '#38bdf8' }}>HOURS TAKEN</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#ffffff' }}>HOURS TAKEN</div>
                             <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4, fontFamily: 'monospace' }}>
                               {day.hours} hours
                             </div>
@@ -1275,7 +1273,7 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
 
                           {/* 2. Tasks Completed */}
                           <div style={{ padding: '12px', borderRadius: 10, background: 'var(--v-glass-bg-subtle)' }}>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e' }}>TASKS COMPLETED</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#e4e4e7' }}>TASKS COMPLETED</div>
                             <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4, fontFamily: 'monospace' }}>
                               {day.completedTasks} of {day.totalTasks}
                             </div>
@@ -1286,7 +1284,7 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
 
                           {/* 3. Pomodoro Sessions */}
                           <div style={{ padding: '12px', borderRadius: 10, background: 'var(--v-glass-bg-subtle)' }}>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b' }}>POMODORO SESSIONS</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#d4d4d8' }}>POMODORO SESSIONS</div>
                             <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4, fontFamily: 'monospace' }}>
                               {day.pomodoros} blocks
                             </div>
@@ -1297,7 +1295,7 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
 
                           {/* 4. Peak Focus */}
                           <div style={{ padding: '12px', borderRadius: 10, background: 'var(--v-glass-bg-subtle)' }}>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: '#a855f7' }}>PEAK FOCUS TASK</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#a1a1aa' }}>PEAK FOCUS TASK</div>
                             <div style={{ fontSize: 15, fontWeight: 800, marginTop: 4, color: 'var(--text-primary)' }}>
                               {day.peakTaskName}
                             </div>
@@ -1397,17 +1395,17 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                     dataKey="tasks"
                     name="Tasks Completed"
                     yAxisId="tasks"
-                    stroke="#16161a"
+                    stroke="#ffffff"
                     strokeWidth={2}
                     dot={({ cx = 0, cy = 0 }) => (
                       <path
                         d={`M ${cx} ${cy - 4} L ${cx + 4} ${cy} L ${cx} ${cy + 4} L ${cx - 4} ${cy} Z`}
-                        fill="#ff5a2e"
-                        stroke="#0b0b0d"
+                        fill="#ffffff"
+                        stroke="#000000"
                         strokeWidth={1.5}
                       />
                     )}
-                    activeDot={{ r: 5, fill: '#ff5a2e', stroke: '#e7e7ea', strokeWidth: 2 }}
+                    activeDot={{ r: 5, fill: '#ffffff', stroke: '#000000', strokeWidth: 2 }}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -1426,7 +1424,7 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <CheckCircle2 size={20} style={{ color: '#22c55e' }} />
+                <CheckCircle2 size={20} style={{ color: '#ffffff' }} />
                 <div>
                   <h2
                     className="font-bloody"
@@ -1444,7 +1442,7 @@ export function AnalyticsScreen({ isPhone }: AnalyticsScreenProps) {
                   </div>
                 </div>
               </div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#22c55e', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#ffffff', fontFamily: 'monospace' }}>
                 Completed: {summary.tasks}
               </span>
             </div>

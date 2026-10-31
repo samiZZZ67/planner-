@@ -42,9 +42,9 @@ function calcScheduledMinutes(start: string, end: string): number {
 }
 
 const PRIORITY_COLORS: Record<PriorityLevel, string> = {
-  Low: '#22c55e',
-  Medium: '#f59e0b',
-  High: '#ef4444',
+  Low: '#71717a',
+  Medium: '#a1a1aa',
+  High: '#ffffff',
 };
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -254,7 +254,7 @@ export function AddTaskScreen({ currentDate, onChangeDate, isPhone, onTaskAdded 
     onTaskAdded?.();
   };
 
-  const budgetBarColor = budgetUsedPct >= 100 ? '#ef4444' : budgetUsedPct >= 80 ? '#f59e0b' : '#22c55e';
+  const budgetBarColor = budgetUsedPct >= 100 ? '#71717a' : budgetUsedPct >= 80 ? '#a1a1aa' : '#ffffff';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -386,7 +386,7 @@ export function AddTaskScreen({ currentDate, onChangeDate, isPhone, onTaskAdded 
             Used: <strong style={{ color: budgetBarColor }}>{Math.round(budget.allocatedMinutes / 60 * 10) / 10}h</strong>
           </span>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Free: <strong style={{ color: remainingMinutes <= 0 ? '#ef4444' : '#22c55e' }}>
+            Free: <strong style={{ color: remainingMinutes <= 0 ? '#a1a1aa' : '#ffffff' }}>
               {Math.max(0, Math.round(remainingMinutes / 60 * 10) / 10)}h
             </strong>
           </span>
@@ -652,8 +652,8 @@ export function AddTaskScreen({ currentDate, onChangeDate, isPhone, onTaskAdded 
                     width: 20,
                     height: 20,
                     borderRadius: 6,
-                    border: `2px solid ${mustDo ? '#f59e0b' : 'var(--v-glass-border)'}`,
-                    background: mustDo ? 'rgba(245,158,11,0.3)' : 'transparent',
+                    border: `2px solid ${mustDo ? '#ffffff' : 'var(--v-glass-border)'}`,
+                    background: mustDo ? 'rgba(255,255,255,0.2)' : 'transparent',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -676,13 +676,13 @@ export function AddTaskScreen({ currentDate, onChangeDate, isPhone, onTaskAdded 
               margin: '0 20px 16px',
               padding: '10px 14px',
               borderRadius: 10,
-              background: 'rgba(239,68,68,0.12)',
-              border: '1px solid rgba(239,68,68,0.4)',
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.2)',
               display: 'flex',
               alignItems: 'center',
               gap: 8,
               fontSize: 13,
-              color: '#ef4444',
+              color: 'var(--text-primary)',
             }}>
               <AlertCircle size={14} />
               {error}

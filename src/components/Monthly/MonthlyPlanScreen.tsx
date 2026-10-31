@@ -179,7 +179,7 @@ function EditablePriorityCard({
                       type="button"
                       onClick={() => handleSaveEdit(idx)}
                       className="v-circle-btn"
-                      style={{ width: 26, height: 26, color: '#22c55e' }}
+                      style={{ width: 26, height: 26, color: '#ffffff' }}
                       title="Save item"
                     >
                       <Check size={12} />
@@ -213,7 +213,7 @@ function EditablePriorityCard({
                       type="button"
                       onClick={() => handleDelete(idx, item)}
                       className="v-circle-btn"
-                      style={{ width: 26, height: 26, color: '#f87171' }}
+                      style={{ width: 26, height: 26, color: 'var(--text-secondary)' }}
                       title="Delete this priority (requires confirmation)"
                     >
                       <Trash2 size={11} />
@@ -453,7 +453,7 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
               Monthly Deliverables Completion
             </span>
           </div>
-          <span style={{ fontSize: 14, fontWeight: 800, color: completionPercentage === 100 ? '#22c55e' : 'var(--accent-color)' }}>
+          <span style={{ fontSize: 14, fontWeight: 800, color: completionPercentage === 100 ? '#ffffff' : 'var(--accent-color)' }}>
             {completionPercentage}%
           </span>
         </div>
@@ -463,7 +463,7 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
             className="v-budget-bar-fill"
             style={{
               width: `${completionPercentage}%`,
-              background: completionPercentage === 100 ? '#22c55e' : 'var(--accent-color)',
+              background: completionPercentage === 100 ? '#ffffff' : 'var(--accent-color)',
             }}
           />
         </div>
@@ -513,8 +513,8 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
           <div style={{ display: 'grid', gridTemplateColumns: isPhone ? '1fr' : 'repeat(2, 1fr)', gap: 14 }}>
             <EditablePriorityCard
               title="Academic Priorities & Coursework (AASTU)"
-              icon={<BookOpen size={14} color="#38bdf8" />}
-              accentColor="#38bdf8"
+              icon={<BookOpen size={14} color="#ffffff" />}
+              accentColor="#ffffff"
               value={academicPriorities}
               onChange={val => {
                 setAcademicPriorities(val);
@@ -527,8 +527,8 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
 
             <EditablePriorityCard
               title="Video-Editing & Deep-Work Deliverables"
-              icon={<Video size={14} color="#a855f7" />}
-              accentColor="#a855f7"
+              icon={<Video size={14} color="#ffffff" />}
+              accentColor="#ffffff"
               value={editingTargets}
               onChange={val => {
                 setEditingTargets(val);
@@ -602,8 +602,8 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
                       width: 20,
                       height: 20,
                       borderRadius: 6,
-                      border: `2px solid ${g.completed ? '#22c55e' : 'var(--v-glass-border)'}`,
-                      background: g.completed ? '#22c55e' : 'transparent',
+                      border: `2px solid ${g.completed ? '#ffffff' : 'var(--v-glass-border)'}`,
+                      background: g.completed ? '#ffffff' : 'transparent',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -611,7 +611,7 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
                       flexShrink: 0,
                     }}
                   >
-                    {g.completed && <Check size={12} color="#0d0d11" strokeWidth={3} />}
+                    {g.completed && <Check size={12} color="#000000" strokeWidth={3} />}
                   </button>
                   <span
                     style={{
@@ -628,7 +628,7 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
                     type="button"
                     onClick={() => handleDeleteGoal(g.id, g.text)}
                     className="v-circle-btn"
-                    style={{ width: 26, height: 26, color: '#f87171' }}
+                    style={{ width: 26, height: 26, color: 'var(--text-secondary)' }}
                     title="Delete goal milestone"
                   >
                     <Trash2 size={11} />
@@ -687,7 +687,7 @@ export function MonthlyPlanScreen({ currentDate, isPhone }: MonthlyPlanScreenPro
                       {m.title}
                     </span>
                   </div>
-                  <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 600 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>
                     {m.completionPercentage}% deliverables complete
                   </span>
                 </div>

@@ -91,7 +91,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
           style={{
             background: 'none',
             border: 'none',
-            color: copied ? '#22c55e' : 'var(--text-secondary)',
+            color: copied ? '#ffffff' : 'var(--text-secondary)',
             fontSize: 11,
             cursor: 'pointer',
             display: 'flex',

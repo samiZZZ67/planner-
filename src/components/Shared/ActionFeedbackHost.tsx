@@ -38,13 +38,13 @@ export function ActionFeedbackHost() {
           position: 'fixed', top: 16, right: 16, zIndex: 2000, display: 'flex', alignItems: 'center', gap: 10,
           maxWidth: 'min(420px, calc(100vw - 32px))', padding: '11px 14px', borderRadius: 14,
           color: 'var(--text-primary)', background: 'var(--v-glass-bg-card, rgba(18,16,30,.96))',
-          border: `1px solid ${error ? 'rgba(248,113,113,.5)' : pending ? 'rgba(167,139,250,.45)' : 'rgba(74,222,128,.45)'}`,
+          border: '1px solid var(--v-glass-border)',
           boxShadow: '0 12px 36px rgba(0,0,0,.28)', backdropFilter: 'blur(16px)', fontSize: 13,
         }}
       >
         {pending ? <LoaderCircle size={17} style={{ flexShrink: 0, animation: 'sams-action-spin .8s linear infinite' }} />
-          : error ? <AlertCircle size={17} color="#f87171" style={{ flexShrink: 0 }} />
-            : <CheckCircle2 size={17} color="#4ade80" style={{ flexShrink: 0 }} />}
+          : error ? <AlertCircle size={17} color="var(--text-primary)" style={{ flexShrink: 0 }} />
+            : <CheckCircle2 size={17} color="var(--text-primary)" style={{ flexShrink: 0 }} />}
         <span style={{ overflowWrap: 'anywhere' }}>{notice.message}</span>
       </div>
     </>

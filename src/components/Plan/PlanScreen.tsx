@@ -412,7 +412,7 @@ export function PlanScreen({
               border: 'none',
               padding: 0,
               cursor: 'pointer',
-              color: t.isCompleted ? '#4ade80' : 'rgba(255, 255, 255, 0.45)',
+              color: t.isCompleted ? '#ffffff' : 'rgba(255, 255, 255, 0.45)',
               display: 'flex',
               alignItems: 'center',
               flexShrink: 0,
@@ -450,9 +450,9 @@ export function PlanScreen({
                 fontSize: 9,
                 padding: '1px 5px',
                 borderRadius: 4,
-                background: 'rgba(167, 139, 250, 0.15)',
-                color: '#a78bfa',
-                border: '1px solid rgba(167, 139, 250, 0.3)',
+                background: 'rgba(255, 255, 255, 0.1)',
+                color: '#ffffff',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
                 cursor: 'pointer',
                 flexShrink: 0,
               }}
@@ -487,9 +487,9 @@ export function PlanScreen({
                 fontSize: 9,
                 padding: '1px 6px',
                 borderRadius: 4,
-                background: 'rgba(239, 68, 68, 0.22)',
-                border: '1px solid rgba(239, 68, 68, 0.55)',
-                color: '#fca5a5',
+                background: 'rgba(255, 255, 255, 0.12)',
+                border: '1px solid rgba(255, 255, 255, 0.35)',
+                color: '#ffffff',
                 cursor: 'pointer',
                 fontWeight: 700,
                 display: 'inline-flex',
@@ -499,7 +499,7 @@ export function PlanScreen({
               }}
               title="Time overlap detected with another scheduled task. Click to resolve."
             >
-              <AlertTriangle size={10} style={{ color: '#ef4444' }} />
+              <AlertTriangle size={10} style={{ color: '#ffffff' }} />
               Overlap
             </span>
           )}
@@ -517,11 +517,11 @@ export function PlanScreen({
                 }
               }}
               style={{
-                background: isThisTimerActive ? 'rgba(56, 189, 248, 0.25)' : 'none',
-                border: isThisTimerActive ? '1px solid #38bdf8' : 'none',
+                background: isThisTimerActive ? 'rgba(255, 255, 255, 0.2)' : 'none',
+                border: isThisTimerActive ? '1px solid #ffffff' : 'none',
                 borderRadius: 4,
                 padding: '2px 4px',
-                color: isThisTimerActive ? '#38bdf8' : 'rgba(255,255,255,0.45)',
+                color: isThisTimerActive ? '#ffffff' : 'rgba(255,255,255,0.45)',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -582,9 +582,9 @@ export function PlanScreen({
                     fontWeight: 700,
                     padding: '2px 5px',
                     borderRadius: 4,
-                    border: isSelected ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
-                    background: isSelected ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.04)',
-                    color: isSelected ? '#38bdf8' : 'rgba(255, 255, 255, 0.5)',
+                    border: isSelected ? '1px solid #ffffff' : '1px solid rgba(255, 255, 255, 0.1)',
+                    background: isSelected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.04)',
+                    color: isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.5)',
                     cursor: 'pointer',
                     transition: 'all 0.15s',
                   }}
@@ -601,9 +601,9 @@ export function PlanScreen({
             {(['High', 'Medium', 'Low'] as PriorityLevel[]).map(lvl => {
               const label = lvl === 'High' ? 'Hard' : lvl;
               const isSelected = t.priority === lvl;
-              const color = lvl === 'High' ? '#f87171' : lvl === 'Medium' ? '#fbbf24' : '#34d399';
-              const bgColor = lvl === 'High' ? 'rgba(239,68,68,0.22)' : lvl === 'Medium' ? 'rgba(245,158,11,0.22)' : 'rgba(16,185,129,0.22)';
-              const borderColor = lvl === 'High' ? 'rgba(239,68,68,0.55)' : lvl === 'Medium' ? 'rgba(245,158,11,0.55)' : 'rgba(16,185,129,0.55)';
+              const color = lvl === 'High' ? '#ffffff' : lvl === 'Medium' ? '#d4d4d8' : '#a1a1aa';
+              const bgColor = lvl === 'High' ? 'rgba(255,255,255,0.25)' : lvl === 'Medium' ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.08)';
+              const borderColor = lvl === 'High' ? 'rgba(255,255,255,0.6)' : lvl === 'Medium' ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.2)';
 
               return (
                 <button
@@ -706,7 +706,7 @@ export function PlanScreen({
           </h2>
           {/* Budget adjuster & progress bar */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-            <span style={{ fontSize: 11, color: isOverBudget ? '#f87171' : 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: 11, color: isOverBudget ? '#ffffff' : 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
               Planned: <strong>{totalPlannedHrs}h</strong>
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 999, padding: '2px 6px' }}>
@@ -740,13 +740,13 @@ export function PlanScreen({
                 style={{
                   height: '100%',
                   width: `${Math.min(100, (totalPlannedHrs / (freeHours || 1)) * 100)}%`,
-                  background: isOverBudget ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #38bdf8, #818cf8)',
+                  background: isOverBudget ? 'linear-gradient(90deg, #ffffff, #d4d4d8)' : 'linear-gradient(90deg, #d4d4d8, #71717a)',
                   transition: 'width 0.3s ease',
                 }}
               />
             </div>
             {isOverBudget && (
-              <span style={{ fontSize: 10, color: '#f87171', fontWeight: 700 }}>
+              <span style={{ fontSize: 10, color: '#ffffff', fontWeight: 700 }}>
                 ⚠ OVER
               </span>
             )}
@@ -760,8 +760,8 @@ export function PlanScreen({
           className="v-card"
           style={{
             padding: '10px 16px',
-            background: 'rgba(239, 68, 68, 0.12)',
-            borderColor: 'rgba(239, 68, 68, 0.35)',
+            background: 'rgba(255, 255, 255, 0.08)',
+            borderColor: 'rgba(255, 255, 255, 0.25)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -770,8 +770,8 @@ export function PlanScreen({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AlertTriangle size={16} style={{ color: '#f87171', flexShrink: 0 }} />
-            <div style={{ fontSize: 12, color: '#fee2e2' }}>
+            <AlertTriangle size={16} style={{ color: '#ffffff', flexShrink: 0 }} />
+            <div style={{ fontSize: 12, color: '#ffffff' }}>
               <strong>
                 {conflictAnalysis.timeCollisions.length > 0
                   ? `${conflictAnalysis.timeCollisions.length} Time Overlap${conflictAnalysis.timeCollisions.length > 1 ? 's' : ''}`
@@ -795,14 +795,14 @@ export function PlanScreen({
             style={{
               padding: '5px 14px',
               fontSize: 11,
-              background: 'rgba(245, 158, 11, 0.25)',
-              borderColor: '#fbbf24',
+              background: 'rgba(255, 255, 255, 0.15)',
+              borderColor: 'rgba(255, 255, 255, 0.4)',
               color: '#ffffff',
               fontWeight: 700,
               gap: 5,
             }}
           >
-            <Sparkles size={12} style={{ color: '#facc15' }} />
+            <Sparkles size={12} style={{ color: '#ffffff' }} />
             Auto-Resolve Conflicts with AI
           </button>
         </div>
@@ -814,8 +814,8 @@ export function PlanScreen({
           className="v-card"
           style={{
             padding: '10px 16px',
-            background: 'rgba(245, 158, 11, 0.12)',
-            borderColor: 'rgba(245, 158, 11, 0.35)',
+            background: 'rgba(255, 255, 255, 0.08)',
+            borderColor: 'rgba(255, 255, 255, 0.25)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -824,16 +824,16 @@ export function PlanScreen({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Clock size={15} style={{ color: '#fbbf24', flexShrink: 0 }} />
+            <Clock size={15} style={{ color: '#ffffff', flexShrink: 0 }} />
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)' }}>
-              You have <strong style={{ color: '#fbbf24' }}>{prevUnfinished.length}</strong> unfinished tasks from {prevDate}.
+              You have <strong style={{ color: '#ffffff' }}>{prevUnfinished.length}</strong> unfinished tasks from {prevDate}.
             </div>
           </div>
           <button
             type="button"
             onClick={() => onOpenAutoPlan(prevDate, prevUnfinished)}
             className="v-pill-btn v-pill-btn-primary"
-            style={{ padding: '4px 12px', fontSize: 11, background: 'rgba(245,158,11,0.25)', borderColor: '#fbbf24', color: '#ffffff' }}
+            style={{ padding: '4px 12px', fontSize: 11, background: 'rgba(255, 255, 255, 0.15)', borderColor: 'rgba(255, 255, 255, 0.4)', color: '#ffffff' }}
           >
             Review & Rollover →
           </button>
@@ -846,14 +846,14 @@ export function PlanScreen({
           className="v-card"
           style={{
             padding: '10px 16px',
-            background: 'rgba(99, 102, 241, 0.12)',
-            borderColor: 'rgba(99, 102, 241, 0.3)',
+            background: 'rgba(255, 255, 255, 0.08)',
+            borderColor: 'rgba(255, 255, 255, 0.25)',
             display: 'flex',
             alignItems: 'center',
             gap: 10,
           }}
         >
-          <Sparkles size={15} style={{ color: '#a5b4fc', flexShrink: 0 }} />
+          <Sparkles size={15} style={{ color: '#ffffff', flexShrink: 0 }} />
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)' }}>
             <strong>One Change Promised Yesterday:</strong> {yesterdayReflection}
           </div>
@@ -895,9 +895,9 @@ export function PlanScreen({
                   fontWeight: 600,
                   padding: '2px 8px',
                   borderRadius: 999,
-                  border: isSel ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.08)',
-                  background: isSel ? 'rgba(56,189,248,0.2)' : 'rgba(255,255,255,0.03)',
-                  color: isSel ? '#38bdf8' : 'rgba(255,255,255,0.5)',
+                  border: isSel ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.08)',
+                  background: isSel ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.03)',
+                  color: isSel ? '#ffffff' : 'rgba(255,255,255,0.5)',
                   cursor: 'pointer',
                 }}
               >
@@ -1080,7 +1080,7 @@ export function PlanScreen({
                 gap: 6,
               }}
             >
-              <Star size={12} style={{ color: '#facc15', fill: '#facc15' }} />
+              <Star size={12} style={{ color: '#ffffff', fill: '#ffffff' }} />
               <span>GOALS (TOP 3)</span>
             </div>
 
@@ -1143,9 +1143,9 @@ export function PlanScreen({
                             fontSize: 9,
                             padding: '1px 4px',
                             borderRadius: 3,
-                            border: newGoalTime === m ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.08)',
-                            background: newGoalTime === m ? 'rgba(56, 189, 248, 0.2)' : 'transparent',
-                            color: newGoalTime === m ? '#38bdf8' : 'rgba(255,255,255,0.4)',
+                            border: newGoalTime === m ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.08)',
+                            background: newGoalTime === m ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
+                            color: newGoalTime === m ? '#ffffff' : 'rgba(255,255,255,0.4)',
                             cursor: 'pointer',
                           }}
                         >
@@ -1163,9 +1163,9 @@ export function PlanScreen({
                             fontSize: 9,
                             padding: '1px 4px',
                             borderRadius: 3,
-                            border: newGoalPriority === lvl ? '1px solid #facc15' : '1px solid rgba(255,255,255,0.08)',
-                            background: newGoalPriority === lvl ? 'rgba(250, 204, 21, 0.2)' : 'transparent',
-                            color: newGoalPriority === lvl ? '#facc15' : 'rgba(255,255,255,0.4)',
+                            border: newGoalPriority === lvl ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.08)',
+                            background: newGoalPriority === lvl ? 'rgba(255, 255, 255, 0.2)' : 'transparent',
+                            color: newGoalPriority === lvl ? '#ffffff' : 'rgba(255,255,255,0.4)',
                             cursor: 'pointer',
                           }}
                         >
@@ -1230,7 +1230,7 @@ export function PlanScreen({
                   placeholder="+ Add person to call..."
                   style={{ flex: 1, background: 'transparent', border: 'none', color: '#ffffff', fontSize: 12, outline: 'none' }}
                 />
-                <button type="submit" disabled={!newCallTitle.trim()} style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer' }}>
+                <button type="submit" disabled={!newCallTitle.trim()} style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer' }}>
                   <Plus size={14} />
                 </button>
               </form>
@@ -1288,7 +1288,7 @@ export function PlanScreen({
                   placeholder="+ Add errand to run..."
                   style={{ flex: 1, background: 'transparent', border: 'none', color: '#ffffff', fontSize: 12, outline: 'none' }}
                 />
-                <button type="submit" disabled={!newErrandTitle.trim()} style={{ background: 'none', border: 'none', color: '#a78bfa', cursor: 'pointer' }}>
+                <button type="submit" disabled={!newErrandTitle.trim()} style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer' }}>
                   <Plus size={14} />
                 </button>
               </form>
@@ -1385,9 +1385,9 @@ export function PlanScreen({
                           fontWeight: 700,
                           padding: '2px 5px',
                           borderRadius: 4,
-                          border: newTodoTime === m ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
-                          background: newTodoTime === m ? 'rgba(56, 189, 248, 0.25)' : 'rgba(255, 255, 255, 0.04)',
-                          color: newTodoTime === m ? '#38bdf8' : 'rgba(255, 255, 255, 0.5)',
+                          border: newTodoTime === m ? '1px solid #ffffff' : '1px solid rgba(255,255,255,0.1)',
+                          background: newTodoTime === m ? 'rgba(255, 255, 255, 0.25)' : 'rgba(255, 255, 255, 0.04)',
+                          color: newTodoTime === m ? '#ffffff' : 'rgba(255, 255, 255, 0.5)',
                           cursor: 'pointer',
                         }}
                       >
@@ -1401,9 +1401,9 @@ export function PlanScreen({
                     {(['High', 'Medium', 'Low'] as PriorityLevel[]).map(lvl => {
                       const label = lvl === 'High' ? 'Hard' : lvl;
                       const isSelected = newTodoPriority === lvl;
-                      const color = lvl === 'High' ? '#f87171' : lvl === 'Medium' ? '#fbbf24' : '#34d399';
-                      const bgColor = lvl === 'High' ? 'rgba(239,68,68,0.22)' : lvl === 'Medium' ? 'rgba(245,158,11,0.22)' : 'rgba(16,185,129,0.22)';
-                      const borderColor = lvl === 'High' ? 'rgba(239,68,68,0.55)' : lvl === 'Medium' ? 'rgba(245,158,11,0.55)' : 'rgba(16,185,129,0.55)';
+                      const color = lvl === 'High' ? '#ffffff' : lvl === 'Medium' ? '#d4d4d8' : '#a1a1aa';
+                      const bgColor = lvl === 'High' ? 'rgba(255,255,255,0.25)' : lvl === 'Medium' ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.08)';
+                      const borderColor = lvl === 'High' ? 'rgba(255,255,255,0.6)' : lvl === 'Medium' ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.2)';
 
                       return (
                         <button
@@ -1631,9 +1631,9 @@ export function PlanScreen({
                         height: 42,
                         clipPath: 'polygon(10% 0%, 90% 0%, 80% 100%, 20% 100%)', // realistic tumbler cup silhouette
                         borderRadius: '2px 2px 4px 4px',
-                        border: `1.5px solid ${isFilled ? '#38bdf8' : 'rgba(255,255,255,0.3)'}`,
-                        background: isFilled ? 'linear-gradient(180deg, rgba(56,189,248,0.4) 0%, rgba(14,165,233,0.8) 100%)' : 'rgba(255,255,255,0.04)',
-                        color: isFilled ? '#ffffff' : 'rgba(255,255,255,0.45)',
+                        border: `1.5px solid ${isFilled ? '#ffffff' : 'rgba(255,255,255,0.3)'}`,
+                        background: isFilled ? 'linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(200,200,200,0.8) 100%)' : 'rgba(255,255,255,0.04)',
+                        color: isFilled ? '#000000' : 'rgba(255,255,255,0.45)',
                         fontSize: 11,
                         fontWeight: 800,
                         cursor: 'pointer',
@@ -1641,7 +1641,7 @@ export function PlanScreen({
                         alignItems: 'center',
                         justifyContent: 'center',
                         transition: 'all 0.15s ease',
-                        boxShadow: isFilled ? '0 0 10px rgba(56,189,248,0.4)' : 'none',
+                        boxShadow: isFilled ? '0 0 10px rgba(255,255,255,0.4)' : 'none',
                       }}
                       title={`Glass ${num} - click to toggle`}
                     >
@@ -1664,9 +1664,9 @@ export function PlanScreen({
                         height: 42,
                         clipPath: 'polygon(10% 0%, 90% 0%, 80% 100%, 20% 100%)',
                         borderRadius: '2px 2px 4px 4px',
-                        border: `1.5px solid ${isFilled ? '#38bdf8' : 'rgba(255,255,255,0.3)'}`,
-                        background: isFilled ? 'linear-gradient(180deg, rgba(56,189,248,0.4) 0%, rgba(14,165,233,0.8) 100%)' : 'rgba(255,255,255,0.04)',
-                        color: isFilled ? '#ffffff' : 'rgba(255,255,255,0.45)',
+                        border: `1.5px solid ${isFilled ? '#ffffff' : 'rgba(255,255,255,0.3)'}`,
+                        background: isFilled ? 'linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(200,200,200,0.8) 100%)' : 'rgba(255,255,255,0.04)',
+                        color: isFilled ? '#000000' : 'rgba(255,255,255,0.45)',
                         fontSize: 11,
                         fontWeight: 800,
                         cursor: 'pointer',
@@ -1674,7 +1674,7 @@ export function PlanScreen({
                         alignItems: 'center',
                         justifyContent: 'center',
                         transition: 'all 0.15s ease',
-                        boxShadow: isFilled ? '0 0 10px rgba(56,189,248,0.4)' : 'none',
+                        boxShadow: isFilled ? '0 0 10px rgba(255,255,255,0.4)' : 'none',
                       }}
                       title={`Glass ${num} - click to toggle`}
                     >

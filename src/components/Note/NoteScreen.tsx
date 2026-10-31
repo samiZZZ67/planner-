@@ -198,11 +198,11 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
         {/* 2-minute Save Countdown & Manual Save Button */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {countdown !== null && countdown > 0 ? (
-            <span style={{ fontSize: 12, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 5 }}>
               <Clock size={12} /> Unsaved changes ({formatCountdown(countdown)})
             </span>
           ) : saved ? (
-            <span style={{ fontSize: 12, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 5 }}>
               <Check size={12} /> Saved
             </span>
           ) : (
@@ -242,7 +242,7 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Obstacles */}
           <div className="v-card" style={{ padding: '18px 20px' }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#f87171', display: 'block', marginBottom: 10 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 10 }}>
               What obstacles did I face today?
             </label>
             <VisualRichEditor
@@ -255,7 +255,7 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
 
           {/* Happened */}
           <div className="v-card" style={{ padding: '18px 20px' }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#38bdf8', display: 'block', marginBottom: 10 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 10 }}>
               What happened?
             </label>
             <VisualRichEditor
@@ -268,7 +268,7 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
 
           {/* Solved */}
           <div className="v-card" style={{ padding: '18px 20px' }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#22c55e', display: 'block', marginBottom: 10 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 10 }}>
               How did I solve it?
             </label>
             <VisualRichEditor
@@ -281,7 +281,7 @@ export function NoteScreen({ currentDate, onChangeDate, isPhone }: NoteScreenPro
 
           {/* Better Tomorrow */}
           <div className="v-card" style={{ padding: '18px 20px' }}>
-            <label style={{ fontSize: 13, fontWeight: 700, color: '#f59e0b', display: 'block', marginBottom: 10 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: 10 }}>
               What could I do better tomorrow?
             </label>
             <VisualRichEditor

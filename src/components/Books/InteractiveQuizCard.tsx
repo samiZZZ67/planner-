@@ -67,7 +67,7 @@ export function InteractiveQuizCard({
           color: 'var(--text-secondary)',
         }}
       >
-        <Brain size={36} style={{ margin: '0 auto 12px auto', opacity: 0.5, color: 'var(--accent-color, #60a5fa)' }} />
+        <Brain size={36} style={{ margin: '0 auto 12px auto', opacity: 0.5, color: 'var(--text-secondary)' }} />
         <h4 style={{ margin: '0 0 8px 0', color: 'var(--text-primary)' }}>No Quiz Questions Available</h4>
         <p style={{ margin: '0 0 16px 0', fontSize: 13 }}>
           Quiz questions for this reading section have not been generated yet or pages were empty.
@@ -177,8 +177,8 @@ export function InteractiveQuizCard({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: scorePercent >= 70 ? 'rgba(34, 197, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-              color: scorePercent >= 70 ? '#4ade80' : '#fcd34d',
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: '#ffffff',
             }}
           >
             <Award size={30} />
@@ -203,14 +203,14 @@ export function InteractiveQuizCard({
           }}
         >
           <div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: scorePercent >= 70 ? '#4ade80' : '#60a5fa' }}>
+            <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)' }}>
               {correctCount} / {totalQuestions}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Correct Answers</div>
           </div>
           <div style={{ width: 1, height: 40, background: 'var(--v-glass-border)' }} />
           <div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: scorePercent >= 70 ? '#4ade80' : '#60a5fa' }}>
+            <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)' }}>
               {scorePercent}%
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Comprehension Score</div>
@@ -224,11 +224,11 @@ export function InteractiveQuizCard({
               style={{
                 padding: 14,
                 borderRadius: 12,
-                background: 'rgba(34, 197, 94, 0.05)',
-                border: '1px solid rgba(34, 197, 94, 0.2)',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: '#4ade80', fontSize: 13, fontWeight: 600 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>
                 <CheckCircle2 size={15} />
                 <span>Concepts Mastered ({masteredConcepts.length})</span>
               </div>
@@ -245,11 +245,11 @@ export function InteractiveQuizCard({
               style={{
                 padding: 14,
                 borderRadius: 12,
-                background: 'rgba(239, 68, 68, 0.05)',
-                border: '1px solid rgba(239, 68, 68, 0.2)',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--v-glass-border)',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: '#f87171', fontSize: 13, fontWeight: 600 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: 'var(--text-muted)', fontSize: 13, fontWeight: 600 }}>
                 <AlertCircle size={15} />
                 <span>Concepts to Revise ({revisionConcepts.length})</span>
               </div>
@@ -264,12 +264,12 @@ export function InteractiveQuizCard({
               style={{
                 padding: 14,
                 borderRadius: 12,
-                background: 'rgba(34, 197, 94, 0.05)',
-                border: '1px solid rgba(34, 197, 94, 0.2)',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                color: '#4ade80',
+                color: 'var(--text-primary)',
                 fontSize: 13,
               }}
             >
@@ -330,17 +330,17 @@ export function InteractiveQuizCard({
 
   const difficultyColor =
     currentQuestion.difficulty === 'hard'
-      ? '#c084fc'
+      ? '#ffffff'
       : currentQuestion.difficulty === 'medium'
-      ? '#fcd34d'
-      : '#4ade80';
+      ? '#d4d4d8'
+      : '#a1a1aa';
 
   const difficultyBg =
     currentQuestion.difficulty === 'hard'
-      ? 'rgba(192, 132, 252, 0.15)'
+      ? 'rgba(255, 255, 255, 0.15)'
       : currentQuestion.difficulty === 'medium'
-      ? 'rgba(252, 211, 77, 0.15)'
-      : 'rgba(74, 222, 128, 0.15)';
+      ? 'rgba(255, 255, 255, 0.1)'
+      : 'rgba(255, 255, 255, 0.06)';
 
   return (
     <div
@@ -410,7 +410,7 @@ export function InteractiveQuizCard({
           style={{
             height: '100%',
             width: `${((currentIndex + 1) / totalQuestions) * 100}%`,
-            background: 'var(--accent-color, #60a5fa)',
+            background: 'var(--text-primary, #ffffff)',
             transition: 'width 0.25s ease',
           }}
         />
@@ -442,20 +442,20 @@ export function InteractiveQuizCard({
 
           if (isSubmitted) {
             if (isCorrectOption) {
-              optionBorder = '#22c55e';
-              optionBg = 'rgba(34, 197, 94, 0.16)';
-              optionTextColor = '#86efac';
+              optionBorder = '#ffffff';
+              optionBg = 'rgba(255, 255, 255, 0.16)';
+              optionTextColor = '#ffffff';
             } else if (isSelected && !isCorrectOption) {
-              optionBorder = '#ef4444';
-              optionBg = 'rgba(239, 68, 68, 0.16)';
-              optionTextColor = '#fca5a5';
+              optionBorder = 'var(--v-glass-border)';
+              optionBg = 'rgba(255, 255, 255, 0.05)';
+              optionTextColor = 'var(--text-muted)';
             } else {
               optionBg = 'rgba(255, 255, 255, 0.02)';
               optionTextColor = 'var(--text-muted)';
             }
           } else if (isSelected) {
-            optionBorder = 'var(--accent-color, #60a5fa)';
-            optionBg = 'rgba(96, 165, 250, 0.14)';
+            optionBorder = 'var(--text-primary, #ffffff)';
+            optionBg = 'rgba(255, 255, 255, 0.14)';
           }
 
           return (
@@ -492,8 +492,8 @@ export function InteractiveQuizCard({
                     justifyContent: 'center',
                     fontWeight: 700,
                     fontSize: 11,
-                    background: isSelected ? 'var(--accent-color, #60a5fa)' : 'rgba(255, 255, 255, 0.08)',
-                    color: isSelected ? '#ffffff' : 'var(--text-secondary)',
+                    background: isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.08)',
+                    color: isSelected ? '#000000' : 'var(--text-secondary)',
                     flexShrink: 0,
                   }}
                 >
@@ -503,10 +503,10 @@ export function InteractiveQuizCard({
               </div>
 
               {isSubmitted && isCorrectOption && (
-                <CheckCircle2 size={18} style={{ color: '#4ade80', flexShrink: 0 }} />
+                <CheckCircle2 size={18} style={{ color: '#ffffff', flexShrink: 0 }} />
               )}
               {isSubmitted && isSelected && !isCorrectOption && (
-                <XCircle size={18} style={{ color: '#f87171', flexShrink: 0 }} />
+                <XCircle size={18} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
               )}
             </button>
           );
@@ -519,19 +519,19 @@ export function InteractiveQuizCard({
           style={{
             padding: 16,
             borderRadius: 12,
-            background: isCurrentCorrect ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)',
-            border: `1px solid ${isCurrentCorrect ? 'rgba(34, 197, 94, 0.25)' : 'rgba(239, 68, 68, 0.25)'}`,
+            background: 'rgba(255, 255, 255, 0.06)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
             display: 'grid',
             gap: 8,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {isCurrentCorrect ? (
-              <CheckCircle2 size={18} style={{ color: '#4ade80' }} />
+              <CheckCircle2 size={18} style={{ color: '#ffffff' }} />
             ) : (
-              <XCircle size={18} style={{ color: '#f87171' }} />
+              <XCircle size={18} style={{ color: 'var(--text-secondary)' }} />
             )}
-            <strong style={{ fontSize: 13, color: isCurrentCorrect ? '#86efac' : '#fca5a5' }}>
+            <strong style={{ fontSize: 13, color: '#ffffff' }}>
               {isCurrentCorrect ? 'Correct Answer! Excellent recall.' : 'Incorrect Response.'}
             </strong>
           </div>

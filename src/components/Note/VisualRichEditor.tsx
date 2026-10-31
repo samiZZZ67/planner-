@@ -20,20 +20,20 @@ interface VisualRichEditorProps {
 
 const TEXT_COLORS = [
   { label: 'Default', value: 'inherit' },
-  { label: 'Red', value: '#ef4444' },
-  { label: 'Sky Blue', value: '#38bdf8' },
-  { label: 'Green', value: '#22c55e' },
-  { label: 'Amber', value: '#f59e0b' },
-  { label: 'Purple', value: '#a855f7' },
+  { label: 'Pure White', value: '#ffffff' },
+  { label: 'Light Gray', value: '#d4d4d8' },
+  { label: 'Mid Gray', value: '#a1a1aa' },
+  { label: 'Dark Gray', value: '#52525b' },
+  { label: 'Pure Black', value: '#000000' },
 ];
 
 const HIGHLIGHT_COLORS = [
   { label: 'Clear', value: 'transparent' },
-  { label: 'Yellow', value: 'rgba(250, 204, 21, 0.4)' },
-  { label: 'Green', value: 'rgba(34, 197, 94, 0.35)' },
-  { label: 'Blue', value: 'rgba(56, 189, 248, 0.35)' },
-  { label: 'Pink', value: 'rgba(244, 63, 94, 0.35)' },
-  { label: 'Amber', value: 'rgba(245, 158, 11, 0.35)' },
+  { label: 'Soft White', value: 'rgba(255, 255, 255, 0.25)' },
+  { label: 'Light Gray', value: 'rgba(255, 255, 255, 0.15)' },
+  { label: 'Mid Gray', value: 'rgba(255, 255, 255, 0.08)' },
+  { label: 'Subtle Dark', value: 'rgba(0, 0, 0, 0.3)' },
+  { label: 'Dark Contrast', value: 'rgba(0, 0, 0, 0.6)' },
 ];
 
 export function VisualRichEditor({
@@ -247,7 +247,7 @@ export function VisualRichEditor({
             style={{ padding: '4px 8px', fontSize: 11, minHeight: 30, gap: 4 }}
             title="Highlight Color"
           >
-            <Highlighter size={13} color="#f59e0b" />
+            <Highlighter size={13} color="var(--text-primary)" />
             <span>Highlight</span>
           </button>
 

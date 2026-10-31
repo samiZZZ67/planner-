@@ -107,12 +107,12 @@ export function ScheduleConflictModal({
                 width: 34,
                 height: 34,
                 borderRadius: 10,
-                background: 'rgba(245, 158, 11, 0.2)',
-                border: '1px solid #fbbf24',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#fbbf24',
+                color: '#ffffff',
               }}
             >
               <AlertTriangle size={18} />
@@ -120,7 +120,7 @@ export function ScheduleConflictModal({
             <div>
               <h2
                 id="conflict-modal-title"
-                style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#fef08a' }}
+                style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}
               >
                 Schedule Conflict & Overlap Resolver
               </h2>
@@ -158,21 +158,21 @@ export function ScheduleConflictModal({
                 style={{
                   padding: '10px 14px',
                   borderRadius: 12,
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.25)',
                   fontSize: 12,
-                  color: '#fca5a5',
+                  color: 'var(--text-primary)',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 6,
                 }}
               >
                 <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <AlertTriangle size={14} style={{ color: '#ef4444' }} />
+                  <AlertTriangle size={14} style={{ color: '#ffffff' }} />
                   <span>Time Collisions Detected:</span>
                 </div>
                 {analysis.timeCollisions.map((c, i) => (
-                  <div key={i} style={{ paddingLeft: 20, fontSize: 11.5, color: '#fee2e2' }}>
+                  <div key={i} style={{ paddingLeft: 20, fontSize: 11.5, color: 'var(--text-secondary)' }}>
                     • <strong>{c.taskTitleA}</strong> overlaps with <strong>{c.taskTitleB}</strong> by {c.overlapMinutes} mins ({c.timeWindow})
                   </div>
                 ))}
@@ -184,16 +184,16 @@ export function ScheduleConflictModal({
                 style={{
                   padding: '10px 14px',
                   borderRadius: 12,
-                  background: 'rgba(245, 158, 11, 0.15)',
-                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
                   fontSize: 12,
-                  color: '#fef08a',
+                  color: 'var(--text-primary)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
                 }}
               >
-                <Clock size={15} style={{ color: '#facc15', flexShrink: 0 }} />
+                <Clock size={15} style={{ color: '#ffffff', flexShrink: 0 }} />
                 <span>
                   Planned tasks (<strong>{Math.round((analysis.totalPlannedMinutes / 60) * 10) / 10}h</strong>) exceed your daily budget (<strong>{freeHours}h</strong>) by {Math.round(analysis.budgetOverflowMinutes / 6) / 10}h.
                 </span>
@@ -203,7 +203,7 @@ export function ScheduleConflictModal({
 
           {/* Proposed Auto-Resolution Preview */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#38bdf8' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
               <Sparkles size={14} />
               <span>Intelligent Sequential Schedule:</span>
             </div>
@@ -247,8 +247,8 @@ export function ScheduleConflictModal({
                       <span style={{ color: 'rgba(255, 255, 255, 0.4)', textDecoration: ch.oldStartTime ? 'line-through' : 'none' }}>
                         {ch.oldStartTime ? `${ch.oldStartTime}–${ch.oldEndTime}` : 'Unscheduled'}
                       </span>
-                      <ArrowRight size={11} style={{ color: '#38bdf8' }} />
-                      <span style={{ color: '#4ade80', fontWeight: 700 }}>
+                      <ArrowRight size={11} style={{ color: '#ffffff' }} />
+                      <span style={{ color: '#ffffff', fontWeight: 700 }}>
                         {ch.newStartTime}–{ch.newEndTime} ({ch.durationMinutes}m)
                       </span>
                     </div>
@@ -290,8 +290,6 @@ export function ScheduleConflictModal({
               fontSize: 12,
               fontWeight: 700,
               gap: 6,
-              background: appliedSuccess ? '#22c55e' : 'linear-gradient(135deg, #f59e0b, #d97706)',
-              borderColor: appliedSuccess ? '#22c55e' : '#f59e0b',
             }}
           >
             {appliedSuccess ? (

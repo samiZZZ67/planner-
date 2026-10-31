@@ -75,7 +75,7 @@ const FullScreenTooltip = ({ active, payload, label }: any) => {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 9, height: 9, borderRadius: '50%', background: p.color }} />
-            <span style={{ color: '#cbd5e1' }}>{p.name}:</span>
+            <span style={{ color: '#d4d4d8' }}>{p.name}:</span>
           </div>
           <span style={{ color: p.color, fontFamily: 'monospace', fontSize: 15, fontWeight: 800 }}>
             {p.value}
@@ -168,8 +168,8 @@ export function FullScreenDailyGraphModal({
               height: 36,
               borderRadius: '50%',
               overflow: 'hidden',
-              border: '1.5px solid rgba(168, 85, 247, 0.5)',
-              boxShadow: '0 0 15px rgba(168, 85, 247, 0.35)',
+              border: '1.5px solid rgba(255, 255, 255, 0.3)',
+              boxShadow: '0 0 15px rgba(255, 255, 255, 0.15)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -197,9 +197,9 @@ export function FullScreenDailyGraphModal({
                     fontWeight: 800,
                     padding: '2px 8px',
                     borderRadius: 999,
-                    background: 'rgba(34, 197, 94, 0.18)',
-                    color: '#22c55e',
-                    border: '1px solid rgba(34, 197, 94, 0.35)',
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    color: '#ffffff',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
                   }}
                 >
                   CURRENT WEEK
@@ -211,9 +211,9 @@ export function FullScreenDailyGraphModal({
                     fontWeight: 800,
                     padding: '2px 8px',
                     borderRadius: 999,
-                    background: 'rgba(245, 158, 11, 0.18)',
-                    color: '#f59e0b',
-                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: '#a1a1aa',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
                   }}
                 >
                   HISTORICAL WEEK
@@ -266,8 +266,8 @@ export function FullScreenDailyGraphModal({
             gap: 12,
           }}
         >
-          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #38bdf8' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#38bdf8' }}>
+          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #ffffff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ffffff' }}>
               <Clock size={16} />
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>HOURS TAKEN</span>
             </div>
@@ -277,8 +277,8 @@ export function FullScreenDailyGraphModal({
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total focus in week</div>
           </div>
 
-          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #22c55e' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#22c55e' }}>
+          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #ffffff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ffffff' }}>
               <CheckCircle2 size={16} />
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>TASKS COMPLETED</span>
             </div>
@@ -288,8 +288,8 @@ export function FullScreenDailyGraphModal({
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{summary.completion}% completion rate</div>
           </div>
 
-          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #f59e0b' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#f59e0b' }}>
+          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #ffffff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ffffff' }}>
               <Flame size={16} />
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>POMODOROS</span>
             </div>
@@ -299,8 +299,8 @@ export function FullScreenDailyGraphModal({
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>25m focus blocks</div>
           </div>
 
-          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #a855f7' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#a855f7' }}>
+          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #ffffff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ffffff' }}>
               <Target size={16} />
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>PEAK FOCUS DAY</span>
             </div>
@@ -318,15 +318,15 @@ export function FullScreenDailyGraphModal({
             style={{
               padding: '24px',
               textAlign: 'center',
-              borderColor: 'rgba(245, 158, 11, 0.4)',
-              background: 'rgba(245, 158, 11, 0.08)',
+              borderColor: 'rgba(255, 255, 255, 0.2)',
+              background: 'rgba(255, 255, 255, 0.05)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: 8,
             }}
           >
-            <Calendar size={28} style={{ color: '#f59e0b' }} />
+            <Calendar size={28} style={{ color: '#ffffff' }} />
             <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>
               No focus hours or tasks recorded for this week
             </div>
@@ -353,7 +353,7 @@ export function FullScreenDailyGraphModal({
         <div className="v-card" style={{ padding: isPhone ? '18px 14px' : '24px 28px', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <TrendingUp size={20} style={{ color: '#38bdf8' }} />
+              <TrendingUp size={20} style={{ color: '#ffffff' }} />
               <div>
                 <h3 className="font-bloody" style={{ fontSize: 20, margin: 0, letterSpacing: '0.02em' }}>
                   FOCUS HOURS TAKEN BY DAY
@@ -363,7 +363,7 @@ export function FullScreenDailyGraphModal({
                 </div>
               </div>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#38bdf8', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
               Total: {summary.hours}h
             </span>
           </div>
@@ -373,8 +373,8 @@ export function FullScreenDailyGraphModal({
               <AreaChart data={chartData} margin={{ top: 15, right: 15, left: -15, bottom: 0 }}>
                 <defs>
                   <linearGradient id="fullScreenFocusGlow" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.65} />
-                    <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.03} />
+                    <stop offset="5%" stopColor="#ffffff" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#ffffff" stopOpacity={0.03} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255, 255, 255, 0.08)" vertical={false} />
@@ -393,10 +393,10 @@ export function FullScreenDailyGraphModal({
                   type="monotone"
                   dataKey="hours"
                   name="Hours Taken"
-                  stroke="#38bdf8"
-                  strokeWidth={3.5}
+                  stroke="#ffffff"
+                  strokeWidth={2.5}
                   fill="url(#fullScreenFocusGlow)"
-                  activeDot={{ r: 7, fill: '#38bdf8', stroke: '#fff', strokeWidth: 2.5 }}
+                  activeDot={{ r: 7, fill: '#ffffff', stroke: '#000000', strokeWidth: 2.5 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -407,7 +407,7 @@ export function FullScreenDailyGraphModal({
         <div className="v-card" style={{ padding: isPhone ? '18px 14px' : '24px 28px', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <CheckCircle2 size={20} style={{ color: '#22c55e' }} />
+              <CheckCircle2 size={20} style={{ color: '#ffffff' }} />
               <div>
                 <h3 className="font-bloody" style={{ fontSize: 20, margin: 0, letterSpacing: '0.02em' }}>
                   TASKS COMPLETED BY DAY
@@ -417,7 +417,7 @@ export function FullScreenDailyGraphModal({
                 </div>
               </div>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#22c55e', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
               Completed: {summary.tasks}
             </span>
           </div>
@@ -440,7 +440,7 @@ export function FullScreenDailyGraphModal({
                 <Bar
                   dataKey="tasks"
                   name="Tasks Completed"
-                  fill="#22c55e"
+                  fill="#e7e7ea"
                   radius={[8, 8, 0, 0]}
                   maxBarSize={48}
                 />
@@ -487,10 +487,10 @@ export function FullScreenDailyGraphModal({
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                    <span style={{ fontSize: 12, color: '#38bdf8', fontWeight: 700 }}>
+                    <span style={{ fontSize: 12, color: '#ffffff', fontWeight: 700 }}>
                       ⏱️ {day.hours}h focus
                     </span>
-                    <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>
+                    <span style={{ fontSize: 12, color: '#e4e4e7', fontWeight: 700 }}>
                       ✓ {day.completedTasks}/{day.totalTasks} ({completion}%)
                     </span>
                   </div>

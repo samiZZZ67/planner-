@@ -2046,7 +2046,7 @@ export function FreeLLMAssistant({
             style={{
               width: 25,
               height: 25,
-              color: isDark ? 'var(--accent-color)' : '#0284c7',
+              color: isDark ? 'var(--accent-color)' : '#000000',
               filter: 'drop-shadow(0 0 6px var(--accent-glow))',
               transform: 'rotate(-15deg)',
             }}
@@ -2059,7 +2059,7 @@ export function FreeLLMAssistant({
               right: -6,
               width: 14,
               height: 14,
-              color: isDark ? '#bae6fd' : '#0369a1',
+              color: isDark ? '#ffffff' : '#000000',
               filter: 'drop-shadow(0 0 4px var(--accent-glow))',
               animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             }}
@@ -2073,9 +2073,9 @@ export function FreeLLMAssistant({
               width: 9,
               height: 9,
               borderRadius: '50%',
-              background: gatewayOnline === false ? '#ef4444' : '#10b981',
+              background: gatewayOnline === false ? '#71717a' : '#ffffff',
               border: isDark ? '1.5px solid #0d0d11' : '1.5px solid #ffffff',
-              boxShadow: gatewayOnline === false ? '0 0 6px #ef4444' : '0 0 6px #10b981',
+              boxShadow: gatewayOnline === false ? '0 0 6px #71717a' : '0 0 6px #ffffff',
             }}
           />
           {/* Always-Available Voice Listening Indicator Badge */}
@@ -2089,16 +2089,16 @@ export function FreeLLMAssistant({
                 width: 17,
                 height: 17,
                 borderRadius: '50%',
-                background: voiceLifecycleState === 'listening_wake_word' ? '#10b981' : '#38bdf8',
+                background: voiceLifecycleState === 'listening_wake_word' ? '#ffffff' : '#d4d4d8',
                 border: isDark ? '1.5px solid #0d0d11' : '1.5px solid #ffffff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 0 10px rgba(16, 185, 129, 0.8)',
+                boxShadow: '0 0 10px rgba(255, 255, 255, 0.5)',
                 animation: 'pulse 1.8s infinite',
               }}
             >
-              <Mic style={{ width: 10, height: 10, color: '#ffffff' }} />
+              <Mic style={{ width: 10, height: 10, color: '#000000' }} />
             </span>
           )}
         </div>
@@ -2244,8 +2244,8 @@ export function FreeLLMAssistant({
                   width: 7,
                   height: 7,
                   borderRadius: '50%',
-                  background: gatewayOnline === true ? '#10b981' : gatewayOnline === false ? '#ef4444' : '#f59e0b',
-                  boxShadow: gatewayOnline === true ? '0 0 6px #10b981' : undefined,
+                  background: gatewayOnline === true ? '#ffffff' : gatewayOnline === false ? '#71717a' : '#d4d4d8',
+                  boxShadow: gatewayOnline === true ? '0 0 6px #ffffff' : undefined,
                 }}
               />
               <span>
@@ -2316,7 +2316,7 @@ export function FreeLLMAssistant({
               transition: 'all 0.15s ease',
             }}
           >
-            <Volume2 style={{ width: 14, height: 14, color: '#c084fc' }} />
+            <Volume2 style={{ width: 14, height: 14, color: '#ffffff' }} />
             {!isPhone && (
               <span style={{ maxWidth: 85, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {(() => {
@@ -2461,10 +2461,10 @@ export function FreeLLMAssistant({
                   padding: '8px 12px',
                   borderRadius: 10,
                   background: isDark
-                    ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(99, 102, 241, 0.35))'
-                    : 'linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(99, 102, 241, 0.18))',
-                  border: isDark ? '1px solid rgba(168, 85, 247, 0.5)' : '1px solid rgba(168, 85, 247, 0.35)',
-                  color: isDark ? '#ffffff' : '#6d28d9',
+                    ? 'rgba(255, 255, 255, 0.15)'
+                    : 'rgba(0, 0, 0, 0.08)',
+                  border: isDark ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(0, 0, 0, 0.2)',
+                  color: isDark ? '#ffffff' : '#000000',
                   fontSize: 12,
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -2576,7 +2576,7 @@ export function FreeLLMAssistant({
                           style={{
                             flex: 1,
                             background: isDark ? 'rgba(0, 0, 0, 0.4)' : '#ffffff',
-                            border: '1px solid #a855f7',
+                            border: '1px solid #ffffff',
                             borderRadius: 4,
                             padding: '3px 6px',
                             color: 'var(--text-primary)',
@@ -2586,7 +2586,7 @@ export function FreeLLMAssistant({
                         />
                         <button
                           onClick={() => handleRenameConversation(conv.id, editingTitleText)}
-                          style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', padding: 2 }}
+                          style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer', padding: 2 }}
                           title="Save title"
                         >
                           <Check style={{ width: 13, height: 13 }} />
@@ -2614,10 +2614,10 @@ export function FreeLLMAssistant({
                         borderRadius: 8,
                         cursor: 'pointer',
                         background: isActive
-                          ? (isDark ? 'rgba(168, 85, 247, 0.22)' : 'rgba(168, 85, 247, 0.14)')
+                          ? (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)')
                           : 'transparent',
                         border: isActive
-                          ? (isDark ? '1px solid rgba(192, 132, 252, 0.4)' : '1px solid rgba(168, 85, 247, 0.35)')
+                          ? (isDark ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(0, 0, 0, 0.2)')
                           : '1px solid transparent',
                         transition: 'all 0.15s ease',
                       }}
@@ -2637,7 +2637,7 @@ export function FreeLLMAssistant({
                           style={{
                             fontSize: 12,
                             fontWeight: isActive ? 600 : 500,
-                            color: isActive ? (isDark ? '#f8fafc' : '#581c87') : 'var(--text-primary)',
+                            color: isActive ? (isDark ? '#f8fafc' : '#000000') : 'var(--text-primary)',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
@@ -2681,9 +2681,9 @@ export function FreeLLMAssistant({
                             }
                           }}
                           style={{
-                            background: deletingConvId === conv.id ? 'rgba(239, 68, 68, 0.2)' : 'none',
-                            border: deletingConvId === conv.id ? '1px solid rgba(239, 68, 68, 0.4)' : 'none',
-                            color: deletingConvId === conv.id ? '#ef4444' : 'var(--text-muted)',
+                            background: deletingConvId === conv.id ? 'rgba(255, 255, 255, 0.2)' : 'none',
+                            border: deletingConvId === conv.id ? '1px solid rgba(255, 255, 255, 0.4)' : 'none',
+                            color: deletingConvId === conv.id ? '#ffffff' : 'var(--text-muted)',
                             cursor: 'pointer',
                             padding: 3,
                             borderRadius: 4,
@@ -2731,11 +2731,11 @@ export function FreeLLMAssistant({
                     type="button"
                     onClick={() => setSettingsActiveTab('gateway')}
                     style={{
-                      background: settingsActiveTab === 'gateway' ? (isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(168, 85, 247, 0.15)') : 'transparent',
-                      border: '1px solid ' + (settingsActiveTab === 'gateway' ? 'rgba(168, 85, 247, 0.4)' : 'transparent'),
+                      background: settingsActiveTab === 'gateway' ? (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)') : 'transparent',
+                      border: '1px solid ' + (settingsActiveTab === 'gateway' ? 'rgba(255, 255, 255, 0.4)' : 'transparent'),
                       borderRadius: 6,
                       padding: '4px 8px',
-                      color: settingsActiveTab === 'gateway' ? '#c084fc' : 'var(--text-muted)',
+                      color: settingsActiveTab === 'gateway' ? '#ffffff' : 'var(--text-muted)',
                       fontWeight: settingsActiveTab === 'gateway' ? 600 : 400,
                       cursor: 'pointer',
                       display: 'flex',
@@ -2751,11 +2751,11 @@ export function FreeLLMAssistant({
                     type="button"
                     onClick={() => setSettingsActiveTab('voice')}
                     style={{
-                      background: settingsActiveTab === 'voice' ? (isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(168, 85, 247, 0.15)') : 'transparent',
-                      border: '1px solid ' + (settingsActiveTab === 'voice' ? 'rgba(168, 85, 247, 0.4)' : 'transparent'),
+                      background: settingsActiveTab === 'voice' ? (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)') : 'transparent',
+                      border: '1px solid ' + (settingsActiveTab === 'voice' ? 'rgba(255, 255, 255, 0.4)' : 'transparent'),
                       borderRadius: 6,
                       padding: '4px 8px',
-                      color: settingsActiveTab === 'voice' ? '#c084fc' : 'var(--text-muted)',
+                      color: settingsActiveTab === 'voice' ? '#ffffff' : 'var(--text-muted)',
                       fontWeight: settingsActiveTab === 'voice' ? 600 : 400,
                       cursor: 'pointer',
                       display: 'flex',
@@ -2771,11 +2771,11 @@ export function FreeLLMAssistant({
                     type="button"
                     onClick={() => setSettingsActiveTab('wake')}
                     style={{
-                      background: settingsActiveTab === 'wake' ? (isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(168, 85, 247, 0.15)') : 'transparent',
-                      border: '1px solid ' + (settingsActiveTab === 'wake' ? 'rgba(168, 85, 247, 0.4)' : 'transparent'),
+                      background: settingsActiveTab === 'wake' ? (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)') : 'transparent',
+                      border: '1px solid ' + (settingsActiveTab === 'wake' ? 'rgba(255, 255, 255, 0.4)' : 'transparent'),
                       borderRadius: 6,
                       padding: '4px 8px',
-                      color: settingsActiveTab === 'wake' ? '#c084fc' : 'var(--text-muted)',
+                      color: settingsActiveTab === 'wake' ? '#ffffff' : 'var(--text-muted)',
                       fontWeight: settingsActiveTab === 'wake' ? 600 : 400,
                       cursor: 'pointer',
                       display: 'flex',
@@ -2817,7 +2817,7 @@ export function FreeLLMAssistant({
                         style={{
                           width: '100%',
                           background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
-                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(15, 23, 42, 0.18)'),
                           color: 'var(--text-primary)',
                           borderRadius: 6,
                           padding: '6px 8px',
@@ -2835,7 +2835,7 @@ export function FreeLLMAssistant({
                         <span
                           style={{
                             fontSize: 10.5,
-                            color: keyConfigured ? '#10b981' : '#f59e0b',
+                            color: keyConfigured ? '#ffffff' : '#d4d4d8',
                             fontWeight: 600,
                           }}
                         >
@@ -2854,7 +2854,7 @@ export function FreeLLMAssistant({
                         style={{
                           width: '100%',
                           background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
-                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(15, 23, 42, 0.18)'),
                           color: 'var(--text-primary)',
                           borderRadius: 6,
                           padding: '6px 8px',
@@ -2866,7 +2866,7 @@ export function FreeLLMAssistant({
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 11, color: gatewayOnline ? '#10b981' : gatewayError ? '#ef4444' : '#94a3b8', flex: 1, minWidth: 160 }}>
+                    <span style={{ fontSize: 11, color: gatewayOnline ? '#ffffff' : gatewayError ? '#a1a1aa' : '#71717a', flex: 1, minWidth: 160 }}>
                       {isTestingGateway
                         ? 'Testing connection...'
                         : gatewayOnline
@@ -2897,11 +2897,11 @@ export function FreeLLMAssistant({
                         onClick={() => saveGatewaySettings(false)}
                         disabled={isTestingGateway}
                         style={{
-                          background: 'linear-gradient(135deg, #a855f7, #6366f1)',
+                          background: '#ffffff',
                           border: 'none',
                           borderRadius: 6,
                           padding: '4px 12px',
-                          color: '#fff',
+                          color: '#000000',
                           fontSize: 11,
                           fontWeight: 600,
                           cursor: isTestingGateway ? 'default' : 'pointer',
@@ -2939,7 +2939,7 @@ export function FreeLLMAssistant({
                         style={{
                           width: '100%',
                           background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
-                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(15, 23, 42, 0.18)'),
                           color: 'var(--text-primary)',
                           borderRadius: 6,
                           padding: '6px 8px',
@@ -2964,7 +2964,7 @@ export function FreeLLMAssistant({
                         style={{
                           width: '100%',
                           background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
-                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(15, 23, 42, 0.18)'),
                           color: 'var(--text-primary)',
                           borderRadius: 6,
                           padding: '6px 8px',
@@ -3005,7 +3005,7 @@ export function FreeLLMAssistant({
                             style={{
                               flex: 1,
                               background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
-                              border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.25)' : 'rgba(15, 23, 42, 0.15)'),
+                              border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.15)'),
                               color: 'var(--text-primary)',
                               borderRadius: 6,
                               padding: '4px 8px',
@@ -3025,11 +3025,11 @@ export function FreeLLMAssistant({
                               }
                             }}
                             style={{
-                              background: 'rgba(168, 85, 247, 0.2)',
-                              border: '1px solid rgba(168, 85, 247, 0.4)',
+                              background: 'rgba(255, 255, 255, 0.1)',
+                              border: '1px solid rgba(255, 255, 255, 0.3)',
                               borderRadius: 6,
                               padding: '3px 8px',
-                              color: '#c084fc',
+                              color: '#ffffff',
                               fontSize: 10.5,
                               fontWeight: 500,
                               cursor: 'pointer',
@@ -3053,7 +3053,7 @@ export function FreeLLMAssistant({
                         onChange={e => saveVoiceSettings(selectedVoiceProvider, selectedVoiceId, Number(e.target.value) || 1.0)}
                         style={{
                           background: isDark ? 'rgba(0, 0, 0, 0.45)' : '#ffffff',
-                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(15, 23, 42, 0.18)'),
                           color: 'var(--text-primary)',
                           borderRadius: 6,
                           padding: '4px 6px',
@@ -3077,11 +3077,11 @@ export function FreeLLMAssistant({
                             aria-label="Control voice preview playback"
                             onClick={speechState.status === 'playing' ? pauseSpeechPlayback : resumeSpeechPlayback}
                             style={{
-                              background: 'rgba(168, 85, 247, 0.2)',
-                              border: '1px solid rgba(168, 85, 247, 0.4)',
+                              background: 'rgba(255, 255, 255, 0.15)',
+                              border: '1px solid rgba(255, 255, 255, 0.3)',
                               borderRadius: 6,
                               padding: '4px 8px',
-                              color: '#c084fc',
+                              color: '#ffffff',
                               fontSize: 11,
                               cursor: 'pointer',
                               display: 'flex',
@@ -3117,11 +3117,11 @@ export function FreeLLMAssistant({
                           onClick={() => void playSpeech('Hello! This is a preview of your NightPlanner neural voice assistant.', 'voice-settings-test')}
                           disabled={speechState.status === 'loading'}
                           style={{
-                            background: 'rgba(168, 85, 247, 0.15)',
-                            border: '1px solid rgba(168, 85, 247, 0.35)',
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
                             borderRadius: 6,
                             padding: '4px 10px',
-                            color: '#c084fc',
+                            color: '#ffffff',
                             fontSize: 11,
                             fontWeight: 500,
                             cursor: speechState.status === 'loading' ? 'wait' : 'pointer',
@@ -3155,8 +3155,8 @@ export function FreeLLMAssistant({
                         style={{
                           padding: '8px 10px',
                           borderRadius: 8,
-                          background: isConfigured ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
-                          border: '1px solid ' + (isConfigured ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.25)'),
+                          background: isConfigured ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid ' + (isConfigured ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.15)'),
                           fontSize: 11,
                           display: 'flex',
                           flexDirection: 'column',
@@ -3164,7 +3164,7 @@ export function FreeLLMAssistant({
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <strong style={{ color: isConfigured ? '#34d399' : '#fbbf24' }}>
+                          <strong style={{ color: isConfigured ? '#ffffff' : '#d4d4d8' }}>
                             {isConfigured ? `✓ ${currentProv?.name || 'Provider'} Active` : `⚠️ ${currentProv?.name || 'Provider'} Not Configured`}
                           </strong>
                           <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
@@ -3175,7 +3175,7 @@ export function FreeLLMAssistant({
                           {currentProv?.freeTierNote}
                         </span>
                         {currentProv?.setupDocs && !isConfigured && (
-                          <span style={{ color: '#fbbf24', fontSize: 10.5, marginTop: 2 }}>
+                          <span style={{ color: '#d4d4d8', fontSize: 10.5, marginTop: 2 }}>
                             {currentProv.setupDocs}
                           </span>
                         )}
@@ -3187,7 +3187,7 @@ export function FreeLLMAssistant({
                               <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 10.5 }}>
                                 Key Rotation Pool ({currentProv.keyPool.activeKeys}/{currentProv.keyPool.totalKeys} Active)
                               </span>
-                              <span style={{ fontSize: 10, color: currentProv.keyPool.exhaustedKeys > 0 ? '#f87171' : '#34d399' }}>
+                              <span style={{ fontSize: 10, color: currentProv.keyPool.exhaustedKeys > 0 ? '#a1a1aa' : '#ffffff' }}>
                                 {currentProv.keyPool.exhaustedKeys > 0
                                   ? `${currentProv.keyPool.exhaustedKeys} in cooldown`
                                   : 'All keys available'}
@@ -3198,10 +3198,10 @@ export function FreeLLMAssistant({
                                 {currentProv.keyPool.keys.map((k: any) => {
                                   const isKeyActive = k.status === 'active';
                                   const statusColor = isKeyActive
-                                    ? '#34d399'
+                                    ? '#ffffff'
                                     : k.status === 'rate_limited'
-                                    ? '#fbbf24'
-                                    : '#f87171';
+                                    ? '#d4d4d8'
+                                    : '#a1a1aa';
                                   return (
                                     <div
                                       key={k.index}
@@ -3290,7 +3290,7 @@ export function FreeLLMAssistant({
                             wakeWordManagerRef.current?.disable();
                           }
                         }}
-                        style={{ width: 18, height: 18, accentColor: '#a855f7', cursor: 'pointer' }}
+                        style={{ width: 18, height: 18, accentColor: '#ffffff', cursor: 'pointer' }}
                       />
                     </label>
                   </div>
@@ -3310,7 +3310,7 @@ export function FreeLLMAssistant({
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: '#a855f7',
+                          color: '#ffffff',
                           fontSize: 10.5,
                           cursor: 'pointer',
                           padding: 0,
@@ -3326,12 +3326,12 @@ export function FreeLLMAssistant({
                         <span
                           key={word}
                           style={{
-                            background: isDark ? 'rgba(168, 85, 247, 0.2)' : 'rgba(168, 85, 247, 0.1)',
-                            border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.4)' : 'rgba(168, 85, 247, 0.3)'),
+                            background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+                            border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)'),
                             borderRadius: 16,
                             padding: '3px 8px',
                             fontSize: 11,
-                            color: isDark ? '#e9d5ff' : '#6b21a8',
+                            color: isDark ? '#ffffff' : '#000000',
                             display: 'flex',
                             alignItems: 'center',
                             gap: 4,
@@ -3385,7 +3385,7 @@ export function FreeLLMAssistant({
                         style={{
                           flex: 1,
                           background: isDark ? 'rgba(0, 0, 0, 0.4)' : '#ffffff',
-                          border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(15, 23, 42, 0.18)'),
+                          border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(15, 23, 42, 0.18)'),
                           color: 'var(--text-primary)',
                           borderRadius: 6,
                           padding: '5px 8px',
@@ -3405,11 +3405,11 @@ export function FreeLLMAssistant({
                           }
                         }}
                         style={{
-                          background: 'rgba(168, 85, 247, 0.25)',
-                          border: '1px solid rgba(168, 85, 247, 0.4)',
+                          background: 'rgba(255, 255, 255, 0.15)',
+                          border: '1px solid rgba(255, 255, 255, 0.3)',
                           borderRadius: 6,
                           padding: '4px 10px',
-                          color: '#c084fc',
+                          color: '#ffffff',
                           fontSize: 11,
                           fontWeight: 600,
                           cursor: 'pointer',
@@ -3450,7 +3450,7 @@ export function FreeLLMAssistant({
                             localStorage.setItem(STORAGE_KEY_VOICE_REPLIES, String(val));
                           } catch {}
                         }}
-                        style={{ width: 16, height: 16, accentColor: '#a855f7', cursor: 'pointer' }}
+                        style={{ width: 16, height: 16, accentColor: '#ffffff', cursor: 'pointer' }}
                       />
                     </div>
 
@@ -3482,7 +3482,7 @@ export function FreeLLMAssistant({
                             localStorage.setItem(STORAGE_KEY_WAKE_CHIME, String(val));
                           } catch {}
                         }}
-                        style={{ width: 16, height: 16, accentColor: '#a855f7', cursor: 'pointer' }}
+                        style={{ width: 16, height: 16, accentColor: '#ffffff', cursor: 'pointer' }}
                       />
                     </div>
                   </div>
@@ -3506,11 +3506,11 @@ export function FreeLLMAssistant({
                       type="button"
                       onClick={() => wakeWordManagerRef.current?.playWakeChime()}
                       style={{
-                        background: 'rgba(168, 85, 247, 0.2)',
-                        border: '1px solid rgba(168, 85, 247, 0.4)',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
                         borderRadius: 4,
                         padding: '3px 8px',
-                        color: '#c084fc',
+                        color: '#ffffff',
                         fontSize: 10.5,
                         cursor: 'pointer',
                       }}
@@ -3543,7 +3543,7 @@ export function FreeLLMAssistant({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 64 }}>
-            <Bot style={{ width: 13, height: 13, color: '#a855f7' }} />
+            <Bot style={{ width: 13, height: 13, color: '#ffffff' }} />
             <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Model:</span>
           </div>
 
@@ -3560,7 +3560,7 @@ export function FreeLLMAssistant({
                   style={{
                     width: '100%',
                     background: isDark ? 'rgba(0, 0, 0, 0.4)' : '#ffffff',
-                    border: '1px solid rgba(168, 85, 247, 0.4)',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
                     color: 'var(--text-primary)',
                     borderRadius: 6,
                     padding: '2px 6px',
@@ -3612,8 +3612,8 @@ export function FreeLLMAssistant({
               value={selectedModel}
               onChange={e => handleModelChange(e.target.value)}
               style={{
-                background: isDark ? 'rgba(20, 16, 36, 0.95)' : '#ffffff',
-                border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(168, 85, 247, 0.4)'),
+                background: isDark ? 'rgba(20, 20, 20, 0.95)' : '#ffffff',
+                border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'),
                 color: 'var(--text-primary)',
                 fontSize: 12,
                 borderRadius: 8,
@@ -3624,7 +3624,7 @@ export function FreeLLMAssistant({
               }}
             >
               <optgroup label="⚡ Automatic Switching (Playground Mode)">
-                <option value="auto" style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
+                <option value="auto" style={{ background: isDark ? '#171717' : '#ffffff', color: isDark ? '#ffffff' : '#000000' }}>
                   ⚡ Auto (Smart Switch — Configured Models)
                 </option>
               </optgroup>
@@ -3638,7 +3638,7 @@ export function FreeLLMAssistant({
                       m.provider.toLowerCase().includes(modelSearch.toLowerCase())
                     )
                     .map(m => (
-                      <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
+                      <option key={m.id} value={m.id} style={{ background: isDark ? '#171717' : '#ffffff', color: isDark ? '#ffffff' : '#000000' }}>
                         {m.name} ({m.provider})
                       </option>
                     ))}
@@ -3646,7 +3646,7 @@ export function FreeLLMAssistant({
               ) : catalogModels.length > 0 ? (
                 <optgroup label={`✅ Configured Ready Models (${catalogModels.length})`}>
                   {catalogModels.map(m => (
-                    <option key={m.id} value={m.id} style={{ background: isDark ? '#171426' : '#ffffff', color: isDark ? '#fff' : '#0f172a' }}>
+                    <option key={m.id} value={m.id} style={{ background: isDark ? '#171717' : '#ffffff', color: isDark ? '#ffffff' : '#000000' }}>
                       {m.name} ({m.provider})
                     </option>
                   ))}
@@ -3679,7 +3679,7 @@ export function FreeLLMAssistant({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ color: isDark ? '#d8b4fe' : '#7c3aed', fontWeight: 600 }}>
+                <span style={{ color: isDark ? '#ffffff' : '#000000', fontWeight: 600 }}>
                   {selectedModel === 'auto'
                     ? `FreeLLM Auto Router (${catalogModels.length} ready models)`
                     : activeModelObj?.provider || 'FreeLLM Gateway'}
@@ -3701,31 +3701,9 @@ export function FreeLLMAssistant({
                       fontSize: 9,
                       padding: '1px 5px',
                       borderRadius: 4,
-                      background:
-                        cap === 'vision'
-                          ? 'rgba(56, 189, 248, 0.2)'
-                          : cap === 'code'
-                          ? 'rgba(34, 197, 94, 0.2)'
-                          : cap === 'reasoning'
-                          ? 'rgba(234, 179, 8, 0.2)'
-                          : cap === 'image_gen'
-                          ? 'rgba(236, 72, 153, 0.2)'
-                          : cap === 'video_gen'
-                          ? 'rgba(244, 63, 94, 0.2)'
-                          : isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(15, 23, 42, 0.06)',
-                      color:
-                        cap === 'vision'
-                          ? '#0284c7'
-                          : cap === 'code'
-                          ? '#16a34a'
-                          : cap === 'reasoning'
-                          ? '#ca8a04'
-                          : cap === 'image_gen'
-                          ? '#db2777'
-                          : cap === 'video_gen'
-                          ? '#e11d48'
-                          : 'var(--text-primary)',
-                      border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(15, 23, 42, 0.1)'),
+                      background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+                      color: isDark ? '#ffffff' : '#000000',
+                      border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)'),
                       textTransform: 'capitalize',
                     }}
                   >
@@ -3746,9 +3724,9 @@ export function FreeLLMAssistant({
                     marginTop: 2,
                     padding: '2px 6px',
                     borderRadius: 4,
-                    background: 'rgba(56, 189, 248, 0.15)',
-                    border: '1px solid rgba(56, 189, 248, 0.3)',
-                    color: '#7dd3fc',
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    color: '#ffffff',
                     fontSize: 10,
                     display: 'flex',
                     alignItems: 'center',
@@ -3769,8 +3747,8 @@ export function FreeLLMAssistant({
         <div
           style={{
             padding: '10px 14px',
-            background: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(254, 226, 226, 0.95)',
-            borderBottom: '1px solid rgba(239, 68, 68, 0.35)',
+            background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -3780,12 +3758,12 @@ export function FreeLLMAssistant({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-            <AlertTriangle style={{ width: 16, height: 16, color: '#ef4444', flexShrink: 0 }} />
+            <AlertTriangle style={{ width: 16, height: 16, color: '#ffffff', flexShrink: 0 }} />
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600, color: isDark ? '#fca5a5' : '#b91c1c', fontSize: 12 }}>
+              <div style={{ fontWeight: 600, color: isDark ? '#ffffff' : '#000000', fontSize: 12 }}>
                 {pendingConfirmation.confirmationPrompt || 'Confirmation Required'}
               </div>
-              <div style={{ fontSize: 11, color: isDark ? '#f87171' : '#dc2626', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 11, color: isDark ? '#d4d4d8' : '#52525b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {pendingConfirmation.targetTitle ? `Target: "${pendingConfirmation.targetTitle}"` : pendingConfirmation.message}
               </div>
             </div>
@@ -3808,15 +3786,14 @@ export function FreeLLMAssistant({
             <button
               onClick={() => handleConfirmAction(true)}
               style={{
-                background: '#ef4444',
+                background: '#ffffff',
                 border: 'none',
                 borderRadius: 6,
                 padding: '4px 12px',
-                color: '#ffffff',
+                color: '#000000',
                 fontWeight: 600,
                 cursor: 'pointer',
                 fontSize: 11,
-                boxShadow: '0 0 10px rgba(239, 68, 68, 0.4)',
               }}
             >
               Confirm
@@ -3830,8 +3807,8 @@ export function FreeLLMAssistant({
         <div
           style={{
             padding: '5px 12px',
-            background: isDark ? 'rgba(16, 185, 129, 0.08)' : 'rgba(236, 253, 245, 0.9)',
-            borderBottom: '1px solid ' + (isDark ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.25)'),
+            background: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+            borderBottom: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.1)'),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -3845,21 +3822,12 @@ export function FreeLLMAssistant({
                 width: 7,
                 height: 7,
                 borderRadius: '50%',
-                background:
-                  voiceLifecycleState === 'listening_wake_word'
-                    ? '#10b981'
-                    : voiceLifecycleState === 'listening_command' || voiceLifecycleState === 'transcribing'
-                    ? '#38bdf8'
-                    : voiceLifecycleState === 'executing' || voiceLifecycleState === 'understanding'
-                    ? '#a855f7'
-                    : voiceLifecycleState === 'speaking_response'
-                    ? '#f59e0b'
-                    : '#94a3b8',
+                background: '#ffffff',
                 boxShadow: '0 0 6px currentColor',
                 animation: 'pulse 1.8s infinite',
               }}
             />
-            <span style={{ fontWeight: 600, color: isDark ? '#34d399' : '#059669', flexShrink: 0 }}>
+            <span style={{ fontWeight: 600, color: isDark ? '#ffffff' : '#000000', flexShrink: 0 }}>
               {voiceLifecycleState === 'listening_wake_word'
                 ? `Listening for "${wakeWordsList[0] || 'Sami'}"`
                 : voiceLifecycleState === 'listening_command'
@@ -3915,8 +3883,8 @@ export function FreeLLMAssistant({
         <div
           style={{
             padding: '16px 20px',
-            background: 'linear-gradient(180deg, rgba(30, 16, 50, 0.95), rgba(18, 12, 34, 0.98))',
-            borderBottom: '1px solid rgba(168, 85, 247, 0.3)',
+            background: isDark ? 'rgba(15, 15, 15, 0.98)' : 'rgba(250, 250, 250, 0.98)',
+            borderBottom: '1px solid var(--v-glass-border-subtle)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -3933,13 +3901,13 @@ export function FreeLLMAssistant({
               borderRadius: '50%',
               background:
                 voiceModeStatus === 'speaking'
-                  ? 'radial-gradient(circle, #38bdf8 0%, #6366f1 70%, #a855f7 100%)'
+                  ? 'radial-gradient(circle, #ffffff 0%, #71717a 70%, #27272a 100%)'
                   : isMicMuted
-                  ? 'radial-gradient(circle, #64748b 0%, #334155 100%)'
-                  : 'radial-gradient(circle, #c084fc 0%, #a855f7 60%, #4f46e5 100%)',
+                  ? 'radial-gradient(circle, #71717a 0%, #27272a 100%)'
+                  : 'radial-gradient(circle, #ffffff 0%, #71717a 60%, #18181b 100%)',
               boxShadow: isMicMuted
-                ? '0 0 10px rgba(100, 116, 139, 0.3)'
-                : '0 0 35px rgba(168, 85, 247, 0.8), 0 0 50px rgba(56, 189, 248, 0.4)',
+                ? '0 0 10px rgba(255, 255, 255, 0.1)'
+                : '0 0 35px rgba(255, 255, 255, 0.4)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -3962,7 +3930,7 @@ export function FreeLLMAssistant({
                 ? 'Listening for your voice...'
                 : 'Voice Mode Ready'}
             </div>
-            <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2, maxWidth: 360, fontStyle: 'italic' }}>
+            <div style={{ fontSize: 11, color: '#d4d4d8', marginTop: 2, maxWidth: 360, fontStyle: 'italic' }}>
               {dictationInterim || voiceSubtitle}
             </div>
           </div>
@@ -3975,11 +3943,11 @@ export function FreeLLMAssistant({
                 setIsMicMuted(muted);
               }}
               style={{
-                background: isMicMuted ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.1)',
-                border: isMicMuted ? '1px solid #ef4444' : '1px solid rgba(255, 255, 255, 0.2)',
+                background: isMicMuted ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                border: isMicMuted ? '1px solid #ffffff' : '1px solid rgba(255, 255, 255, 0.2)',
                 borderRadius: 20,
                 padding: '6px 14px',
-                color: isMicMuted ? '#f87171' : '#ffffff',
+                color: isMicMuted ? '#ffffff' : '#ffffff',
                 fontSize: 12,
                 cursor: 'pointer',
                 display: 'flex',
@@ -4021,11 +3989,11 @@ export function FreeLLMAssistant({
             <button
               onClick={toggleVoiceMode}
               style={{
-                background: 'rgba(168, 85, 247, 0.2)',
-                border: '1px solid rgba(168, 85, 247, 0.4)',
+                background: 'rgba(255, 255, 255, 0.15)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
                 borderRadius: 20,
                 padding: '6px 14px',
-                color: '#d8b4fe',
+                color: '#ffffff',
                 fontSize: 12,
                 cursor: 'pointer',
               }}
@@ -4067,7 +4035,7 @@ export function FreeLLMAssistant({
                   alignItems: 'center',
                   gap: 6,
                   fontSize: 11,
-                  color: isUser ? (isDark ? '#cbd5e1' : '#64748b') : '#a855f7',
+                  color: isUser ? (isDark ? '#d4d4d8' : '#71717a') : '#ffffff',
                   padding: '0 4px',
                 }}
               >
@@ -4088,12 +4056,12 @@ export function FreeLLMAssistant({
                   padding: '10px 14px',
                   borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                   background: isUser
-                    ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.55), rgba(99, 102, 241, 0.6))'
+                    ? (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.12)')
                     : isDark
                     ? 'rgba(255, 255, 255, 0.05)'
                     : 'rgba(255, 255, 255, 0.95)',
                   border: isUser
-                    ? '1px solid rgba(216, 180, 254, 0.4)'
+                    ? '1px solid rgba(255, 255, 255, 0.35)'
                     : isDark
                     ? '1px solid rgba(255, 255, 255, 0.1)'
                     : '1px solid rgba(15, 23, 42, 0.1)',
@@ -4102,7 +4070,7 @@ export function FreeLLMAssistant({
                   lineHeight: 1.55,
                   wordBreak: 'break-word',
                   boxShadow: isUser
-                    ? '0 4px 14px rgba(168, 85, 247, 0.2)'
+                    ? '0 4px 14px rgba(255, 255, 255, 0.1)'
                     : isDark
                     ? '0 4px 14px rgba(0, 0, 0, 0.25)'
                     : '0 2px 10px rgba(0, 0, 0, 0.06)',
@@ -4134,11 +4102,11 @@ export function FreeLLMAssistant({
                             style={{ width: 28, height: 28, borderRadius: 4, objectFit: 'cover', cursor: 'pointer' }}
                           />
                         ) : att.type.startsWith('audio/') ? (
-                          <Music style={{ width: 14, height: 14, color: '#38bdf8' }} />
+                          <Music style={{ width: 14, height: 14, color: '#ffffff' }} />
                         ) : att.type.startsWith('video/') ? (
-                          <VideoIcon style={{ width: 14, height: 14, color: '#f43f5e' }} />
+                          <VideoIcon style={{ width: 14, height: 14, color: '#ffffff' }} />
                         ) : (
-                          <FileText style={{ width: 14, height: 14, color: '#a855f7' }} />
+                          <FileText style={{ width: 14, height: 14, color: '#ffffff' }} />
                         )}
                         <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {att.name}
@@ -4165,7 +4133,7 @@ export function FreeLLMAssistant({
                       borderRadius: 12,
                       overflow: 'hidden',
                       background: 'rgba(0, 0, 0, 0.4)',
-                      border: '1px solid rgba(168, 85, 247, 0.3)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
                     }}
                   >
                     <div style={{ position: 'relative' }}>
@@ -4246,7 +4214,7 @@ export function FreeLLMAssistant({
                       borderRadius: 12,
                       overflow: 'hidden',
                       background: 'rgba(0, 0, 0, 0.4)',
-                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
                     }}
                   >
                     <video
@@ -4266,7 +4234,7 @@ export function FreeLLMAssistant({
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         fontSize: 11,
-                        color: '#94a3b8',
+                        color: 'var(--text-muted)',
                       }}
                     >
                       <span>🎬 Video Stream</span>
@@ -4275,7 +4243,7 @@ export function FreeLLMAssistant({
                         download={`video-${Date.now()}.mp4`}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: '#38bdf8', textDecoration: 'none' }}
+                        style={{ color: '#ffffff', textDecoration: 'underline' }}
                       >
                         Download Video
                       </a>
@@ -4298,13 +4266,13 @@ export function FreeLLMAssistant({
                         fontWeight: 500,
                         padding: '2px 8px',
                         borderRadius: 12,
-                        background: isDark ? 'rgba(168, 85, 247, 0.12)' : 'rgba(168, 85, 247, 0.1)',
-                        border: isDark ? '1px solid rgba(168, 85, 247, 0.28)' : '1px solid rgba(168, 85, 247, 0.25)',
-                        color: isDark ? '#d8b4fe' : '#7c3aed',
+                        background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                        border: isDark ? '1px solid rgba(255, 255, 255, 0.2)' : '1px solid rgba(0, 0, 0, 0.15)',
+                        color: isDark ? '#ffffff' : '#000000',
                         letterSpacing: '0.01em',
                       }}
                     >
-                      <span style={{ color: isDark ? '#c084fc' : '#9333ea', fontSize: 10 }}>✦</span>
+                      <span style={{ color: isDark ? '#ffffff' : '#000000', fontSize: 10 }}>✦</span>
                       <span>{msg.model || selectedModel}</span>
                       {msg.provider && (
                         <span style={{ opacity: 0.7 }}>
@@ -4315,7 +4283,7 @@ export function FreeLLMAssistant({
                       {msg.latencyMs ? (
                         <>
                           <span style={{ opacity: 0.45 }}>·</span>
-                          <span style={{ color: isDark ? '#a5b4fc' : '#4f46e5', fontFamily: 'monospace', fontSize: 9.5 }}>{msg.latencyMs}ms</span>
+                          <span style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: 9.5 }}>{msg.latencyMs}ms</span>
                         </>
                       ) : null}
                     </span>
@@ -4328,7 +4296,7 @@ export function FreeLLMAssistant({
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: copiedId === msg.id ? '#10b981' : 'var(--text-muted)',
+                      color: copiedId === msg.id ? '#ffffff' : 'var(--text-muted)',
                       fontSize: 11,
                       cursor: 'pointer',
                       display: 'flex',
@@ -4356,7 +4324,7 @@ export function FreeLLMAssistant({
                         alignItems: 'center',
                         gap: 4,
                         fontSize: 11,
-                        color: '#c084fc',
+                        color: '#ffffff',
                         padding: '2px 4px',
                       }}
                     >
@@ -4371,10 +4339,10 @@ export function FreeLLMAssistant({
                           onClick={pauseSpeechPlayback}
                           title="Pause voice reading"
                           style={{
-                            background: 'rgba(168, 85, 247, 0.15)',
-                            border: '1px solid rgba(168, 85, 247, 0.3)',
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
                             borderRadius: 6,
-                            color: '#c084fc',
+                            color: '#ffffff',
                             fontSize: 11,
                             cursor: 'pointer',
                             display: 'flex',
@@ -4391,10 +4359,10 @@ export function FreeLLMAssistant({
                           onClick={resumeSpeechPlayback}
                           title="Resume voice reading"
                           style={{
-                            background: 'rgba(168, 85, 247, 0.15)',
-                            border: '1px solid rgba(168, 85, 247, 0.3)',
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
                             borderRadius: 6,
-                            color: '#c084fc',
+                            color: '#ffffff',
                             fontSize: 11,
                             cursor: 'pointer',
                             display: 'flex',
@@ -4461,9 +4429,9 @@ export function FreeLLMAssistant({
                         gap: 6,
                         flexWrap: 'wrap',
                         fontSize: 10.5,
-                        color: '#fbbf24',
-                        background: 'rgba(245, 158, 11, 0.1)',
-                        border: '1px solid rgba(245, 158, 11, 0.25)',
+                        color: '#ffffff',
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
                         borderRadius: 6,
                         padding: '3px 8px',
                         width: '100%',
@@ -4478,11 +4446,11 @@ export function FreeLLMAssistant({
                         onClick={() => void playSpeech(msg.content, msg.id, true)}
                         title="Switch to system browser voice"
                         style={{
-                          background: 'rgba(245, 158, 11, 0.2)',
+                          background: 'rgba(255, 255, 255, 0.15)',
                           border: 'none',
                           borderRadius: 4,
                           padding: '1px 6px',
-                          color: '#fef3c7',
+                          color: '#ffffff',
                           fontSize: 10,
                           cursor: 'pointer',
                         }}
@@ -4501,9 +4469,9 @@ export function FreeLLMAssistant({
                         gap: 6,
                         flexWrap: 'wrap',
                         fontSize: 11,
-                        color: '#f87171',
-                        background: 'rgba(239, 68, 68, 0.12)',
-                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                        color: '#ffffff',
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
                         borderRadius: 6,
                         padding: '4px 8px',
                         width: '100%',
@@ -4516,11 +4484,11 @@ export function FreeLLMAssistant({
                         type="button"
                         onClick={() => void playSpeech(msg.content, msg.id)}
                         style={{
-                          background: 'rgba(239, 68, 68, 0.2)',
+                          background: 'rgba(255, 255, 255, 0.15)',
                           border: 'none',
                           borderRadius: 4,
                           padding: '2px 6px',
-                          color: '#fca5a5',
+                          color: '#ffffff',
                           fontSize: 10.5,
                           fontWeight: 600,
                           cursor: 'pointer',
@@ -4564,9 +4532,9 @@ export function FreeLLMAssistant({
                         }}
                         title="Retry this request"
                         style={{
-                          background: 'rgba(239, 68, 68, 0.2)',
-                          border: '1px solid rgba(239, 68, 68, 0.4)',
-                          color: '#fca5a5',
+                          background: 'rgba(255, 255, 255, 0.1)',
+                          border: '1px solid rgba(255, 255, 255, 0.2)',
+                          color: '#ffffff',
                           fontSize: 11,
                           cursor: 'pointer',
                           display: 'flex',
@@ -4643,8 +4611,8 @@ export function FreeLLMAssistant({
                     transition: 'all 0.15s ease',
                   }}
                   onMouseEnter={e => {
-                    e.currentTarget.style.background = isDark ? 'rgba(168, 85, 247, 0.2)' : 'rgba(168, 85, 247, 0.12)';
-                    e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.4)';
+                    e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
                   }}
                   onMouseLeave={e => {
                     e.currentTarget.style.background = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.85)';
@@ -4682,9 +4650,9 @@ export function FreeLLMAssistant({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#a855f7' }} />
-              <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#818cf8', animationDelay: '0.2s' }} />
-              <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8', animationDelay: '0.4s' }} />
+              <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#ffffff' }} />
+              <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#d4d4d8', animationDelay: '0.2s' }} />
+              <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#a1a1aa', animationDelay: '0.4s' }} />
             </div>
             <span style={{ fontStyle: 'normal', color: 'var(--text-secondary)', fontWeight: 500 }}>
               {activityLabel || 'Thinking...'}
@@ -4783,7 +4751,7 @@ export function FreeLLMAssistant({
             gap: 4,
           }}
         >
-          <Paperclip style={{ width: 12, height: 12, color: '#38bdf8' }} />
+          <Paperclip style={{ width: 12, height: 12, color: 'var(--text-secondary)' }} />
           Attach Files
         </button>
 
@@ -4797,9 +4765,9 @@ export function FreeLLMAssistant({
             fontSize: 11,
             padding: '4px 9px',
             borderRadius: 10,
-            background: 'rgba(168, 85, 247, 0.15)',
-            border: '1px solid rgba(168, 85, 247, 0.35)',
-            color: isDark ? '#d8b4fe' : '#7c3aed',
+            background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+            border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.15)'),
+            color: isDark ? '#ffffff' : '#000000',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -4820,9 +4788,9 @@ export function FreeLLMAssistant({
             fontSize: 11,
             padding: '4px 9px',
             borderRadius: 10,
-            background: 'rgba(56, 189, 248, 0.15)',
-            border: '1px solid rgba(56, 189, 248, 0.35)',
-            color: isDark ? '#7dd3fc' : '#0284c7',
+            background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+            border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.15)'),
+            color: isDark ? '#ffffff' : '#000000',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -4839,9 +4807,9 @@ export function FreeLLMAssistant({
             fontSize: 11,
             padding: '4px 9px',
             borderRadius: 10,
-            background: 'rgba(236, 72, 153, 0.15)',
-            border: '1px solid rgba(236, 72, 153, 0.35)',
-            color: isDark ? '#f472b6' : '#db2777',
+            background: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+            border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.15)'),
+            color: isDark ? '#ffffff' : '#000000',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -4861,7 +4829,7 @@ export function FreeLLMAssistant({
             display: 'flex',
             flexWrap: 'wrap',
             gap: 6,
-            background: isDark ? 'rgba(20, 16, 36, 0.9)' : 'rgba(241, 245, 249, 0.95)',
+            background: isDark ? 'rgba(10, 10, 10, 0.95)' : 'rgba(245, 245, 245, 0.95)',
             borderTop: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)'),
           }}
         >
@@ -4869,8 +4837,8 @@ export function FreeLLMAssistant({
             <div
               key={att.id}
               style={{
-                background: isDark ? 'rgba(168, 85, 247, 0.2)' : 'rgba(168, 85, 247, 0.12)',
-                border: '1px solid ' + (isDark ? 'rgba(168, 85, 247, 0.4)' : 'rgba(168, 85, 247, 0.3)'),
+                background: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                border: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)'),
                 borderRadius: 8,
                 padding: '3px 8px',
                 display: 'flex',
@@ -4880,7 +4848,7 @@ export function FreeLLMAssistant({
                 color: 'var(--text-primary)',
               }}
             >
-              <FileText style={{ width: 12, height: 12, color: '#c084fc' }} />
+              <FileText style={{ width: 12, height: 12, color: isDark ? '#ffffff' : '#000000' }} />
               <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {att.name}
               </span>
@@ -4906,7 +4874,7 @@ export function FreeLLMAssistant({
       <footer
         style={{
           padding: '10px 14px',
-          background: isDark ? 'rgba(20, 16, 36, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+          background: isDark ? 'rgba(10, 10, 10, 0.95)' : 'rgba(255, 255, 255, 0.95)',
           borderTop: '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(15, 23, 42, 0.1)'),
           display: 'flex',
           alignItems: 'flex-end',
@@ -4960,7 +4928,7 @@ export function FreeLLMAssistant({
             borderRadius: 10,
             background: isDark ? 'rgba(255, 255, 255, 0.06)' : '#f8fafc',
             border: isDictating
-              ? '1px solid #ef4444'
+              ? '1px solid #ffffff'
               : '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(15, 23, 42, 0.15)'),
             color: 'var(--text-primary)',
             fontSize: 13,
@@ -4981,12 +4949,12 @@ export function FreeLLMAssistant({
             height: 36,
             borderRadius: 10,
             background: isDictating
-              ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+              ? (isDark ? '#ffffff' : '#000000')
               : isDark
               ? 'rgba(255, 255, 255, 0.08)'
               : 'rgba(15, 23, 42, 0.05)',
-            border: isDictating ? '1px solid #f87171' : '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.1)'),
-            color: isDictating ? '#ffffff' : 'var(--text-secondary)',
+            border: isDictating ? (isDark ? '1px solid #ffffff' : '1px solid #000000') : '1px solid ' + (isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(15, 23, 42, 0.1)'),
+            color: isDictating ? (isDark ? '#000000' : '#ffffff') : 'var(--text-secondary)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -5009,12 +4977,12 @@ export function FreeLLMAssistant({
             borderRadius: 10,
             background:
               (input.trim() || attachments.length > 0) && !isLoading
-                ? 'linear-gradient(135deg, #a855f7, #6366f1)'
+                ? (isDark ? '#ffffff' : '#000000')
                 : isDark
                 ? 'rgba(255, 255, 255, 0.08)'
                 : 'rgba(15, 23, 42, 0.05)',
             border: 'none',
-            color: (input.trim() || attachments.length > 0) && !isLoading ? '#ffffff' : 'var(--text-muted)',
+            color: (input.trim() || attachments.length > 0) && !isLoading ? (isDark ? '#000000' : '#ffffff') : 'var(--text-muted)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -5023,7 +4991,7 @@ export function FreeLLMAssistant({
             flexShrink: 0,
             boxShadow:
               (input.trim() || attachments.length > 0) && !isLoading
-                ? '0 0 12px rgba(168, 85, 247, 0.5)'
+                ? (isDark ? '0 0 12px rgba(255, 255, 255, 0.3)' : '0 0 12px rgba(0, 0, 0, 0.25)')
                 : 'none',
           }}
         >

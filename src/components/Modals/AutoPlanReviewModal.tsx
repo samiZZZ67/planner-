@@ -154,16 +154,16 @@ export function AutoPlanReviewModal({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.88)' }}>
                       <span>{task.icon || sec?.icon || '📌'}</span>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
-                      {task.mustDo && <Star size={11} style={{ fill: '#eab308', color: '#eab308', flexShrink: 0 }} />}
+                      {task.mustDo && <Star size={11} style={{ fill: '#ffffff', color: '#ffffff', flexShrink: 0 }} />}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
-                      <span style={{ color: sec?.color || '#a855f7' }}>{sec?.name || 'Section'}</span>
+                      <span style={{ color: sec?.color || '#ffffff' }}>{sec?.name || 'Section'}</span>
                       <span>{task.estimatedMinutes}m est</span>
                       <span>{task.priority} Priority</span>
                       {task.isCompleted ? (
-                        <span style={{ color: 'rgba(34,197,94,0.8)' }}>(Completed)</span>
+                        <span style={{ color: 'rgba(255,255,255,0.9)' }}>(Completed)</span>
                       ) : (
-                        <span style={{ color: 'rgba(234,179,8,0.8)' }}>(Unfinished)</span>
+                        <span style={{ color: 'rgba(255,255,255,0.5)' }}>(Unfinished)</span>
                       )}
                     </div>
                   </div>

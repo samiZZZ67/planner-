@@ -22,10 +22,10 @@ interface TodoScreenProps {
 }
 
 const COLOR_OPTIONS = [
-  { label: 'Red', value: '#ef4444', ring: 'rgba(239, 68, 68, 0.4)' },
-  { label: 'Blue', value: '#38bdf8', ring: 'rgba(56, 189, 248, 0.4)' },
-  { label: 'Green', value: '#22c55e', ring: 'rgba(34, 197, 94, 0.4)' },
-  { label: 'Amber', value: '#f59e0b', ring: 'rgba(245, 158, 11, 0.4)' },
+  { label: 'White', value: '#ffffff', ring: 'rgba(255, 255, 255, 0.4)' },
+  { label: 'Light Gray', value: '#d4d4d8', ring: 'rgba(212, 212, 216, 0.4)' },
+  { label: 'Medium Gray', value: '#a1a1aa', ring: 'rgba(161, 161, 170, 0.4)' },
+  { label: 'Dark Gray', value: '#71717a', ring: 'rgba(113, 113, 122, 0.4)' },
   { label: 'Default', value: '', ring: 'rgba(255, 255, 255, 0.3)' },
 ];
 
@@ -197,7 +197,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
    */
   const handleApplyFormattingToSelection = (
     formatType: 'bold' | 'underline' | 'strikethrough' | 'color',
-    colorValue = '#ef4444'
+    colorValue = '#ffffff'
   ) => {
     const active = activeInputRef.current;
     if (!active || !active.element) {
@@ -370,19 +370,19 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
       updates.isStrikethrough = !task.isStrikethrough;
     } else if (type === 'color') {
       const nextColor =
-        task.textColor === '#ef4444'
-          ? '#38bdf8'
-          : task.textColor === '#38bdf8'
-          ? '#22c55e'
-          : task.textColor === '#22c55e'
+        task.textColor === '#ffffff'
+          ? '#d4d4d8'
+          : task.textColor === '#d4d4d8'
+          ? '#a1a1aa'
+          : task.textColor === '#a1a1aa'
           ? ''
-          : '#ef4444';
+          : '#ffffff';
       updates.textColor = nextColor || undefined;
     } else if (type === 'preset_exercise') {
-      // Fulfill exercise requirement: Make title bold, strikethrough, and red
+      // Fulfill exercise requirement: Make title bold, strikethrough, and monochrome
       updates.isBold = true;
       updates.isStrikethrough = true;
-      updates.textColor = '#ef4444';
+      updates.textColor = '#ffffff';
     }
 
     await db.tasks.update(task.id, updates);
@@ -437,7 +437,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
     );
     syncEngine.notifyLocalMutation();
 
-    await startTimer(timeModalTask.id, timeModalTask.title, duration, '#38bdf8');
+    await startTimer(timeModalTask.id, timeModalTask.title, duration, '#ffffff');
     setTimeModalTask(null);
   };
 
@@ -513,9 +513,9 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
           className="v-card"
           style={{
             padding: isPhone ? '14px 16px' : '16px 24px',
-            background: isFocus ? 'rgba(56, 189, 248, 0.18)' : 'rgba(34, 197, 94, 0.18)',
-            borderColor: isFocus ? '#38bdf8' : '#22c55e',
-            boxShadow: `0 0 30px ${isFocus ? 'rgba(56, 189, 248, 0.35)' : 'rgba(34, 197, 94, 0.35)'}`,
+            background: isFocus ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.04)',
+            borderColor: isFocus ? '#ffffff' : '#a1a1aa',
+            boxShadow: `0 0 30px ${isFocus ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)'}`,
             display: 'flex',
             flexWrap: 'wrap',
             alignItems: 'center',
@@ -529,7 +529,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                 width: 44,
                 height: 44,
                 borderRadius: '50%',
-                background: isFocus ? 'rgba(56, 189, 248, 0.3)' : 'rgba(34, 197, 94, 0.3)',
+                background: 'rgba(255, 255, 255, 0.12)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -546,7 +546,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                     fontWeight: 800,
                     textTransform: 'uppercase',
                     letterSpacing: '0.08em',
-                    color: isFocus ? '#38bdf8' : '#22c55e',
+                    color: isFocus ? '#ffffff' : '#d4d4d8',
                   }}
                 >
                   {isFocus ? `Focus Session ${currentSessionNumber} of ${totalSessions}` : '5-Minute Rest Break'}
@@ -556,8 +556,8 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                     style={{
                       fontSize: 10,
                       fontWeight: 700,
-                      background: 'rgba(239, 68, 68, 0.2)',
-                      color: '#ef4444',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      color: '#ffffff',
                       padding: '2px 6px',
                       borderRadius: 4,
                     }}
@@ -593,7 +593,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                 fontSize: 28,
                 fontWeight: 900,
                 fontFamily: 'monospace',
-                color: isFocus ? '#38bdf8' : '#22c55e',
+                color: isFocus ? '#ffffff' : '#d4d4d8',
                 letterSpacing: '0.04em',
               }}
             >
@@ -640,7 +640,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               type="button"
               onClick={stopTimer}
               className="v-circle-btn"
-              style={{ width: 38, height: 38, color: '#f87171' }}
+              style={{ width: 38, height: 38, color: 'var(--text-secondary)' }}
               title="Stop & Log Focus Time"
               aria-label="Stop"
             >
@@ -721,7 +721,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
           >
             <FileText size={15} />
             <span>Note</span>
-            {hasNotesContent && <span style={{ fontSize: 11, color: '#22c55e' }}>●</span>}
+            {hasNotesContent && <span style={{ fontSize: 11, color: '#ffffff' }}>●</span>}
           </button>
 
           <button
@@ -816,7 +816,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               {noteCountdown && noteCountdown > 0 ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600 }}>
+                  <span style={{ fontSize: 11, color: '#d4d4d8', fontWeight: 600 }}>
                     ⏳ Saving in {noteCountdown}s
                   </span>
                   <button
@@ -830,7 +830,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                   </button>
                 </div>
               ) : noteSaved ? (
-                <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600, marginRight: 4 }}>
+                <span style={{ fontSize: 11, color: '#ffffff', fontWeight: 600, marginRight: 4 }}>
                   ✓ Saved locally (Syncs in 30s)
                 </span>
               ) : null}
@@ -1063,7 +1063,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                   gap: 6,
                 }}
               >
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#f87171', letterSpacing: '0.04em' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#ffffff', letterSpacing: '0.04em' }}>
                   1. OBSTACLES FACED
                 </span>
                 <div style={{ fontSize: 14, color: 'var(--text-primary)', minHeight: 40, lineHeight: 1.5 }}>
@@ -1082,7 +1082,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                   gap: 6,
                 }}
               >
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#e4e4e7', letterSpacing: '0.04em' }}>
                   2. WHAT HAPPENED
                 </span>
                 <div style={{ fontSize: 14, color: 'var(--text-primary)', minHeight: 40, lineHeight: 1.5 }}>
@@ -1101,7 +1101,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                   gap: 6,
                 }}
               >
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', letterSpacing: '0.04em' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#d4d4d8', letterSpacing: '0.04em' }}>
                   3. HOW I SOLVED IT
                 </span>
                 <div style={{ fontSize: 14, color: 'var(--text-primary)', minHeight: 40, lineHeight: 1.5 }}>
@@ -1120,7 +1120,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                   gap: 6,
                 }}
               >
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', letterSpacing: '0.04em' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#a1a1aa', letterSpacing: '0.04em' }}>
                   4. WHAT CAN I IMPROVE
                 </span>
                 <div style={{ fontSize: 14, color: 'var(--text-primary)', minHeight: 40, lineHeight: 1.5 }}>
@@ -1155,19 +1155,19 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               if (!title) setTitle('Exercise');
               setIsBold(true);
               setIsStrikethrough(true);
-              setTextColor('#ef4444');
+              setTextColor('#ffffff');
             }}
             className="v-pill-btn"
             style={{
               padding: '4px 10px',
               fontSize: 11,
-              color: '#ef4444',
-              borderColor: 'rgba(239, 68, 68, 0.4)',
-              background: 'rgba(239, 68, 68, 0.1)',
+              color: 'var(--text-primary)',
+              borderColor: 'rgba(255, 255, 255, 0.4)',
+              background: 'rgba(255, 255, 255, 0.1)',
             }}
-            title="Preset: Make title Bold, Strikethrough & Red"
+            title="Preset: Make title Bold, Strikethrough & Monochrome"
           >
-            🔴 Preset: Bold, Strikethrough & Red
+            ⚪ Preset: Bold, Strikethrough & Formatted
           </button>
         </div>
 
@@ -1505,9 +1505,9 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                           width: 24,
                           height: 24,
                           borderRadius: 8,
-                          background: task.isCompleted ? 'rgba(34, 197, 94, 0.2)' : 'var(--v-glass-bg-subtle)',
-                          border: `2px solid ${task.isCompleted ? '#22c55e' : 'var(--v-glass-border)'}`,
-                          color: '#22c55e',
+                          background: task.isCompleted ? '#ffffff' : 'var(--v-glass-bg-subtle)',
+                          border: `2px solid ${task.isCompleted ? '#ffffff' : 'var(--v-glass-border)'}`,
+                          color: '#000000',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -1638,7 +1638,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                           type="button"
                           onClick={event => { void withActionFeedback('Deleting task', () => handleDeleteTask(task.id), event.currentTarget); }}
                           className="v-circle-btn"
-                          style={{ width: 30, height: 30, color: '#f87171' }}
+                          style={{ width: 30, height: 30, color: 'var(--text-secondary)' }}
                           title="Delete Task"
                           aria-label="Delete task"
                         >
@@ -1676,8 +1676,8 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                               display: 'flex',
                               alignItems: 'center',
                               gap: 8,
-                              background: isFocus ? 'rgba(56, 189, 248, 0.15)' : 'rgba(34, 197, 94, 0.15)',
-                              border: `1.5px solid ${isFocus ? '#38bdf8' : '#22c55e'}`,
+                              background: isFocus ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)',
+                              border: `1.5px solid ${isFocus ? '#ffffff' : '#a1a1aa'}`,
                               borderRadius: 999,
                               padding: '4px 12px',
                             }}
@@ -1687,7 +1687,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                                 fontSize: 13,
                                 fontWeight: 800,
                                 fontFamily: 'monospace',
-                                color: isFocus ? '#38bdf8' : '#22c55e',
+                                color: isFocus ? '#ffffff' : '#d4d4d8',
                               }}
                             >
                               {isFocus ? '🎯 Focus' : '☕ Break'}: {formattedCountdown}
@@ -1719,7 +1719,7 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
                               type="button"
                               onClick={stopTimer}
                               className="v-circle-btn"
-                              style={{ width: 28, height: 28, color: '#f87171' }}
+                              style={{ width: 28, height: 28, color: 'var(--text-secondary)' }}
                               title="Stop & Log Time"
                             >
                               <StopIcon size={12} />
@@ -1854,11 +1854,11 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: '#38bdf8' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
                   <span>🎯 {pomodoroCalculations.sessions} Focus Sessions</span>
                   <span style={{ fontSize: 12, opacity: 0.8 }}>(25m each)</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#22c55e' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#d4d4d8' }}>
                   <span>☕ {pomodoroCalculations.breaks} Breaks</span>
                   <span style={{ fontSize: 11, opacity: 0.8 }}>(5m each)</span>
                 </div>
@@ -1879,19 +1879,8 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
               style={{
                 padding: '12px 16px',
                 borderRadius: 12,
-                background:
-                  notificationStatus === 'granted'
-                    ? 'rgba(34, 197, 94, 0.1)'
-                    : notificationStatus === 'denied'
-                    ? 'rgba(239, 68, 68, 0.1)'
-                    : 'rgba(56, 189, 248, 0.1)',
-                border: `1px solid ${
-                  notificationStatus === 'granted'
-                    ? 'rgba(34, 197, 94, 0.3)'
-                    : notificationStatus === 'denied'
-                    ? 'rgba(239, 68, 68, 0.3)'
-                    : 'rgba(56, 189, 248, 0.3)'
-                }`,
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -1900,15 +1889,15 @@ export function TodoScreen({ currentDate, onChangeDate, isPhone }: TodoScreenPro
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {notificationStatus === 'granted' ? (
-                  <Bell size={18} style={{ color: '#22c55e', flexShrink: 0 }} />
+                  <Bell size={18} style={{ color: '#ffffff', flexShrink: 0 }} />
                 ) : notificationStatus === 'denied' ? (
-                  <BellOff size={18} style={{ color: '#ef4444', flexShrink: 0 }} />
+                  <BellOff size={18} style={{ color: '#a1a1aa', flexShrink: 0 }} />
                 ) : (
-                  <AlertTriangle size={18} style={{ color: '#38bdf8', flexShrink: 0 }} />
+                  <AlertTriangle size={18} style={{ color: '#d4d4d8', flexShrink: 0 }} />
                 )}
                 <div style={{ fontSize: 12, lineHeight: 1.4 }}>
                   {notificationStatus === 'granted' ? (
-                    <span style={{ color: '#22c55e', fontWeight: 600 }}>
+                    <span style={{ color: '#ffffff', fontWeight: 600 }}>
                       Notifications Active (Alerts ready online & offline)
                     </span>
                   ) : notificationStatus === 'denied' ? (

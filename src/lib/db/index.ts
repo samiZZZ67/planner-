@@ -38,12 +38,12 @@ export const db = new SamsSpaceDB();
 
 // Initial Default Sections
 export const DEFAULT_SECTIONS: Omit<Section, 'id' | 'updatedAt' | 'synced' | 'deleted' | 'isSample'>[] = [
-  { name: 'Entertainment', color: '#a855f7', icon: '🎮', order: 0, dailyTargetMinutes: 120, targetType: 'at most' },
-  { name: 'Deep Work', color: '#f59e0b', icon: '⚡', order: 1, dailyTargetMinutes: 180, targetType: 'at least' },
-  { name: 'Learning', color: '#3b82f6', icon: '📚', order: 2, dailyTargetMinutes: 60, targetType: 'at least' },
-  { name: 'Health', color: '#10b981', icon: '🏃', order: 3, dailyTargetMinutes: 45, targetType: 'at least' },
-  { name: 'Rest', color: '#6366f1', icon: '🌙', order: 4, dailyTargetMinutes: 60, targetType: 'at least' },
-  { name: 'Other', color: '#64748b', icon: '📌', order: 5, dailyTargetMinutes: null, targetType: 'at least' },
+  { name: 'Entertainment', color: '#ffffff', icon: '🎮', order: 0, dailyTargetMinutes: 120, targetType: 'at most' },
+  { name: 'Deep Work', color: '#e4e4e7', icon: '⚡', order: 1, dailyTargetMinutes: 180, targetType: 'at least' },
+  { name: 'Learning', color: '#d4d4d8', icon: '📚', order: 2, dailyTargetMinutes: 60, targetType: 'at least' },
+  { name: 'Health', color: '#a1a1aa', icon: '🏃', order: 3, dailyTargetMinutes: 45, targetType: 'at least' },
+  { name: 'Rest', color: '#71717a', icon: '🌙', order: 4, dailyTargetMinutes: 60, targetType: 'at least' },
+  { name: 'Other', color: '#52525b', icon: '📌', order: 5, dailyTargetMinutes: null, targetType: 'at least' },
 ];
 
 /**

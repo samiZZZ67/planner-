@@ -315,9 +315,9 @@ export function BriefSchedulingModal({
               style={{
                 padding: '10px 14px',
                 borderRadius: 12,
-                background: 'rgba(34, 197, 94, 0.15)',
-                border: '1px solid rgba(34, 197, 94, 0.35)',
-                color: '#22c55e',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
+                color: '#ffffff',
                 fontSize: 12,
                 display: 'flex',
                 alignItems: 'center',
@@ -334,9 +334,9 @@ export function BriefSchedulingModal({
               style={{
                 padding: '10px 14px',
                 borderRadius: 12,
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.35)',
-                color: '#ef4444',
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
+                color: 'var(--text-secondary)',
                 fontSize: 12,
                 display: 'flex',
                 alignItems: 'center',
@@ -401,7 +401,7 @@ export function BriefSchedulingModal({
                   width: 10,
                   height: 10,
                   borderRadius: '50%',
-                  background: channelInfo?.canPost ? '#22c55e' : '#f59e0b',
+                  background: channelInfo?.canPost ? '#ffffff' : '#71717a',
                 }}
               />
               <span style={{ fontSize: 12 }}>
@@ -449,15 +449,11 @@ export function BriefSchedulingModal({
                   fontSize: 11,
                   fontWeight: 600,
                   background: statusInfo?.morning.isDeliveredToday
-                    ? 'rgba(34, 197, 94, 0.15)'
-                    : statusInfo?.morning.isSkippedToday
-                    ? 'rgba(245, 158, 11, 0.15)'
-                    : 'rgba(59, 130, 246, 0.15)',
+                    ? 'rgba(255, 255, 255, 0.15)'
+                    : 'rgba(255, 255, 255, 0.06)',
                   color: statusInfo?.morning.isDeliveredToday
-                    ? '#22c55e'
-                    : statusInfo?.morning.isSkippedToday
-                    ? '#f59e0b'
-                    : '#60a5fa',
+                    ? '#ffffff'
+                    : 'var(--text-muted)',
                 }}
               >
                 {statusInfo?.morning.isDeliveredToday
@@ -515,7 +511,7 @@ export function BriefSchedulingModal({
                   type="button"
                   onClick={() => handleUnskip('morning')}
                   className="v-pill-btn"
-                  style={{ padding: '6px 12px', fontSize: 11, gap: 5, color: '#f59e0b' }}
+                  style={{ padding: '6px 12px', fontSize: 11, gap: 5, color: 'var(--text-secondary)' }}
                 >
                   <RefreshCw size={12} />
                   <span>Unskip Today</span>
@@ -610,15 +606,11 @@ export function BriefSchedulingModal({
                   fontSize: 11,
                   fontWeight: 600,
                   background: statusInfo?.evening.isDeliveredToday
-                    ? 'rgba(34, 197, 94, 0.15)'
-                    : statusInfo?.evening.isSkippedToday
-                    ? 'rgba(245, 158, 11, 0.15)'
-                    : 'rgba(59, 130, 246, 0.15)',
+                    ? 'rgba(255, 255, 255, 0.15)'
+                    : 'rgba(255, 255, 255, 0.06)',
                   color: statusInfo?.evening.isDeliveredToday
-                    ? '#22c55e'
-                    : statusInfo?.evening.isSkippedToday
-                    ? '#f59e0b'
-                    : '#60a5fa',
+                    ? '#ffffff'
+                    : 'var(--text-muted)',
                 }}
               >
                 {statusInfo?.evening.isDeliveredToday
@@ -676,7 +668,7 @@ export function BriefSchedulingModal({
                   type="button"
                   onClick={() => handleUnskip('evening')}
                   className="v-pill-btn"
-                  style={{ padding: '6px 12px', fontSize: 11, gap: 5, color: '#f59e0b' }}
+                  style={{ padding: '6px 12px', fontSize: 11, gap: 5, color: 'var(--text-secondary)' }}
                 >
                   <RefreshCw size={12} />
                   <span>Unskip Today</span>
@@ -772,7 +764,7 @@ export function BriefSchedulingModal({
                   cursor: 'pointer',
                   fontSize: 12,
                   fontWeight: 600,
-                  color: quizSettings.enabled ? '#22c55e' : 'var(--text-muted)',
+                  color: quizSettings.enabled ? '#ffffff' : 'var(--text-muted)',
                 }}
               >
                 <input
@@ -876,7 +868,7 @@ export function BriefSchedulingModal({
                     Section {activeQuizSession.currentSectionIndex + 1}/{activeQuizSession.totalSections} · Score: {activeQuizSession.score}
                   </div>
                 </div>
-                <span style={{ color: '#60a5fa', fontWeight: 600 }}>In Progress</span>
+                <span style={{ color: '#ffffff', fontWeight: 600 }}>In Progress</span>
               </div>
             )}
 
@@ -954,8 +946,8 @@ export function BriefSchedulingModal({
                           borderRadius: 6,
                           fontSize: 10,
                           fontWeight: 600,
-                          background: d.status === 'completed' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          color: d.status === 'completed' ? '#22c55e' : '#ef4444',
+                          background: d.status === 'completed' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                          color: d.status === 'completed' ? '#ffffff' : 'var(--text-secondary)',
                         }}
                       >
                         {d.status}
@@ -984,7 +976,7 @@ export function BriefSchedulingModal({
           }}
         >
           <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Shield size={12} color="#22c55e" />
+            <Shield size={12} color="#ffffff" />
             <span>Persistent Node-Cron Scheduler Active (Runs even with browser closed)</span>
           </div>
           <button
