@@ -176,6 +176,7 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
                 }}
                 title={tab.label}
                 aria-label={tab.label}
+                aria-current={isActive ? 'page' : undefined}
               >
                 {tab.icon}
                 <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.02em' }}>

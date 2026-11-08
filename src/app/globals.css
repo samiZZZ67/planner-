@@ -1073,7 +1073,7 @@ video[controls] { display: none !important; }
    ================================================================ */
 html {
   width: 100%;
-  min-width: 320px;
+  min-width: 0;
   min-height: 100%;
   font-size: clamp(0.9375rem, 0.91rem + 0.12vw, 1rem);
   scroll-padding-block: env(safe-area-inset-top) 1rem;
@@ -1081,7 +1081,7 @@ html {
 
 body {
   width: 100%;
-  min-width: 320px;
+  min-width: 0;
   min-height: 100dvh;
   overflow-x: clip;
   padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
@@ -1326,6 +1326,93 @@ canvas {
 .border-red-800\/40,
 .border-amber-800\/40 {
   border-color: var(--v-glass-border) !important;
+}
+
+/* Shared control behavior keeps every workflow usable at narrow widths. */
+button,
+[role="button"] {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
+  min-width: 0;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+@media (max-width: 767px) {
+  .app-header > div:last-child {
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 100%;
+  }
+
+  .app-header > div:last-child > div {
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 100%;
+  }
+
+  .v-modal-dialog {
+    width: 100%;
+    max-height: calc(100dvh - max(1rem, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+  }
+
+  .v-tabs {
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: 1rem;
+  }
+
+  .v-tab-btn {
+    scroll-snap-align: start;
+  }
+
+  .v-dock[aria-label="Phone Navigation Tab Bar"] {
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: .5rem;
+  }
+
+  .v-dock[aria-label="Phone Navigation Tab Bar"] > button {
+    scroll-snap-align: center;
+  }
+
+  /* A fixed 340px grid track otherwise overflows narrow book review dialogs. */
+  [style*="minmax(340px"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@media (pointer: coarse) {
+  button,
+  [role="button"] {
+    min-width: 44px;
+    min-height: 44px !important;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 24px;
+    height: 24px;
+  }
 }
 
 
