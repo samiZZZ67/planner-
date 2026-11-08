@@ -102,9 +102,9 @@ export function SettingsScreen({
           className="v-card"
           style={{
             padding: '12px 18px',
-            background: 'rgba(255, 255, 255, 0.08)',
-            borderColor: 'rgba(255, 255, 255, 0.25)',
-            color: '#ffffff',
+            background: 'var(--v-glass-bg-subtle)',
+            borderColor: 'var(--v-glass-border)',
+            color: 'var(--text-primary)',
             fontSize: 13,
             fontWeight: 600,
             display: 'flex',
@@ -213,11 +213,11 @@ export function SettingsScreen({
               borderRadius: 6,
               background:
                 notifStatus === 'granted'
-                  ? 'rgba(255, 255, 255, 0.15)'
-                  : 'rgba(255, 255, 255, 0.06)',
+                  ? 'var(--v-glass-bg-hover)'
+                  : 'var(--v-glass-bg-subtle)',
               color:
                 notifStatus === 'granted'
-                  ? '#ffffff'
+                  ? 'var(--text-primary)'
                   : 'var(--text-muted)',
             }}
           >
@@ -287,8 +287,8 @@ export function SettingsScreen({
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
             TELEGRAM AUTOMATION & DAILY BRIEFS
           </div>
-          <span style={{ fontSize: 11, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ffffff', display: 'inline-block' }} />
+          <span style={{ fontSize: 11, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text-primary)', display: 'inline-block' }} />
             Active (UTC+3 / EAT)
           </span>
         </div>
@@ -324,8 +324,8 @@ export function SettingsScreen({
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
             ETHIOPIAN CALENDAR & HABESHA CLOCK SYSTEM
           </div>
-          <span style={{ fontSize: 11, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ffffff', display: 'inline-block' }} />
+          <span style={{ fontSize: 11, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text-primary)', display: 'inline-block' }} />
             Africa/Addis_Ababa (UTC+3)
           </span>
         </div>
@@ -615,7 +615,7 @@ function AIProviderSettingsSection({ showMsg, isPhone }: { showMsg: (msg: string
                 style={{
                   fontSize: 11,
                   fontWeight: 600,
-                  color: p.configured ? '#ffffff' : 'var(--text-muted)',
+                  color: p.configured ? 'var(--text-primary)' : 'var(--text-muted)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,

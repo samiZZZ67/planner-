@@ -179,7 +179,7 @@ function EditablePriorityCard({
                       type="button"
                       onClick={() => handleSaveEdit(idx)}
                       className="v-circle-btn"
-                      style={{ width: 26, height: 26, color: '#ffffff' }}
+                      style={{ width: 26, height: 26, color: 'var(--text-primary)' }}
                       title="Save item"
                     >
                       <Check size={12} />

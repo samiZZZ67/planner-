@@ -58,6 +58,14 @@ on:
     # Manual trigger from GitHub UI or API — useful for testing and on-demand
     # delivery of overdue jobs.
     inputs:
+      app_url:
+        description: "Override App URL (e.g. https://sams-space-backend.onrender.com). Leave empty to use repo secret/variable."
+        required: false
+        type: string
+      cron_secret:
+        description: "Override BOOKS_CRON_SECRET. Leave empty to use repo secret."
+        required: false
+        type: string
       dry_run:
         description: "Dry run: only wake the service and check health, skip delivery trigger"
         required: false
@@ -79,29 +87,30 @@ jobs:
       # ────────────────────────────────────────────────────────────────────────
       - name: "🔑 Validate required configuration"
         run: |
-          errors=0
+          # Resolve APP_URL from inputs, variables, or secrets
+          RAW_URL="${{ inputs.app_url || vars.MOON_APP_URL || secrets.MOON_APP_URL || vars.APP_URL || secrets.APP_URL || vars.RENDER_APP_URL || secrets.RENDER_APP_URL || vars.NIGHTPLANNER_URL || secrets.NIGHTPLANNER_URL }}"
+          RAW_SECRET="${{ inputs.cron_secret || secrets.BOOKS_CRON_SECRET || vars.BOOKS_CRON_SECRET || secrets.CRON_SECRET || vars.CRON_SECRET }}"
 
-          if [ -z "${{ vars.MOON_APP_URL }}" ]; then
-            echo "::error::Repository variable MOON_APP_URL is not set. Go to Settings → Secrets and variables → Actions → Variables and add it (e.g. https://your-app.onrender.com)."
-            errors=$((errors + 1))
-          fi
-
-          if [ -z "${{ secrets.BOOKS_CRON_SECRET }}" ]; then
-            echo "::error::Repository secret BOOKS_CRON_SECRET is not set. Go to Settings → Secrets and variables → Actions → Secrets and add it."
-            errors=$((errors + 1))
-          fi
-
-          if [ $errors -gt 0 ]; then
-            echo "::error::$errors required configuration value(s) missing. See errors above."
+          if [ -z "$RAW_URL" ]; then
+            echo "::error::Application URL is not configured."
+            echo "::notice::To fix: Go to GitHub Repo → Settings → Secrets and variables → Actions."
+            echo "::notice::Add either a Variable or Secret named MOON_APP_URL (or APP_URL) set to your app URL (e.g. https://sams-space-backend.onrender.com)."
+            echo "::notice::You can also trigger manually using workflow_dispatch and provide the App URL input directly."
             exit 1
           fi
 
           # Sanitize URL: strip trailing slashes
-          APP_URL="${{ vars.MOON_APP_URL }}"
-          APP_URL="${APP_URL%/}"
+          APP_URL="${RAW_URL%/}"
           echo "APP_URL=${APP_URL}" >> "$GITHUB_ENV"
-          echo "✅ Configuration validated."
+          echo "CRON_SECRET=${RAW_SECRET}" >> "$GITHUB_ENV"
+
+          echo "✅ Configuration resolved:"
           echo "   App URL: ${APP_URL}"
+          if [ -n "$RAW_SECRET" ]; then
+            echo "   Auth Token: [Configured - Bearer auth will be sent]"
+          else
+            echo "   Auth Token: [None - proceeding unauthenticated, valid if BOOKS_CRON_SECRET is unset on server]"
+          fi
           echo "   Trigger: ${{ github.event_name }}"
           echo "   UTC time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "   EAT time: $(TZ='Africa/Addis_Ababa' date '+%Y-%m-%d %H:%M:%S EAT')"
@@ -112,14 +121,26 @@ jobs:
       - name: "☀️ Wake Render service (health check)"
         id: health
         run: |
-          echo "Pinging ${APP_URL}/api/health to wake the service..."
+          echo "Pinging ${APP_URL}/health to wake the service..."
 
+          # Try lightweight /health first (handled directly by server.js in <10ms)
           HTTP_CODE=$(curl -s -o /tmp/health_response.json -w "%{http_code}" \
-            --max-time 120 \
+            --max-time 90 \
             --retry 2 \
-            --retry-delay 10 \
-            --retry-max-time 180 \
-            "${APP_URL}/api/health" 2>/dev/null) || HTTP_CODE="000"
+            --retry-delay 5 \
+            --retry-max-time 150 \
+            "${APP_URL}/health" 2>/dev/null) || HTTP_CODE="000"
+
+          # Fall back to /api/health if /health is not 2xx
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 400 ]; then
+            echo "Primary /health returned ${HTTP_CODE}. Trying /api/health..."
+            HTTP_CODE=$(curl -s -o /tmp/health_response.json -w "%{http_code}" \
+              --max-time 90 \
+              --retry 2 \
+              --retry-delay 5 \
+              --retry-max-time 150 \
+              "${APP_URL}/api/health" 2>/dev/null) || HTTP_CODE="000"
+          fi
 
           echo "Health check HTTP status: ${HTTP_CODE}"
 
@@ -133,14 +154,14 @@ jobs:
             echo "✅ Service is awake and healthy."
             echo "healthy=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::Health check returned HTTP ${HTTP_CODE}. The service may be starting up. Will still attempt delivery trigger."
+            echo "::warning::Health check returned HTTP ${HTTP_CODE}. The service may still be warming up. Will proceed with delivery trigger."
             echo "healthy=false" >> "$GITHUB_OUTPUT"
           fi
 
           # Give Render an extra moment to fully initialize the scheduler
           # after cold start (the app runs a 3-second startup sweep).
-          echo "Waiting 8 seconds for scheduler initialization..."
-          sleep 8
+          echo "Waiting 6 seconds for scheduler initialization..."
+          sleep 6
 
       # ────────────────────────────────────────────────────────────────────────
       # 2. Trigger the delivery cycle
@@ -154,14 +175,19 @@ jobs:
           echo "EAT: $(TZ='Africa/Addis_Ababa' date '+%Y-%m-%d %H:%M:%S')"
           echo ""
 
+          # Build header arguments conditionally
+          HEADERS=(-H "Content-Type: application/json")
+          if [ -n "$CRON_SECRET" ]; then
+            HEADERS+=(-H "Authorization: Bearer ${CRON_SECRET}")
+          fi
+
           HTTP_CODE=$(curl -s -o /tmp/cron_response.json -w "%{http_code}" \
             --max-time 300 \
             --retry 1 \
-            --retry-delay 15 \
+            --retry-delay 10 \
             --retry-max-time 330 \
             -X POST \
-            -H "Authorization: Bearer ${{ secrets.BOOKS_CRON_SECRET }}" \
-            -H "Content-Type: application/json" \
+            "${HEADERS[@]}" \
             "${APP_URL}/api/cron/books" 2>/dev/null) || HTTP_CODE="000"
 
           echo "Delivery trigger HTTP status: ${HTTP_CODE}"

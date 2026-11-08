@@ -5,7 +5,7 @@ import { useSync } from '@/lib/sync/useSync';
 import { useTimer } from '@/lib/timer/useTimer';
 import {
   WifiOff, RefreshCw, CheckCircle2, Clock, AlertTriangle,
-  Moon, Sun, Lock, Play, Pause, Square, Save
+  Moon, Sun, Lock, Play, Pause, Square, Save, Settings
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -15,9 +15,10 @@ interface HeaderProps {
   onToggleTheme: () => void;
   onOpenAIChat?: () => void;
   onLockSession?: () => void;
+  onOpenSettings?: () => void;
 }
 
-export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, onLockSession }: HeaderProps) {
+export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, onLockSession, onOpenSettings }: HeaderProps) {
   const [avatarUrl, setAvatarUrl] = React.useState('/icons/icon-192.png');
 
   React.useEffect(() => {
@@ -221,7 +222,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
               width: 8,
               height: 8,
               borderRadius: '50%',
-              background: isFocus ? '#ffffff' : '#a1a1aa',
+              background: isFocus ? 'var(--text-primary)' : 'var(--text-muted)',
               animation: 'timerPulse 1.4s infinite',
             }}
           />
@@ -243,7 +244,7 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
               fontFamily: 'monospace',
               fontSize: 13,
               fontWeight: 800,
-              color: isFocus ? '#ffffff' : '#d4d4d8',
+              color: isFocus ? 'var(--text-primary)' : 'var(--text-secondary)',
             }}
           >
             {isFocus ? '🎯' : '☕'} {formattedCountdown}
@@ -283,6 +284,18 @@ export function Header({ onOpenLogin, isPC, theme, onToggleTheme, onOpenAIChat, 
       {/* Right Controls: Sync & Theme Switch & Cloud Login */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <SyncBadge />
+        {onOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="v-circle-btn"
+            style={{ width: 38, height: 38 }}
+            aria-label="Open Settings"
+            title="Settings"
+          >
+            <Settings size={15} style={{ color: 'var(--text-secondary)' }} />
+          </button>
+        )}
         <button
           onClick={onLockSession || onOpenLogin}
           className="v-circle-btn"

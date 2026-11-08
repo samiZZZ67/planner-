@@ -546,20 +546,20 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
 
       {/* Persistent visible feedback banners */}
       {notice && (
-        <div className="v-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderColor: 'rgba(255, 255, 255, 0.3)', background: 'rgba(255, 255, 255, 0.08)' }}>
-          <span style={{ color: '#ffffff', fontSize: 13 }}>{notice}</span>
+        <div className="v-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderColor: 'var(--v-glass-border)', background: 'var(--v-glass-bg-subtle)' }}>
+          <span style={{ color: 'var(--text-primary)', fontSize: 13 }}>{notice}</span>
           <button type="button" onClick={() => setNotice('')} className="v-circle-btn" style={{ width: 24, height: 24 }} aria-label="Dismiss message"><X size={13} /></button>
         </div>
       )}
       {error && (
-        <div className="v-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderColor: 'rgba(255, 255, 255, 0.3)', background: 'rgba(255, 255, 255, 0.08)' }}>
+        <div className="v-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderColor: 'var(--v-glass-border)', background: 'var(--v-glass-bg-subtle)' }}>
           <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{error}</span>
           <button type="button" onClick={() => setError('')} className="v-circle-btn" style={{ width: 24, height: 24 }} aria-label="Dismiss error"><X size={13} /></button>
         </div>
       )}
 
       <div className="v-card" style={{ padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start', borderColor: 'var(--v-glass-border)' }}>
-        <TriangleAlert size={19} color="#ffffff" style={{ flexShrink: 0, marginTop: 2 }} />
+        <TriangleAlert size={19} color="var(--text-primary)" style={{ flexShrink: 0, marginTop: 2 }} />
         <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
           <strong style={{ color: 'var(--text-primary)' }}>Daily Telegram lessons run automatically.</strong> Each post includes the original reading, a summary, concepts, definitions, an illustrative example, revision questions, and a page image. Scanned or uncertain right-to-left pages pause for a quick visual review before publishing.
         </div>
@@ -611,9 +611,9 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                 fontSize: 12,
                 padding: '8px 12px',
                 borderRadius: 8,
-                background: 'rgba(255, 255, 255, 0.06)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#ffffff',
+                background: 'var(--v-glass-bg-subtle)',
+                border: '1px solid var(--v-glass-border)',
+                color: 'var(--text-primary)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
@@ -629,7 +629,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
         <button className="v-pill-btn" type="submit" disabled={isUploading} style={{ minHeight: 44, display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 8, cursor: isUploading ? 'wait' : 'pointer' }}>
           <FileUp size={17} /> {isUploading ? 'Saving PDF…' : 'Queue daily Telegram delivery'}
         </button>
-        {notice && <p role="status" style={{ margin: 0, color: '#ffffff', fontSize: 13 }}>{notice}</p>}
+        {notice && <p role="status" style={{ margin: 0, color: 'var(--text-primary)', fontSize: 13 }}>{notice}</p>}
         {error && <p role="alert" style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13 }}>{error}</p>}
       </form>
 
@@ -694,22 +694,22 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                       <span style={{ color: 'var(--text-muted)' }}> (pp. {book.startPage}–{book.endPage})</span>
                     </div>
                     <div style={{ color: 'var(--text-secondary)' }}>
-                      <span style={{ color: '#ffffff', fontWeight: 600 }}>{pagesRead} pages sent</span>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{pagesRead} pages sent</span>
                       {' · '}
                       <span>{remainingPages} pages remaining</span>
                       {' · '}
-                      <span style={{ color: '#ffffff', fontWeight: 700 }}>{progressPct}%</span>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{progressPct}%</span>
                     </div>
                   </div>
 
                   {/* Progress Bar */}
-                  <div style={{ width: '100%', height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                  <div style={{ width: '100%', height: 6, borderRadius: 999, background: 'var(--v-glass-border-subtle)', overflow: 'hidden' }}>
                     <div
                       style={{
                         height: '100%',
                         width: `${progressPct}%`,
                         borderRadius: 999,
-                        background: '#ffffff',
+                        background: 'var(--text-primary)',
                         transition: 'width 0.3s ease',
                       }}
                     />
@@ -733,8 +733,9 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                             padding: '2px 7px',
                             borderRadius: 6,
                             fontWeight: 600,
-                            background: 'rgba(255, 255, 255, 0.1)',
-                            color: '#ffffff',
+                            background: 'var(--v-glass-bg-hover)',
+                            color: 'var(--text-primary)',
+                            border: '1px solid var(--v-glass-border-subtle)',
                           }}
                         >
                           {nextPending.deliveryStatus === 'failed' ? 'Failed' : nextPending.status === 'approved' ? 'Scheduled' : 'Draft'}
@@ -747,7 +748,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                       </div>
                     </div>
                   ) : (
-                    <div style={{ fontSize: 12, color: '#ffffff', fontWeight: 600 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>
                       ✓ All scheduled sections for this book have been completed and delivered to Telegram.
                     </div>
                   )}
@@ -780,9 +781,9 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                       fontSize: 12,
                       padding: '7px 11px',
                       borderRadius: 8,
-                      background: 'rgba(255, 255, 255, 0.06)',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#ffffff',
+                      background: 'var(--v-glass-bg-subtle)',
+                      border: '1px solid var(--v-glass-border)',
+                      color: 'var(--text-primary)',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
@@ -840,7 +841,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
               {book.extractionStatus === 'needs_review' && (
                 <button
                   type="button"
-                  className="v-pill-btn"
+                  className="v-pill-btn v-pill-btn-primary"
                   onClick={async () => {
                     try {
                       const res = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/pages/review`, {
@@ -857,7 +858,7 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
                       setError(err?.message || 'Failed to approve pages.');
                     }
                   }}
-                  style={{ padding: '8px 14px', display: 'inline-flex', gap: 6, alignItems: 'center', fontWeight: 600, color: '#ffffff', borderColor: '#ffffff' }}
+                  style={{ padding: '8px 14px', display: 'inline-flex', gap: 6, alignItems: 'center', fontWeight: 600 }}
                   title="Approve all extracted pages and enable reading plan generation / loading"
                 >
                   <CheckCircle2 size={14} /> Approve Extracted Content

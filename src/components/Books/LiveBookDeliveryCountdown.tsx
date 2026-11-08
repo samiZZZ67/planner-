@@ -341,45 +341,45 @@ function SingleBookDeliveryCard({
   const statusConfig = {
     scheduled: {
       label: countdown.isZero ? (countdown.isOverdue ? 'Overdue' : 'Due Now') : 'Scheduled',
-      bg: 'rgba(255, 255, 255, 0.1)',
-      color: '#ffffff',
-      border: 'rgba(255, 255, 255, 0.25)',
+      bg: 'var(--v-glass-bg-hover)',
+      color: 'var(--text-primary)',
+      border: 'var(--v-glass-border)',
     },
     sending: {
       label: 'Sending Now…',
-      bg: 'rgba(255, 255, 255, 0.15)',
-      color: '#ffffff',
-      border: 'rgba(255, 255, 255, 0.35)',
+      bg: 'var(--v-glass-bg-hover)',
+      color: 'var(--text-primary)',
+      border: 'var(--v-glass-border-bright)',
     },
     sent: {
       label: 'Sent to Telegram',
-      bg: 'rgba(255, 255, 255, 0.1)',
-      color: '#ffffff',
-      border: 'rgba(255, 255, 255, 0.25)',
+      bg: 'var(--v-glass-bg-hover)',
+      color: 'var(--text-primary)',
+      border: 'var(--v-glass-border)',
     },
     failed: {
       label: 'Delivery Failed',
-      bg: 'rgba(255, 255, 255, 0.08)',
+      bg: 'var(--v-glass-bg-subtle)',
       color: 'var(--text-secondary)',
-      border: 'rgba(255, 255, 255, 0.2)',
+      border: 'var(--v-glass-border)',
     },
     cancelled: {
       label: 'Cancelled',
-      bg: 'rgba(255, 255, 255, 0.06)',
+      bg: 'var(--v-glass-bg-subtle)',
       color: 'var(--text-muted)',
-      border: 'rgba(255, 255, 255, 0.15)',
+      border: 'var(--v-glass-border-subtle)',
     },
     overdue: {
       label: 'Overdue · Awaiting Dispatch',
-      bg: 'rgba(255, 255, 255, 0.12)',
-      color: '#ffffff',
-      border: 'rgba(255, 255, 255, 0.3)',
+      bg: 'var(--v-glass-bg-hover)',
+      color: 'var(--text-primary)',
+      border: 'var(--v-glass-border-bright)',
     },
     draft: {
       label: 'Draft · Not Queued',
-      bg: 'rgba(255, 255, 255, 0.06)',
+      bg: 'var(--v-glass-bg-subtle)',
       color: 'var(--text-muted)',
-      border: 'rgba(255, 255, 255, 0.15)',
+      border: 'var(--v-glass-border-subtle)',
     },
   }[nextDelivery.status];
 
@@ -590,7 +590,7 @@ function SingleBookDeliveryCard({
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             Next delivery:{' '}
-            <strong style={{ color: '#ffffff' }}>
+            <strong style={{ color: 'var(--text-primary)' }}>
               {nextDelivery.scheduledDate} at {nextDelivery.formattedTime12h}
             </strong>
           </div>
@@ -811,9 +811,9 @@ function SingleBookDeliveryCard({
                 fontSize: 12,
                 padding: '6px 12px',
                 borderRadius: 8,
-                background: 'rgba(255, 255, 255, 0.08)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                color: '#ffffff',
+                background: 'var(--v-glass-bg-subtle)',
+                border: '1px solid var(--v-glass-border)',
+                color: 'var(--text-primary)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
@@ -962,7 +962,7 @@ export function LiveBookDeliveryCountdown({
           title={soundEnabled ? 'Alarm chime enabled (click to mute)' : 'Alarm chime muted (click to enable)'}
           aria-label={soundEnabled ? 'Mute alarm chime' : 'Enable alarm chime'}
         >
-          {soundEnabled ? <Volume2 size={13} color="#ffffff" /> : <VolumeX size={13} color="var(--text-muted)" />}
+          {soundEnabled ? <Volume2 size={13} color="var(--text-primary)" /> : <VolumeX size={13} color="var(--text-muted)" />}
         </button>
       </div>
 
@@ -972,9 +972,9 @@ export function LiveBookDeliveryCountdown({
           style={{
             padding: '8px 12px',
             borderRadius: 8,
-            background: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.25)',
-            color: '#ffffff',
+            background: 'var(--v-glass-bg-subtle)',
+            border: '1px solid var(--v-glass-border)',
+            color: 'var(--text-primary)',
             fontSize: 12,
             display: 'flex',
             alignItems: 'center',
@@ -982,7 +982,7 @@ export function LiveBookDeliveryCountdown({
           }}
         >
           <span>{actionNotice}</span>
-          <button type="button" onClick={() => setActionNotice('')} style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer' }}>
+          <button type="button" onClick={() => setActionNotice('')} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer' }}>
             <X size={12} />
           </button>
         </div>
@@ -992,8 +992,8 @@ export function LiveBookDeliveryCountdown({
           style={{
             padding: '8px 12px',
             borderRadius: 8,
-            background: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.25)',
+            background: 'var(--v-glass-bg-subtle)',
+            border: '1px solid var(--v-glass-border)',
             color: 'var(--text-secondary)',
             fontSize: 12,
             display: 'flex',

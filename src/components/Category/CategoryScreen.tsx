@@ -970,7 +970,7 @@ export function CategoryScreen({ currentDate, onChangeDate, isPhone, focusTaskId
                                 {task.result && (
                                   <div>
                                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>RESULT</div>
-                                    <p className="font-system" style={{ fontSize: 13, color: '#ffffff', margin: 0 }}>{task.result}</p>
+                                    <p className="font-system" style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0 }}>{task.result}</p>
                                   </div>
                                 )}
                                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>

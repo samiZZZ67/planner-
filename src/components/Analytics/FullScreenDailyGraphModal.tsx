@@ -197,9 +197,9 @@ export function FullScreenDailyGraphModal({
                     fontWeight: 800,
                     padding: '2px 8px',
                     borderRadius: 999,
-                    background: 'rgba(255, 255, 255, 0.15)',
-                    color: '#ffffff',
-                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    background: 'var(--v-glass-bg-hover)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--v-glass-border-bright)',
                   }}
                 >
                   CURRENT WEEK
@@ -266,45 +266,45 @@ export function FullScreenDailyGraphModal({
             gap: 12,
           }}
         >
-          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #ffffff' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ffffff' }}>
+          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid var(--text-primary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-primary)' }}>
               <Clock size={16} />
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>HOURS TAKEN</span>
             </div>
-            <div className="font-bloody" style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: '#fff' }}>
+            <div className="font-bloody" style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: 'var(--text-primary)' }}>
               {summary.hours}h
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Total focus in week</div>
           </div>
 
-          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #ffffff' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ffffff' }}>
+          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid var(--text-primary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-primary)' }}>
               <CheckCircle2 size={16} />
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>TASKS COMPLETED</span>
             </div>
-            <div className="font-bloody" style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: '#fff' }}>
+            <div className="font-bloody" style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: 'var(--text-primary)' }}>
               {summary.tasks}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{summary.completion}% completion rate</div>
           </div>
 
-          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #ffffff' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ffffff' }}>
+          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid var(--text-primary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-primary)' }}>
               <Flame size={16} />
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>POMODOROS</span>
             </div>
-            <div className="font-bloody" style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: '#fff' }}>
+            <div className="font-bloody" style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: 'var(--text-primary)' }}>
               {summary.pomodoros} 🍅
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>25m focus blocks</div>
           </div>
 
-          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid #ffffff' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#ffffff' }}>
+          <div className="v-card" style={{ padding: '14px 18px', borderLeft: '4px solid var(--text-primary)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-primary)' }}>
               <Target size={16} />
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>PEAK FOCUS DAY</span>
             </div>
-            <div className="font-bloody" style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: '#fff' }}>
+            <div className="font-bloody" style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: 'var(--text-primary)' }}>
               {summary.peakHours}h
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{summary.peakLabel || 'No logs yet'}</div>
@@ -318,16 +318,16 @@ export function FullScreenDailyGraphModal({
             style={{
               padding: '24px',
               textAlign: 'center',
-              borderColor: 'rgba(255, 255, 255, 0.2)',
-              background: 'rgba(255, 255, 255, 0.05)',
+              borderColor: 'var(--v-glass-border)',
+              background: 'var(--v-glass-bg-subtle)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: 8,
             }}
           >
-            <Calendar size={28} style={{ color: '#ffffff' }} />
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>
+            <Calendar size={28} style={{ color: 'var(--text-primary)' }} />
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
               No focus hours or tasks recorded for this week
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 450 }}>
@@ -353,9 +353,9 @@ export function FullScreenDailyGraphModal({
         <div className="v-card" style={{ padding: isPhone ? '18px 14px' : '24px 28px', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <TrendingUp size={20} style={{ color: '#ffffff' }} />
+              <TrendingUp size={20} style={{ color: 'var(--text-primary)' }} />
               <div>
-                <h3 className="font-bloody" style={{ fontSize: 20, margin: 0, letterSpacing: '0.02em' }}>
+                <h3 className="font-bloody" style={{ fontSize: 20, margin: 0, letterSpacing: '0.02em', color: 'var(--text-primary)' }}>
                   FOCUS HOURS TAKEN BY DAY
                 </h3>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -363,7 +363,7 @@ export function FullScreenDailyGraphModal({
                 </div>
               </div>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'monospace' }}>
               Total: {summary.hours}h
             </span>
           </div>
@@ -407,9 +407,9 @@ export function FullScreenDailyGraphModal({
         <div className="v-card" style={{ padding: isPhone ? '18px 14px' : '24px 28px', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <CheckCircle2 size={20} style={{ color: '#ffffff' }} />
+              <CheckCircle2 size={20} style={{ color: 'var(--text-primary)' }} />
               <div>
-                <h3 className="font-bloody" style={{ fontSize: 20, margin: 0, letterSpacing: '0.02em' }}>
+                <h3 className="font-bloody" style={{ fontSize: 20, margin: 0, letterSpacing: '0.02em', color: 'var(--text-primary)' }}>
                   TASKS COMPLETED BY DAY
                 </h3>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -417,7 +417,7 @@ export function FullScreenDailyGraphModal({
                 </div>
               </div>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'monospace' }}>
               Completed: {summary.tasks}
             </span>
           </div>

@@ -30,6 +30,8 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
     { id: 'note', label: 'Note', icon: <StickyNote size={18} /> },
     { id: 'category', label: 'Category', icon: <Tag size={18} /> },
     { id: 'books', label: 'Books', icon: <BookOpen size={18} /> },
+    { id: 'analytics', label: 'Stats', icon: <BarChart3 size={18} /> },
+    { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
   ];
 
   return (
@@ -69,7 +71,7 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
               width: 8,
               height: 8,
               borderRadius: '50%',
-              background: isFocus ? '#ffffff' : '#a1a1aa',
+              background: isFocus ? 'var(--text-primary)' : 'var(--text-muted)',
               animation: 'timerPulse 1.4s infinite',
               flexShrink: 0,
             }}
@@ -92,7 +94,7 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
               fontFamily: 'monospace',
               fontSize: 13,
               fontWeight: 800,
-              color: isFocus ? '#ffffff' : '#d4d4d8',
+              color: isFocus ? 'var(--text-primary)' : 'var(--text-secondary)',
               flexShrink: 0,
             }}
           >
@@ -134,15 +136,19 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
       )}
 
       {/* Floating Bottom Capsule Dock */}
-      <div style={{ width: '100%', maxWidth: 400, padding: '0 16px 8px', pointerEvents: 'auto' }}>
+      <div style={{ width: '100%', maxWidth: 480, padding: '0 8px 8px', pointerEvents: 'auto' }}>
         <nav
           className="v-dock"
           style={{
             height: 60,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-around',
-            padding: '0 8px',
+            justifyContent: 'flex-start',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            scrollbarWidth: 'none',
+            padding: '0 6px',
+            gap: 2,
           }}
           aria-label="Phone Navigation Tab Bar"
         >
@@ -166,6 +172,7 @@ export function PhoneTabBar({ currentTab, onSelectTab }: PhoneTabBarProps) {
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                   minWidth: 56,
+                  flexShrink: 0,
                 }}
                 title={tab.label}
                 aria-label={tab.label}

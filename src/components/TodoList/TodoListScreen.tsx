@@ -502,7 +502,7 @@ export function TodoListScreen({
         {/* Progress bar */}
         <div
           className="v-budget-bar"
-          style={{ height: 7, background: 'rgba(255, 255, 255, 0.08)' }}
+          style={{ height: 7, background: 'var(--v-glass-bg-hover)' }}
           title={`${taskProgress.completed} of ${taskProgress.total} tasks completed (${taskProgress.percentage}%)`}
         >
           <div
@@ -518,10 +518,10 @@ export function TodoListScreen({
 
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
           <span>
-            Completed: <strong style={{ color: taskProgress.completed > 0 ? '#ffffff' : 'var(--text-muted)' }}>{taskProgress.completed}</strong>
+            Completed: <strong style={{ color: taskProgress.completed > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>{taskProgress.completed}</strong>
           </span>
           <span>
-            Remaining: <strong style={{ color: taskProgress.remaining > 0 ? 'var(--text-secondary)' : '#ffffff' }}>{taskProgress.remaining}</strong>
+            Remaining: <strong style={{ color: taskProgress.remaining > 0 ? 'var(--text-secondary)' : 'var(--text-primary)' }}>{taskProgress.remaining}</strong>
           </span>
           <span>
             Total: <strong style={{ color: 'var(--text-primary)' }}>{taskProgress.total} individual task{taskProgress.total !== 1 ? 's' : ''}</strong>
@@ -535,7 +535,7 @@ export function TodoListScreen({
           className="v-card"
           style={{
             padding: '12px 18px',
-            background: isFocus ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.06)',
+            background: isFocus ? 'var(--v-glass-bg-hover)' : 'var(--v-glass-bg-subtle)',
             border: `1.5px solid ${isFocus ? 'var(--v-glass-border-bright)' : 'var(--v-glass-border)'}`,
             display: 'flex',
             alignItems: 'center',
@@ -549,7 +549,7 @@ export function TodoListScreen({
                 width: 10,
                 height: 10,
                 borderRadius: '50%',
-                background: isFocus ? '#ffffff' : '#a1a1aa',
+                background: isFocus ? 'var(--text-primary)' : 'var(--text-muted)',
                 animation: 'timerPulse 1.4s infinite',
                 flexShrink: 0,
               }}
@@ -564,7 +564,7 @@ export function TodoListScreen({
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            <span style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, color: isFocus ? '#ffffff' : '#d4d4d8' }}>
+            <span style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, color: isFocus ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
               {formattedCountdown}
             </span>
             {isTimerRunning ? (
@@ -665,7 +665,7 @@ export function TodoListScreen({
               </div>
             </div>
             {inlineError && (
-              <span style={{ fontSize: 12, color: '#ffffff', fontWeight: 600 }}>{inlineError}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 600 }}>{inlineError}</span>
             )}
           </div>
         </form>
@@ -818,14 +818,14 @@ export function TodoListScreen({
                       padding: '5px 12px',
                       borderRadius: 8,
                       background: task.startTime
-                        ? 'rgba(255, 255, 255, 0.12)'
-                        : 'rgba(255, 255, 255, 0.05)',
+                        ? 'var(--v-glass-bg-hover)'
+                        : 'var(--v-glass-bg-subtle)',
                       border: `1px solid ${
                         task.startTime
-                          ? 'rgba(255, 255, 255, 0.3)'
+                          ? 'var(--v-glass-border-bright)'
                           : 'var(--v-glass-border)'
                       }`,
-                      color: task.startTime ? '#ffffff' : 'var(--text-secondary)',
+                      color: task.startTime ? 'var(--text-primary)' : 'var(--text-secondary)',
                       fontSize: 12,
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -835,7 +835,7 @@ export function TodoListScreen({
                     }}
                     title="Click to set or adjust scheduled time"
                   >
-                    <Clock size={13} color={task.startTime ? '#ffffff' : 'var(--text-muted)'} />
+                    <Clock size={13} color={task.startTime ? 'var(--text-primary)' : 'var(--text-muted)'} />
                     <span>
                       {task.startTime
                         ? `${formatTime12(task.startTime)}${task.endTime ? ` – ${formatTime12(task.endTime)}` : ''} · 🇪🇹 ${getEthiopianClock(task.startTime).periodNameAm} ${getEthiopianClock(task.startTime).ethiopianClock}`
@@ -855,7 +855,7 @@ export function TodoListScreen({
                         gap: 5,
                         padding: '4px 10px',
                         borderRadius: 8,
-                        background: 'rgba(255, 255, 255, 0.08)',
+                        background: 'var(--v-glass-bg-subtle)',
                         border: '1px solid var(--v-glass-border)',
                         color: 'var(--text-primary)',
                         fontSize: 12,
@@ -876,9 +876,9 @@ export function TodoListScreen({
                         fontWeight: 700,
                         padding: '3px 8px',
                         borderRadius: 6,
-                        background: 'rgba(255, 255, 255, 0.12)',
-                        border: '1px solid rgba(255, 255, 255, 0.3)',
-                        color: '#ffffff',
+                        background: 'var(--v-glass-bg-hover)',
+                        border: '1px solid var(--v-glass-border-bright)',
+                        color: 'var(--text-primary)',
                       }}
                     >
                       High Priority

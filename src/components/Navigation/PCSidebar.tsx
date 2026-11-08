@@ -98,7 +98,7 @@ export function PCSidebar({ currentTab, onSelectTab, onOpenAIChat }: PCSidebarPr
           type="button"
           onClick={() => onSelectTab('analytics')}
           className={`v-circle-btn${currentTab === 'analytics' ? ' active' : ''}`}
-          title="Analytics (5)"
+          title="Analytics (7)"
           aria-label="Analytics"
         >
           <BarChart3 size={20} />
@@ -107,7 +107,7 @@ export function PCSidebar({ currentTab, onSelectTab, onOpenAIChat }: PCSidebarPr
           type="button"
           onClick={() => onSelectTab('settings')}
           className={`v-circle-btn${currentTab === 'settings' ? ' active' : ''}`}
-          title="Settings (6)"
+          title="Settings (8)"
           aria-label="Settings"
         >
           <Settings size={20} />

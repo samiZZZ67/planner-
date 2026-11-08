@@ -366,6 +366,7 @@ export default function SamsSpaceApp() {
         theme={theme}
         onToggleTheme={toggleTheme}
         onOpenAIChat={() => setIsAIChatOpen(true)}
+        onOpenSettings={() => setCurrentTab('settings')}
       />
 
       {/* ── 4. Main Spacious Workspace ── */}
@@ -469,29 +470,24 @@ export default function SamsSpaceApp() {
               Book Planner
             </button>
 
-            {/* Preserved secondary tabs if active */}
-            {currentTab === 'analytics' && (
-              <button
-                onClick={() => setCurrentTab('analytics')}
-                className="v-tab-btn active"
-                role="tab"
-                aria-selected={true}
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                Analytics
-              </button>
-            )}
-            {currentTab === 'settings' && (
-              <button
-                onClick={() => setCurrentTab('settings')}
-                className="v-tab-btn active"
-                role="tab"
-                aria-selected={true}
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                Settings
-              </button>
-            )}
+            <button
+              onClick={() => setCurrentTab('analytics')}
+              className={`v-tab-btn${currentTab === 'analytics' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={currentTab === 'analytics'}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Analytics
+            </button>
+            <button
+              onClick={() => setCurrentTab('settings')}
+              className={`v-tab-btn${currentTab === 'settings' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={currentTab === 'settings'}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Settings
+            </button>
           </div>
 
           {/* Active Screen Content */}

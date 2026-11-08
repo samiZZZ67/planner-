@@ -882,14 +882,25 @@ h1, h2, h3, h4 {
   color: var(--ink);
   box-shadow: 0 8px 22px rgba(255,255,255,.12);
 }
-.v-pill-btn-accent,
-[data-theme="light"] .v-pill-btn-accent {
+.v-pill-btn-accent {
   color: var(--text-primary);
   background: transparent;
   border-color: rgba(255,255,255,.35);
 }
-.v-pill-btn-accent:hover,
-[data-theme="light"] .v-pill-btn-accent:hover { color: var(--text-primary); background: rgba(255,255,255,.1); }
+[data-theme="light"] .v-pill-btn-accent {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.28);
+}
+.v-pill-btn-accent:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,.1);
+}
+[data-theme="light"] .v-pill-btn-accent:hover {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.45);
+}
 
 .v-input,
 .g-input,
@@ -1210,9 +1221,30 @@ table {
   .app-workspace-shell { width: min(100%, 78rem) !important; }
 }
 
+button, [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.08s ease, opacity 0.08s ease;
+}
+
+button:active:not(:disabled),
+[role="button"]:active {
+  transform: scale(0.96);
+}
+
+.v-pill-btn:active,
+.v-circle-btn:active,
+.g-btn:active,
+.g-icon-btn:active,
+.v-tab-btn:active {
+  transform: scale(0.96) !important;
+  transition: transform 0.08s ease !important;
+}
+
 @media (pointer: coarse) {
-  button, [role="button"] {
-    min-width: 44px;
+  .v-pill-btn,
+  .g-btn,
+  .v-tab-btn {
     min-height: 44px;
   }
   input[type="checkbox"], input[type="radio"], select {

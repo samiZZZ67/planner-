@@ -273,7 +273,7 @@ export function WeeklyPlanScreen({ currentDate, isPhone }: WeeklyPlanScreenProps
         </div>
         <div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>COMPLETED</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#ffffff', marginTop: 2 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>
             {completedTasksCount} <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>({completionPct}%)</span>
           </div>
         </div>
