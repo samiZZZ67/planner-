@@ -11,6 +11,7 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    "src/lib/server/books/pdf.js-extract/**",
     "next-env.d.ts",
   ]),
 ]);

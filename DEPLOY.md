@@ -50,6 +50,7 @@ Add the following environment variables in your Render Web Service dashboard und
 | `SESSION_SECRET` | **Yes** | `7f8a9b2c3d4e5f6a1b2c3d4e5f6a7b8c` | Random string (32+ chars) for HMAC signing session tokens. |
 | `CLIENT_URL` | Optional | `https://your-planner.vercel.app,http://localhost:3000` | Allowed origin(s) for CORS and Socket.IO. Set if frontend is on Vercel. Defaults to `*` if empty. |
 | `NEXT_PUBLIC_API_URL` | Optional | `https://sams-space-backend.onrender.com` | Public URL of this backend. Used if frontend is separated or pointing to Render. |
+| `APP_URL` | Optional | `https://your-planner.onrender.com` | Public app URL used when generating Telegram links. |
 | `FREE_LLM_API_URL` | Optional | `https://free-llm-api-7fue.onrender.com/v1` | OpenAI-compatible FreeLLM gateway base URL, including `/v1`; moon assistant only. |
 | `FREE_LLM_API_KEY` | Required for gateway chat | (secret) | FreeLLM gateway unified API key. Set on Sam'Space backend only; never in browser storage. `RELAY_TOKEN` is not this key. |
 | `FREE_LLM_MODEL` | Optional | `auto` | Default gateway model. |
@@ -60,10 +61,18 @@ Add the following environment variables in your Render Web Service dashboard und
 | `GROQ_API_KEY_1` | Optional | `gsk_...` | Primary Groq API key for zero-latency AI fallback. |
 | `GROQ_MODEL` | Optional | `openai/gpt-oss-20b` | Groq model name (`openai/gpt-oss-20b`, `openai/gpt-oss-120b`). |
 | `OPENAI_API_KEY` | Optional | (secret) | Enables neural Moon voice output (`gpt-4o-mini-tts`, with `tts-1-hd` fallback). Keep server-side only. If unset or unavailable, playback falls back to the browser's installed speech voice. Speech API usage may incur charges. |
+| `ELEVENLABS_API_KEY` | Optional | (secret) | Enables ElevenLabs speech synthesis. Keep server-side only. |
+| `ELEVENLABS_VOICE_ID` | Optional | (voice ID) | Default ElevenLabs voice. |
+| `PIPER_TTS_URL` | Optional | `http://your-piper-service:5000` | URL of a self-hosted Piper TTS service. |
+| `CLOUDINARY_CLOUD_NAME` | Optional | (cloud name) | Enables Cloudinary file uploads when configured with the API key and secret below. |
+| `CLOUDINARY_API_KEY` | Optional | (secret) | Cloudinary API key. Keep server-side only. |
+| `CLOUDINARY_API_SECRET` | Optional | (secret) | Cloudinary API secret. Keep server-side only. |
 | `BOOK_DATA_DIR` | Recommended for book uploads | `/var/data` | Directory for private uploaded PDFs and cached OCR language data. Mount a persistent disk at the same path in Render. |
 | `TELEGRAM_BOT_TOKEN` | For Telegram publishing | *(BotFather token)* | Secret backend environment variable. Do not use a `NEXT_PUBLIC_` name or paste the token into chat. |
 | `TELEGRAM_CHAT_ID` | For Telegram publishing | `@your_channel` or numeric ID | Backend environment variable for the destination channel. The bot must be an administrator with permission to post. |
+| `TELEGRAM_WEBHOOK_SECRET` | Optional | *(random secret)* | Validates Telegram webhook requests when configured. Keep server-side only. |
 | `BOOKS_CRON_SECRET` | For scheduled publishing | *(random secret, 32+ characters)* | Same secret on the web service and Render Cron service. It protects the scheduler endpoint. |
+| `BRIEFS_CRON_SECRET` | For scheduled briefs | *(random secret, 32+ characters)* | Protects the scheduled briefs endpoint. |
 | `PDF_OCR_LANGS` | Optional | `eng` | Tesseract OCR language code(s), joined with `+`, such as `eng+fra`. The first OCR run downloads language data unless `TESSERACT_LANG_PATH` is configured in the application environment. |
 | `YOUTUBE_API_KEY` | Optional | `AIzaSy...` | Google YouTube Data API v3 key for discovering relevant video lessons and lectures. If unset, the related videos section is omitted without error. |
 | `PODCAST_INDEX_API_KEY` | Optional | *(key string)* | Podcast Index API key for discovering relevant podcast episodes. Used with signed SHA-1 auth. |

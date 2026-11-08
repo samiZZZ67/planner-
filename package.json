@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "node server.js",
-    "start:next": "next start -p ${PORT:-3000} -H 0.0.0.0",
+    "start:next": "node scripts/start-next.mjs",
     "lint": "eslint",
     "test": "vitest run"
   },

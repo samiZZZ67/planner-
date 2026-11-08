@@ -8,11 +8,11 @@ Designed for daily planning: forces you to articulate **what** you will do, **ho
 
 ## 🚀 Key Features
 
-- **100% Offline-First Architecture**: Always reads and writes on-device IndexedDB via Dexie first. Works with zero internet connection.
+- **Offline-First Planning**: Core planning data is read and written to on-device IndexedDB via Dexie. Cloud sync and connected services need an internet connection.
 - **Automatic Cloud Delta Sync**: Automatically synchronizes when online, on app open, and in the background. Uses monotonic Postgres sequence (`server_seq`) and *"newest `updatedAt` wins"* conflict resolution.
-- **Adaptive Dual UI (Phone & PC)**:
-  - **Phone UI**: Bottom tab bar, scrollable section chips, touch targets $\ge 48\text{px}$, sticky mini timer bar, big $+$ action button, 2x2 analytics cards.
-  - **PC UI**: Left sidebar, top bar active timer, board-style columns with drag-and-drop, right-side Day summary panel, keyboard shortcuts (`N`, `Esc`, `1-4`, `Space`).
+- **Responsive UI (Phone & PC)**:
+  - **Phone UI**: Scrollable bottom tab bar, touch-sized controls, sticky mini timer bar, and layouts that stack on narrow screens.
+  - **PC UI**: Left sidebar, top bar active timer, keyboard shortcuts, and wider planning and analytics layouts.
 - **YouTube Studio-Style Analytics**:
   - 7 / 28 / 90-day periods with comparison delta vs prior period (green up $\nearrow$ / red down $\searrow$).
   - Smooth line/area chart with **Daily vs Cumulative** curve toggle (subscriber watch-hour growth curve).
@@ -28,43 +28,12 @@ Designed for daily planning: forces you to articulate **what** you will do, **ho
 
 ## 📁 Project Structure
 
-```
-planner/
-├── public/
-│   ├── fonts/               # Put Bloody Hell @font-face kit here (.woff2, .woff, .ttf)
-│   ├── icons/               # 192x192, 512x512, and maskable PWA icons
-│   ├── manifest.json        # PWA Web App Manifest
-│   └── sw.js                # Offline Service Worker with app shell precaching
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── login/       # Rate-limited single-user auth with 90-day cookie
-│   │   │   ├── logout/      # Clears session cookie
-│   │   │   └── sync/        # Cloud delta sync with Neon Postgres
-│   │   ├── globals.css      # Custom @font-face, dark/light themes, WCAG contrast
-│   │   ├── layout.tsx       # Root layout with PWA meta & viewport
-│   │   └── page.tsx         # Unified client SPA shell with adaptive Phone/PC routing
-│   ├── components/
-│   │   ├── Header.tsx       # Top bar with sync status pill & PC timer
-│   │   ├── Modals/          # TaskFormModal, LoginModal, ImagePreview, ManualTime, AutoPlan
-│   │   ├── Navigation/      # PhoneTabBar, PCSidebar, UpdateBanner
-│   │   ├── Plan/            # Plan screen (Phone chips / PC board columns)
-│   │   ├── Today/           # Today action screen with live timers & 1-min review
-│   │   ├── Progress/        # YouTube Studio analytics with Recharts
-│   │   └── Settings/        # Section manager, sample data, JSON backup/restore
-│   ├── lib/
-│   │   ├── db/              # Dexie IndexedDB schemas & persistent storage
-│   │   ├── plan/            # Auto-plan carry-over & default date calculations
-│   │   ├── pwa/             # Service worker registration & update listener
-│   │   ├── server/          # Neon client & HMAC signed auth tokens
-│   │   ├── sync/            # Delta sync engine & pure conflict resolution logic
-│   │   ├── timer/           # Sleep-safe system clock timer hook
-│   │   └── utils/           # Image compressor & WCAG 2.1 color contrast tools
-│   └── types/               # Shared TypeScript models
-├── schema.sql               # Neon Postgres database schema & monotonic sequence
-├── .env.example             # Environment template
-└── vitest.config.ts         # Vitest configuration for sync engine tests
-```
+- `src/app/`: Dashboard, book planner, quiz, and API routes.
+- `src/components/`: Planning, notes, analytics, books, chat assistants, settings, and shared modals/navigation.
+- `src/lib/`: IndexedDB, sync, date/scheduling, AI and voice services, books, Telegram, and notifications.
+- `public/`: PWA assets, service worker, icons, and optional fonts.
+- `schema.sql`: Neon Postgres schema.
+- `vitest.config.mts`: Vitest configuration.
 
 ---
 
@@ -101,6 +70,8 @@ SESSION_SECRET="generate-a-random-secret-key-at-least-32-chars-long"
 
 *(Note: The app's `/api/sync` route also verifies and auto-creates tables if they don't exist yet!)*
 
+Core planning works locally without cloud credentials. Configure `DATABASE_URL` to enable cloud sync. Optional integrations need their own server-side credentials: Cloudinary for file uploads, an AI/voice provider for assistant features, and Telegram credentials for publishing and scheduled messages. The deployment variables are listed in `.env.example` and [DEPLOY.md](DEPLOY.md).
+
 ### 4. Add the "Bloody Hell" Font
 Place your font files in `public/fonts/`:
 - `public/fonts/BloodyHell.woff2` (preferred)
@@ -115,16 +86,11 @@ npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### 6. Run the Automated Sync Tests
+### 6. Run the Automated Tests
 ```bash
 npm test
 ```
-Runs the 7 automated unit tests covering:
-- Newest `updatedAt` wins conflict rule
-- Unsynced local offline edit priority
-- Soft delete propagation
-- Idempotent repeated sync passes
-- Exponential backoff retry calculations
+Runs the Vitest suite covering sync, dates and scheduling, API routes, AI and voice behavior, book workflows, Telegram, and related utilities. GitHub Actions runs this suite and a production build for pushes and pull requests targeting `main`.
 
 ---
 
