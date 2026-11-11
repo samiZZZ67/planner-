@@ -183,9 +183,6 @@ jobs:
 
           HTTP_CODE=$(curl -s -o /tmp/cron_response.json -w "%{http_code}" \
             --max-time 300 \
-            --retry 1 \
-            --retry-delay 10 \
-            --retry-max-time 330 \
             -X POST \
             "${HEADERS[@]}" \
             "${APP_URL}/api/cron/books" 2>/dev/null) || HTTP_CODE="000"
@@ -193,23 +190,31 @@ jobs:
           echo "Delivery trigger HTTP status: ${HTTP_CODE}"
           echo ""
 
-          if [ -f /tmp/cron_response.json ]; then
-            RESPONSE=$(cat /tmp/cron_response.json)
-            echo "Response:"
-            echo "$RESPONSE" | head -c 4000
-            echo ""
-          else
-            RESPONSE="{}"
+          if [ ! -f /tmp/cron_response.json ]; then
+            echo "::error::The delivery endpoint returned no response body."
+            exit 1
           fi
+
+          RESPONSE=$(cat /tmp/cron_response.json)
+          echo "Response:"
+          echo "$RESPONSE" | head -c 4000
+          echo ""
 
           # Parse key metrics from the JSON response
           BOOK_CLAIMED=$(echo "$RESPONSE" | jq -r '.bookJobs.claimed // 0' 2>/dev/null || echo "?")
           BOOK_COMPLETED=$(echo "$RESPONSE" | jq -r '.bookJobs.completed // 0' 2>/dev/null || echo "?")
+          BOOK_RETRIED=$(echo "$RESPONSE" | jq -r '.bookJobs.retried // 0' 2>/dev/null || echo "?")
           BOOK_FAILED=$(echo "$RESPONSE" | jq -r '.bookJobs.failed // 0' 2>/dev/null || echo "?")
           MSG_CLAIMED=$(echo "$RESPONSE" | jq -r '.scheduledMessages.claimed // 0' 2>/dev/null || echo "?")
           MSG_COMPLETED=$(echo "$RESPONSE" | jq -r '.scheduledMessages.completed // 0' 2>/dev/null || echo "?")
+          MSG_RETRIED=$(echo "$RESPONSE" | jq -r '.scheduledMessages.retried // 0' 2>/dev/null || echo "?")
+          MSG_FAILED=$(echo "$RESPONSE" | jq -r '.scheduledMessages.failed // 0' 2>/dev/null || echo "?")
           BRIEFS_COMPLETED=$(echo "$RESPONSE" | jq -r '.briefs.completed // 0' 2>/dev/null || echo "?")
           BRIEFS_FAILED=$(echo "$RESPONSE" | jq -r '.briefs.failed // 0' 2>/dev/null || echo "?")
+          UNRESOLVED_BOOKS=$(echo "$RESPONSE" | jq -r '.unresolved.bookJobs // 0' 2>/dev/null || echo "?")
+          UNRESOLVED_MESSAGES=$(echo "$RESPONSE" | jq -r '.unresolved.scheduledMessages // 0' 2>/dev/null || echo "?")
+          UNRESOLVED_BRIEFS=$(echo "$RESPONSE" | jq -r '.unresolved.briefs // 0' 2>/dev/null || echo "?")
+          UNCERTAIN_TELEGRAM=$(echo "$RESPONSE" | jq -r '.unresolved.telegramDeliveries // 0' 2>/dev/null || echo "?")
           DURATION=$(echo "$RESPONSE" | jq -r '.durationMs // 0' 2>/dev/null || echo "?")
           AUTO_STATUS=$(echo "$RESPONSE" | jq -r '.automaticPreparation.status // "idle"' 2>/dev/null || echo "?")
 
@@ -217,25 +222,36 @@ jobs:
           echo "═══════════════════════════════════════════════════"
           echo "  📊 DELIVERY CYCLE SUMMARY"
           echo "═══════════════════════════════════════════════════"
-          echo "  📚 Book Jobs:     ${BOOK_CLAIMED} claimed → ${BOOK_COMPLETED} completed, ${BOOK_FAILED} failed"
-          echo "  ✉️  Messages:      ${MSG_CLAIMED} claimed → ${MSG_COMPLETED} completed"
+          echo "  📚 Book Jobs:     ${BOOK_CLAIMED} claimed → ${BOOK_COMPLETED} completed, ${BOOK_RETRIED} retrying, ${BOOK_FAILED} failed"
+          echo "  ✉️  Messages:      ${MSG_CLAIMED} claimed → ${MSG_COMPLETED} completed, ${MSG_RETRIED} retrying, ${MSG_FAILED} failed"
           echo "  🌅 Briefs:        ${BRIEFS_COMPLETED} completed, ${BRIEFS_FAILED} failed"
+          echo "  ⚠️  Unresolved:    ${UNRESOLVED_BOOKS} book jobs, ${UNRESOLVED_MESSAGES} messages, ${UNRESOLVED_BRIEFS} briefs, ${UNCERTAIN_TELEGRAM} uncertain Telegram deliveries"
           echo "  📖 Auto-Prepare:  ${AUTO_STATUS}"
           echo "  ⏱️  Duration:      ${DURATION}ms"
           echo "═══════════════════════════════════════════════════"
           echo ""
 
-          if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "✅ Delivery cycle completed successfully."
-          elif [ "$HTTP_CODE" -eq 401 ]; then
+          if [ "$HTTP_CODE" -eq 401 ]; then
             echo "::error::Authentication failed (HTTP 401). Verify that BOOKS_CRON_SECRET matches between GitHub Secrets and Render environment variables."
             exit 1
-          elif [ "$HTTP_CODE" -eq 000 ]; then
-            echo "::error::Connection failed — the Render service did not respond within the timeout. It may be experiencing a cold start or outage."
-            exit 1
-          else
-            echo "::warning::Delivery trigger returned HTTP ${HTTP_CODE}. Check the response above for details."
           fi
+
+          if [[ ! "$HTTP_CODE" =~ ^2[0-9][0-9]$ ]]; then
+            echo "::error::Delivery trigger failed with HTTP ${HTTP_CODE}. Check the response above and the Render logs."
+            exit 1
+          fi
+
+          if ! jq -e 'type == "object" and has("ok") and (.ok | type == "boolean")' /tmp/cron_response.json >/dev/null; then
+            echo "::error::The delivery endpoint returned invalid or incomplete JSON."
+            exit 1
+          fi
+
+          if ! jq -e '.ok == true and (.skipped // false) == false' /tmp/cron_response.json >/dev/null; then
+            echo "::error::The scheduler did not complete this delivery cycle. The response includes failed, retrying, skipped, or internal-error work."
+            exit 1
+          fi
+
+          echo "✅ Delivery cycle completed with no failed or retrying deliveries."
 
       # ────────────────────────────────────────────────────────────────────────
       # 3. Summary annotation for dry runs

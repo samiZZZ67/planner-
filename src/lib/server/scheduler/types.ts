@@ -23,6 +23,14 @@ export interface ScheduledMessageRecord {
 export interface SchedulerExecutionResult {
   timestamp: number;
   isoTime: string;
+  skipped?: boolean;
+  errors: string[];
+  unresolved: {
+    bookJobs: number;
+    scheduledMessages: number;
+    briefs: number;
+    telegramDeliveries: number;
+  };
   automaticPreparation?: any;
   bookJobs: {
     claimed: number;

@@ -324,6 +324,16 @@ export async function listBriefDeliveries(userId = 'owner', limit = 20): Promise
     .slice(0, limit);
 }
 
+export async function countFailedBriefDeliveries() {
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    const rows = await sql`SELECT COUNT(*) AS count FROM telegram_brief_deliveries WHERE status = 'failed'`;
+    return Number(rows[0]?.count || 0);
+  }
+  return readJson<BriefDeliveryRecord[]>(DELIVERIES_PATH, []).filter(item => item.status === 'failed').length;
+}
+
 export async function getBriefDelivery(id: string): Promise<BriefDeliveryRecord | null> {
   const sql = getDb();
   if (sql) {

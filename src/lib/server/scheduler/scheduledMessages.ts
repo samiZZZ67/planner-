@@ -292,6 +292,16 @@ export async function listScheduledMessages(userId: string, limit = 100): Promis
     .slice(0, limit);
 }
 
+export async function countFailedScheduledMessages() {
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    const rows = await sql`SELECT COUNT(*) AS count FROM scheduled_messages WHERE status = 'failed'`;
+    return Number(rows[0]?.count || 0);
+  }
+  return readMessages().filter(item => item.status === 'failed').length;
+}
+
 export async function deleteScheduledMessage(id: string, userId: string): Promise<boolean> {
   const sql = getDb();
   if (sql) {

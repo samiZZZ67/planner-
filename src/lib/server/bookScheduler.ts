@@ -190,6 +190,27 @@ export async function listBookPublishJobs(userId: string) {
   return readJobs().filter(item => item.userId === userId).sort((a, b) => b.scheduledAt - a.scheduledAt).slice(0, 200);
 }
 
+export async function countStaleBookPublishJobs(now = Date.now()) {
+  const staleBefore = now - 10 * 60 * 1000;
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    const rows = await sql`SELECT COUNT(*) AS count FROM book_publish_jobs WHERE status = 'processing' AND updated_at < ${staleBefore}`;
+    return Number(rows[0]?.count || 0);
+  }
+  return readJobs().filter(item => item.status === 'processing' && item.updatedAt < staleBefore).length;
+}
+
+export async function countFailedBookPublishJobs() {
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    const rows = await sql`SELECT COUNT(*) AS count FROM book_publish_jobs WHERE status = 'failed'`;
+    return Number(rows[0]?.count || 0);
+  }
+  return readJobs().filter(item => item.status === 'failed').length;
+}
+
 export async function claimDueBookPublishJobs(now = Date.now(), limit = 20) {
   const sql = getDb();
   if (sql) {

@@ -27,14 +27,31 @@ export async function POST(request: Request) {
   const now = Date.now();
   console.log(`[API /api/cron/books] Manual or external trigger received at ${new Date(now).toISOString()}`);
   const result = await runScheduledDeliveryCycle(now);
+  const hasUnresolvedDelivery = Boolean(
+    result.errors.length
+    || result.bookJobs.failed
+    || result.bookJobs.retried
+    || result.scheduledMessages.failed
+    || result.scheduledMessages.retried
+    || result.briefs?.failed
+    || result.unresolved.bookJobs
+    || result.unresolved.scheduledMessages
+    || result.unresolved.briefs
+    || result.unresolved.telegramDeliveries
+  );
+  const skipped = Boolean(result.skipped);
+  const ok = !skipped && !hasUnresolvedDelivery;
 
   return NextResponse.json({
-    ok: true,
+    ok,
+    skipped,
+    errors: result.errors,
+    unresolved: result.unresolved,
     automaticPreparation: result.automaticPreparation,
     claimed: result.bookJobs.claimed + result.scheduledMessages.claimed,
     bookJobs: result.bookJobs,
     scheduledMessages: result.scheduledMessages,
     briefs: result.briefs,
     durationMs: result.durationMs,
-  });
+  }, { status: skipped ? 409 : ok ? 200 : 503 });
 }

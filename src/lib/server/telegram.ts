@@ -775,6 +775,16 @@ export async function listTelegramDeliveries(userId: string) {
   return readDeliveries().filter(item => item.userId === userId).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 100);
 }
 
+export async function countUncertainTelegramDeliveries() {
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    const rows = await sql`SELECT COUNT(*) AS count FROM telegram_deliveries WHERE status = 'uncertain'`;
+    return Number(rows[0]?.count || 0);
+  }
+  return readDeliveries().filter(item => item.status === 'uncertain').length;
+}
+
 async function getAssignmentDelivery(userId: string, assignmentId: string): Promise<TelegramDeliveryRecord | null> {
   const sql = getDb();
   if (sql) {

@@ -1,11 +1,11 @@
-import { claimDueBookPublishJobs, listBookPublishJobs, updateBookPublishJob, upsertBookPublishJob } from '../bookScheduler';
+import { claimDueBookPublishJobs, countFailedBookPublishJobs, countStaleBookPublishJobs, listBookPublishJobs, updateBookPublishJob, upsertBookPublishJob } from '../bookScheduler';
 import { listBookAssignments, updateBookAssignment } from '../bookAssignments';
 import { getBook, listBookPages, updateBook } from '../books';
-import { envConfig, publishApprovedAssignment, publishLoadPlanPagesToTelegram, sendTelegramTextToChannel } from '../telegram';
+import { countUncertainTelegramDeliveries, envConfig, publishApprovedAssignment, publishLoadPlanPagesToTelegram, sendTelegramTextToChannel } from '../telegram';
 import { getBookQuizSettings, startQuizSessionForAssignment, processTelegramUpdates } from '../books/bookQuiz';
 import { prepareAutomaticBookPublishing } from '../autoBookPublishing';
-import { claimDueScheduledMessages, updateScheduledMessage } from './scheduledMessages';
-import { processDueBriefs } from './briefs';
+import { claimDueScheduledMessages, countFailedScheduledMessages, updateScheduledMessage } from './scheduledMessages';
+import { countFailedBriefDeliveries, processDueBriefs } from './briefs';
 import type { SchedulerExecutionResult } from './types';
 import type { BookAssignmentRecord } from '../../books/types';
 
@@ -29,6 +29,9 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
     return {
       timestamp: now,
       isoTime: new Date(now).toISOString(),
+      skipped: true,
+      errors: [],
+      unresolved: { bookJobs: 0, scheduledMessages: 0, briefs: 0, telegramDeliveries: 0 },
       bookJobs: { claimed: 0, completed: 0, retried: 0, failed: 0, alreadyCompleted: 0 },
       scheduledMessages: { claimed: 0, completed: 0, retried: 0, failed: 0 },
       durationMs: 0,
@@ -42,6 +45,8 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
   const result: SchedulerExecutionResult = {
     timestamp: now,
     isoTime: new Date(now).toISOString(),
+    errors: [],
+    unresolved: { bookJobs: 0, scheduledMessages: 0, briefs: 0, telegramDeliveries: 0 },
     bookJobs: { claimed: 0, completed: 0, retried: 0, failed: 0, alreadyCompleted: 0 },
     scheduledMessages: { claimed: 0, completed: 0, retried: 0, failed: 0 },
     durationMs: 0,
@@ -56,11 +61,16 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
       }
     } catch (prepErr: any) {
       console.error('[Scheduler] ⚠️ Error during automatic book preparation (non-fatal):', prepErr.message);
+      result.errors.push(`Automatic book preparation failed: ${prepErr instanceof Error ? prepErr.message : String(prepErr)}`);
     }
 
     // ── 2. Process Due Book Publishing Jobs ───────────────────────────
     let dueBookJobs: Awaited<ReturnType<typeof claimDueBookPublishJobs>> = [];
     try {
+      const staleBookJobCount = await countStaleBookPublishJobs(now);
+      if (staleBookJobCount > 0) {
+        result.errors.push(`${staleBookJobCount} interrupted book publishing job(s) require Telegram delivery review before retrying.`);
+      }
       dueBookJobs = await claimDueBookPublishJobs(now);
       result.bookJobs.claimed = dueBookJobs.length;
       if (dueBookJobs.length > 0) {
@@ -68,6 +78,7 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
       }
     } catch (claimErr: any) {
       console.error('[Scheduler] ❌ Error claiming due book jobs:', claimErr.message);
+      result.errors.push(`Claiming due book jobs failed: ${claimErr instanceof Error ? claimErr.message : String(claimErr)}`);
     }
 
     for (const job of dueBookJobs) {
@@ -206,24 +217,29 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
         const errMsg = jobErr instanceof Error ? jobErr.message : 'Publishing failed';
         console.error(`[Scheduler] ❌ Failed publishing assignment ${job.assignmentId}:`, errMsg);
 
+        const deliveryMeta = (jobErr as any)?.delivery as { safeToRetry?: boolean; retryAfterAt?: number | null } | undefined;
+        const canRetrySafely = Boolean(deliveryMeta?.safeToRetry) && job.attemptCount < 5;
         if (currentAssignment) {
           await updateBookAssignment({
             ...currentAssignment,
-            deliveryStatus: 'failed',
+            deliveryStatus: canRetrySafely ? 'scheduled' : 'failed',
             lastDeliveryError: errMsg,
             updatedAt: Date.now(),
           }).catch(() => undefined);
         }
 
-        const deliveryMeta = (jobErr as any)?.delivery as { safeToRetry?: boolean; retryAfterAt?: number | null } | undefined;
-        if (deliveryMeta?.safeToRetry && deliveryMeta.retryAfterAt && job.attemptCount < 5) {
+        if (canRetrySafely) {
+          const retryDelayMs = Math.min(60 * 60 * 1000, 60 * 1000 * Math.pow(2, Math.max(0, job.attemptCount - 1)));
+          const retryAt = deliveryMeta?.retryAfterAt && deliveryMeta.retryAfterAt > Date.now()
+            ? deliveryMeta.retryAfterAt
+            : Date.now() + retryDelayMs;
           await updateBookPublishJob({
             ...job,
             status: 'scheduled',
-            scheduledAt: deliveryMeta.retryAfterAt,
-            lastError: `Temporary Telegram failure: ${errMsg}. Scheduled retry at ${new Date(deliveryMeta.retryAfterAt).toISOString()}`,
+            scheduledAt: retryAt,
+            lastError: `Temporary Telegram failure: ${errMsg}. Scheduled retry at ${new Date(retryAt).toISOString()}`,
           });
-          console.log(`[Scheduler] 🔁 Rescheduled assignment ${job.assignmentId} for retry at ${new Date(deliveryMeta.retryAfterAt).toISOString()}`);
+          console.log(`[Scheduler] 🔁 Rescheduled assignment ${job.assignmentId} for retry at ${new Date(retryAt).toISOString()}`);
           result.bookJobs.retried++;
         } else {
           await updateBookPublishJob({
@@ -274,6 +290,7 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
       }
     } catch (claimMsgErr: any) {
       console.error('[Scheduler] ❌ Error claiming due scheduled messages:', claimMsgErr.message);
+      result.errors.push(`Claiming scheduled messages failed: ${claimMsgErr instanceof Error ? claimMsgErr.message : String(claimMsgErr)}`);
     }
 
     for (const msg of dueMessages) {
@@ -332,6 +349,7 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
       }
     } catch (briefsErr: any) {
       console.error('[Scheduler] ❌ Error processing due briefs:', briefsErr.message);
+      result.errors.push(`Processing scheduled briefs failed: ${briefsErr instanceof Error ? briefsErr.message : String(briefsErr)}`);
     }
 
     // ── 5. Process Background Telegram Updates (Polls & Callbacks) ────
@@ -342,6 +360,24 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
       }
     } catch {
       // Non-fatal if offline or in test
+    }
+
+    try {
+      const [failedBookJobs, failedScheduledMessages, failedBriefs, uncertainTelegramDeliveries] = await Promise.all([
+        countFailedBookPublishJobs(),
+        countFailedScheduledMessages(),
+        countFailedBriefDeliveries(),
+        countUncertainTelegramDeliveries(),
+      ]);
+      result.unresolved = {
+        bookJobs: failedBookJobs,
+        scheduledMessages: failedScheduledMessages,
+        briefs: failedBriefs,
+        telegramDeliveries: uncertainTelegramDeliveries,
+      };
+    } catch (statusErr: any) {
+      console.error('[Scheduler] ❌ Could not inspect unresolved delivery failures:', statusErr?.message || statusErr);
+      result.errors.push(`Could not inspect unresolved delivery failures: ${statusErr instanceof Error ? statusErr.message : String(statusErr)}`);
     }
   } finally {
     isCycleRunning = false;
