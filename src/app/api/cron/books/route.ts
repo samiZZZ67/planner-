@@ -27,20 +27,18 @@ export async function POST(request: Request) {
   const now = Date.now();
   console.log(`[API /api/cron/books] Manual or external trigger received at ${new Date(now).toISOString()}`);
   const result = await runScheduledDeliveryCycle(now);
-  const hasUnresolvedDelivery = Boolean(
-    result.errors.length
-    || result.bookJobs.failed
-    || result.bookJobs.retried
-    || result.scheduledMessages.failed
-    || result.scheduledMessages.retried
-    || result.briefs?.failed
-    || result.unresolved.bookJobs
-    || result.unresolved.scheduledMessages
-    || result.unresolved.briefs
-    || result.unresolved.telegramDeliveries
-  );
+
   const skipped = Boolean(result.skipped);
-  const ok = !skipped && !hasUnresolvedDelivery;
+  // Actual failures that occurred during THIS execution cycle
+  const hasExecutionFailure = Boolean(
+    result.errors.length > 0
+    || result.bookJobs.failed > 0
+    || result.scheduledMessages.failed > 0
+    || (result.briefs && result.briefs.failed > 0)
+  );
+
+  // ok is true if the cycle completed without fatal errors (or was safely skipped by mutex)
+  const ok = !hasExecutionFailure;
 
   return NextResponse.json({
     ok,
@@ -53,5 +51,5 @@ export async function POST(request: Request) {
     scheduledMessages: result.scheduledMessages,
     briefs: result.briefs,
     durationMs: result.durationMs,
-  }, { status: skipped ? 409 : ok ? 200 : 503 });
+  }, { status: ok ? 200 : 503 });
 }

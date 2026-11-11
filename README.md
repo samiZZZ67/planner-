@@ -1,5 +1,8 @@
 # 🌌 Sam'Space
 
+[![CI Build & Test](https://github.com/samiZZZ67/planner-/actions/workflows/ci.yml/badge.svg)](https://github.com/samiZZZ67/planner-/actions/workflows/ci.yml)
+[![📚 Book Delivery & Brief Scheduler](https://github.com/samiZZZ67/planner-/actions/workflows/book-delivery-cron.yml/badge.svg)](https://github.com/samiZZZ67/planner-/actions/workflows/book-delivery-cron.yml)
+
 A personal, offline-first productivity and workspace progressive web app (PWA) built with **Next.js (App Router)**, **React 19**, **TypeScript**, **Tailwind CSS**, **Dexie (IndexedDB)**, and **Neon Postgres**.
 
 Designed for daily planning: forces you to articulate **what** you will do, **how** you will do it (Strategy), **how long** it will take, and **how you will know it is finished** (Done means). Tracks your real time with clock-accurate timers and presents your execution analytics inspired by **YouTube Studio**.

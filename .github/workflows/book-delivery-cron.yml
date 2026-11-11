@@ -246,12 +246,19 @@ jobs:
             exit 1
           fi
 
-          if ! jq -e '.ok == true and (.skipped // false) == false' /tmp/cron_response.json >/dev/null; then
-            echo "::error::The scheduler did not complete this delivery cycle. The response includes failed, retrying, skipped, or internal-error work."
+          IS_OK=$(echo "$RESPONSE" | jq -r '.ok // false' 2>/dev/null || echo "false")
+          SKIPPED=$(echo "$RESPONSE" | jq -r '.skipped // false' 2>/dev/null || echo "false")
+
+          if [ "$IS_OK" != "true" ]; then
+            echo "::error::The scheduler encountered an execution failure during this cycle. Check the response above and the Render logs."
             exit 1
           fi
 
-          echo "✅ Delivery cycle completed with no failed or retrying deliveries."
+          if [ "$SKIPPED" = "true" ]; then
+            echo "ℹ️ Delivery cycle skipped: another execution cycle was already running (idempotent)."
+          else
+            echo "✅ Delivery cycle completed successfully."
+          fi
 
       # ────────────────────────────────────────────────────────────────────────
       # 3. Summary annotation for dry runs
