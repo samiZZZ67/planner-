@@ -85,6 +85,7 @@ export interface DayReview {
 
 export interface DaySheetData {
   notes?: string;
+  diary?: DayDiaryEntry;
   schedule?: Record<string, string>;
   breakfast?: string;
   lunch?: string;
@@ -92,6 +93,23 @@ export interface DaySheetData {
   snacks?: string;
   waterGlasses?: number;
   exercise?: string;
+}
+
+export interface DayDiaryPhoto {
+  id: string;
+  url: string;
+  filename: string;
+  uploadedAt: number;
+  width?: number;
+  height?: number;
+}
+
+export interface DayDiaryEntry {
+  date: string;
+  text: string;
+  photos: DayDiaryPhoto[];
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface Day {

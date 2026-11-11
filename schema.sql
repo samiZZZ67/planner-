@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS days (
     date VARCHAR(10) NOT NULL,
     free_hours NUMERIC(4,2) DEFAULT 8.0,
     review JSONB DEFAULT '{"worked":"","blocked":"","change":""}'::jsonb,
+    sheet_data JSONB DEFAULT '{}'::jsonb,
     updated_at BIGINT NOT NULL,
     deleted BOOLEAN NOT NULL DEFAULT FALSE,
     is_sample BOOLEAN NOT NULL DEFAULT FALSE,

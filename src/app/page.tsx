@@ -13,6 +13,7 @@ import { UpdateBanner } from '@/components/Navigation/UpdateBanner';
 
 import { AddTaskScreen } from '@/components/AddTask/AddTaskScreen';
 import { NoteScreen } from '@/components/Note/NoteScreen';
+import { DiaryScreen } from '@/components/Diary/DiaryScreen';
 import { TodoListScreen } from '@/components/TodoList/TodoListScreen';
 import { CategoryScreen } from '@/components/Category/CategoryScreen';
 import { WeeklyPlanScreen } from '@/components/Weekly/WeeklyPlanScreen';
@@ -159,7 +160,7 @@ export default function SamsSpaceApp() {
         const returnTo = `/?tab=books&assignmentId=${encodeURIComponent(requestedQuiz)}`;
         window.location.replace(`/quiz?assignmentId=${encodeURIComponent(requestedQuiz)}&returnTo=${encodeURIComponent(returnTo)}`);
         return;
-      } else if (requestedTab && ['todo', 'weekly', 'monthly', 'add_task', 'note', 'category', 'books', 'analytics', 'settings'].includes(requestedTab)) {
+      } else if (requestedTab && ['todo', 'weekly', 'monthly', 'add_task', 'note', 'diary', 'category', 'books', 'analytics', 'settings'].includes(requestedTab)) {
         setCurrentTab(requestedTab as TabType);
       }
     }
@@ -300,6 +301,9 @@ export default function SamsSpaceApp() {
       } else if (e.key === '5') {
         e.preventDefault();
         setCurrentTab('note');
+      } else if (e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        setCurrentTab('diary');
       } else if (e.key === '6') {
         e.preventDefault();
         setCurrentTab('category');
@@ -452,6 +456,15 @@ export default function SamsSpaceApp() {
               Note
             </button>
             <button
+              onClick={() => setCurrentTab('diary')}
+              className={`v-tab-btn${currentTab === 'diary' ? ' active' : ''}`}
+              role="tab"
+              aria-selected={currentTab === 'diary'}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Diary
+            </button>
+            <button
               onClick={() => setCurrentTab('category')}
               className={`v-tab-btn${currentTab === 'category' ? ' active' : ''}`}
               role="tab"
@@ -533,6 +546,15 @@ export default function SamsSpaceApp() {
                 currentDate={currentDate}
                 onChangeDate={setCurrentDate}
                 isPhone={isPhone}
+              />
+            )}
+
+            {currentTab === 'diary' && (
+              <DiaryScreen
+                currentDate={currentDate}
+                onChangeDate={setCurrentDate}
+                isPhone={isPhone}
+                onOpenLogin={() => setIsLoginModalOpen(true)}
               />
             )}
 

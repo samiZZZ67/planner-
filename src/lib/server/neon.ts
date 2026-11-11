@@ -113,6 +113,7 @@ export async function ensureSchema(sql: any): Promise<void> {
         date VARCHAR(10) NOT NULL,
         free_hours NUMERIC(4,2) DEFAULT 8.0,
         review JSONB DEFAULT '{"worked":"","blocked":"","change":""}'::jsonb,
+        sheet_data JSONB DEFAULT '{}'::jsonb,
         updated_at BIGINT NOT NULL,
         deleted BOOLEAN NOT NULL DEFAULT FALSE,
         is_sample BOOLEAN NOT NULL DEFAULT FALSE,
@@ -223,6 +224,7 @@ export async function ensureSchema(sql: any): Promise<void> {
 
     await sql`ALTER TABLE days ADD COLUMN IF NOT EXISTS free_hours NUMERIC(4,2) DEFAULT 8.0`;
     await sql`ALTER TABLE days ADD COLUMN IF NOT EXISTS review JSONB DEFAULT '{"worked":"","blocked":"","change":""}'::jsonb`;
+    await sql`ALTER TABLE days ADD COLUMN IF NOT EXISTS sheet_data JSONB DEFAULT '{}'::jsonb`;
     await sql`ALTER TABLE days ADD COLUMN IF NOT EXISTS is_sample BOOLEAN DEFAULT FALSE`;
 
     await sql`ALTER TABLE weekly_plans ADD COLUMN IF NOT EXISTS ai_weekly_report TEXT`;
@@ -367,12 +369,14 @@ export async function syncBatch(
   // Upsert Days
   for (const d of incoming.days) {
     const reviewJson = JSON.stringify(d.review || { worked: '', blocked: '', change: '' });
+    const sheetDataJson = JSON.stringify(d.sheetData || {});
     await sql`
-      INSERT INTO days (id, date, free_hours, review, updated_at, deleted, is_sample, server_seq)
-      VALUES (${d.id}, ${d.date}, ${d.freeHours}, ${reviewJson}::jsonb, ${d.updatedAt}, ${d.deleted}, ${d.isSample}, nextval('server_seq'))
+      INSERT INTO days (id, date, free_hours, review, sheet_data, updated_at, deleted, is_sample, server_seq)
+      VALUES (${d.id}, ${d.date}, ${d.freeHours}, ${reviewJson}::jsonb, ${sheetDataJson}::jsonb, ${d.updatedAt}, ${d.deleted}, ${d.isSample}, nextval('server_seq'))
       ON CONFLICT (id) DO UPDATE SET
         free_hours = EXCLUDED.free_hours,
         review = EXCLUDED.review,
+        sheet_data = COALESCE(days.sheet_data, '{}'::jsonb) || COALESCE(EXCLUDED.sheet_data, '{}'::jsonb),
         updated_at = EXCLUDED.updated_at,
         deleted = EXCLUDED.deleted,
         is_sample = EXCLUDED.is_sample,
@@ -535,6 +539,7 @@ export async function syncBatch(
     date: r.date,
     freeHours: Number(r.free_hours),
     review: typeof r.review === 'object' && r.review ? r.review : JSON.parse(r.review || '{}'),
+    sheetData: typeof r.sheet_data === 'object' && r.sheet_data ? r.sheet_data : JSON.parse(r.sheet_data || '{}'),
     updatedAt: Number(r.updated_at),
     deleted: Boolean(r.deleted),
     isSample: Boolean(r.is_sample),
