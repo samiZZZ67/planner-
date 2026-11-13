@@ -1,0 +1,4 @@
+storeFile=path/to/private-upload-key.jks
+storePassword=replace-with-local-store-password
+keyAlias=upload
+keyPassword=replace-with-local-key-password

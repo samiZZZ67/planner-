@@ -7,6 +7,10 @@ A personal, offline-first productivity and workspace progressive web app (PWA) b
 
 Designed for daily planning: forces you to articulate **what** you will do, **how** you will do it (Strategy), **how long** it will take, and **how you will know it is finished** (Done means). Tracks your real time with clock-accurate timers and presents your execution analytics inspired by **YouTube Studio**.
 
+## Native Flutter app
+
+The native mobile client lives in [`mobile_app/`](mobile_app/). It connects to the existing authenticated API and keeps core planner data in local SQLite for offline use. It does not replace the web/PWA application. Setup, API contracts, tested status, Android build steps, and mobile-specific limitations are documented in [MOBILE_SETUP.md](MOBILE_SETUP.md), [API_DOCUMENTATION.md](API_DOCUMENTATION.md), [TESTING_REPORT.md](TESTING_REPORT.md), and [MOBILE_MIGRATION_PLAN.md](MOBILE_MIGRATION_PLAN.md).
+
 ---
 
 ## 🚀 Key Features
