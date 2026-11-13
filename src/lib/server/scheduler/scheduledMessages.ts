@@ -127,10 +127,11 @@ export async function claimDueScheduledMessages(now = Date.now(), limit = 20): P
   if (sql) {
     await ensureSchema(sql);
 
-    // 1. Recover stale processing jobs interrupted by server restart
+    // 1. Never replay stale processing jobs automatically: Telegram may have
+    // accepted a message immediately before the worker was interrupted.
     await sql`UPDATE scheduled_messages
-      SET status = CASE WHEN attempt_count >= max_attempts THEN 'failed' ELSE 'scheduled' END,
-          last_error = 'Processing was interrupted by a server restart or timeout; reset for recovery.',
+      SET status = 'failed',
+          last_error = 'Processing was interrupted by a server restart or timeout; delivery status is uncertain. Check Telegram before retrying.',
           updated_at = ${now}
       WHERE status = 'processing' AND updated_at < ${staleBefore}`;
 
@@ -185,12 +186,12 @@ export async function claimDueScheduledMessages(now = Date.now(), limit = 20): P
 
   // Local JSON fallback
   const all = readMessages();
-  // 1. Recover stale jobs
+  // 1. Mark stale jobs uncertain instead of replaying them and risking duplicates.
   let modified = false;
   for (const item of all) {
     if (item.status === 'processing' && item.updatedAt < staleBefore) {
-      item.status = item.attemptCount >= item.maxAttempts ? 'failed' : 'scheduled';
-      item.lastError = 'Processing was interrupted by a server restart or timeout; reset for recovery.';
+      item.status = 'failed';
+      item.lastError = 'Processing was interrupted by a server restart or timeout; delivery status is uncertain. Check Telegram before retrying.';
       item.updatedAt = now;
       modified = true;
     }

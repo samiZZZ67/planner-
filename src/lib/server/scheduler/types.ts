@@ -49,6 +49,7 @@ export interface SchedulerExecutionResult {
     processed: number;
     completed: number;
     skipped: number;
+    retried: number;
     failed: number;
   };
   durationMs: number;

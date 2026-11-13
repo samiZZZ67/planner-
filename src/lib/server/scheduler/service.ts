@@ -318,10 +318,20 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
       } catch (msgErr: any) {
         const errMsg = msgErr instanceof Error ? msgErr.message : 'Message dispatch failed';
         console.error(`[Scheduler] ❌ Failed to dispatch scheduled message ${msg.id}:`, errMsg);
+        const sendFailure = msgErr as Error & { uncertain?: boolean; transient?: boolean; retryAfter?: number; messageIds?: number[] };
+        const messageIds = sendFailure.messageIds?.length ? sendFailure.messageIds : msg.telegramMessageIds;
 
-        if (msg.attemptCount < msg.maxAttempts) {
+        if (sendFailure.uncertain || sendFailure.transient || (messageIds?.length || 0) > 0) {
+          await updateScheduledMessage({
+            ...msg,
+            status: 'failed',
+            telegramMessageIds: messageIds || [],
+            lastError: `Delivery status is uncertain; check Telegram before retrying. ${errMsg}`,
+          });
+          result.scheduledMessages.failed++;
+        } else if (msg.attemptCount < msg.maxAttempts) {
           const retryDelayMs = Math.min(60 * 60 * 1000, 5 * 60 * 1000 * Math.pow(2, msg.attemptCount - 1));
-          const retryAt = now + retryDelayMs;
+          const retryAt = Math.max(Date.now() + retryDelayMs, Date.now() + (sendFailure.retryAfter || 0) * 1000);
           await updateScheduledMessage({
             ...msg,
             status: 'scheduled',
@@ -344,7 +354,7 @@ export async function runScheduledDeliveryCycle(now: number = Date.now()): Promi
     // ── 4. Process Morning & Evening Telegram Briefs ─────────────────
     try {
       result.briefs = await processDueBriefs(now);
-      if (result.briefs && (result.briefs.completed > 0 || result.briefs.failed > 0)) {
+      if (result.briefs && (result.briefs.completed > 0 || result.briefs.retried > 0 || result.briefs.failed > 0)) {
         console.log(`[Scheduler] 🌅 Briefs processing result:`, result.briefs);
       }
     } catch (briefsErr: any) {

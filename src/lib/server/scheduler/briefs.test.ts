@@ -3,6 +3,7 @@ import {
   getBriefConfig,
   saveBriefConfig,
   getBriefStatus,
+  getBriefDelivery,
   sendBriefNow,
   processDueBriefs,
   generateEnrichedBriefContent,
@@ -12,10 +13,12 @@ import {
 } from './briefs';
 import * as telegramModule from '../telegram';
 import * as telegramTaskAlerts from '../telegramTaskAlerts';
+import * as neonModule from '../neon';
 
 describe('Morning and Evening Brief Scheduler Suite', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(neonModule, 'getDb').mockReturnValue(null);
   });
 
   describe('1. Default Configuration & Timezone', () => {
@@ -150,7 +153,60 @@ describe('Morning and Evening Brief Scheduler Suite', () => {
     });
   });
 
-  describe('6. Calculation of Next Scheduled UTC Timestamps', () => {
+  describe('6. Retry Safety and Delivery Claims', () => {
+    it('does not resend an automatic brief after an ambiguous Telegram result', async () => {
+      const userId = `user_uncertain_brief_${Date.now()}`;
+      await saveBriefConfig({ userId, morningTime: '00:01', eveningTime: '23:59' });
+      const sendSpy = vi.spyOn(telegramModule, 'sendTelegramTextToChannel').mockRejectedValue(
+        Object.assign(new Error('Telegram request timed out.'), { uncertain: true })
+      );
+      const now = Date.now();
+      const today = getLocalTodayDate('Africa/Addis_Ababa');
+
+      const first = await processDueBriefs(now, userId);
+      expect(first.failed).toBe(1);
+      expect(first.retried).toBe(0);
+      expect(sendSpy).toHaveBeenCalledOnce();
+
+      const delivery = await getBriefDelivery(`morning_${userId}_${today}`);
+      expect(delivery?.status).toBe('failed');
+      expect(delivery?.lastError).toContain('Delivery status is uncertain');
+
+      await processDueBriefs(now + 60_000, userId);
+      expect(sendSpy).toHaveBeenCalledOnce();
+    });
+
+    it('backs off safe rate-limit retries and atomically claims a due brief', async () => {
+      const userId = `user_retry_brief_${Date.now()}`;
+      await saveBriefConfig({ userId, morningTime: '00:01', eveningTime: '23:59' });
+      const sendSpy = vi.spyOn(telegramModule, 'sendTelegramTextToChannel')
+        .mockRejectedValueOnce(Object.assign(new Error('Retry after 10 minutes.'), { retryAfter: 600 }))
+        .mockResolvedValue({ channel: '@SamSpac', messageId: 1003, receiptId: 'rec_1003' });
+      const now = Date.now();
+      const today = getLocalTodayDate('Africa/Addis_Ababa');
+
+      const first = await processDueBriefs(now, userId);
+      expect(first.retried).toBe(1);
+      expect(first.failed).toBe(0);
+      expect(sendSpy).toHaveBeenCalledOnce();
+
+      const retry = await getBriefDelivery(`morning_${userId}_${today}`);
+      expect(retry?.status).toBe('pending');
+      expect(retry?.scheduledFor).toBeGreaterThanOrEqual(now + 600_000);
+
+      await processDueBriefs(now + 60_000, userId);
+      expect(sendSpy).toHaveBeenCalledOnce();
+
+      const [runA, runB] = await Promise.all([
+        processDueBriefs(now + 700_000, userId),
+        processDueBriefs(now + 700_000, userId),
+      ]);
+      expect(runA.processed + runB.processed).toBe(1);
+      expect(sendSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('7. Calculation of Next Scheduled UTC Timestamps', () => {
     it('calculates future UTC timestamp in Africa/Addis_Ababa', () => {
       const userId = `user_calc_${Date.now()}`;
       const config = defaultBriefConfig(userId);

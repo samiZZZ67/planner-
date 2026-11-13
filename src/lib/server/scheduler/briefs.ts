@@ -197,29 +197,63 @@ export function getLocalCurrentTime(timezone = 'Africa/Addis_Ababa'): string {
   return `${map.hour}:${map.minute}`;
 }
 
+function rowString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function briefConfigFromDbRow(r: Record<string, unknown>): BriefConfig {
+  return {
+    userId: rowString(r.user_id),
+    enabled: Boolean(r.enabled),
+    morningTime: rowString(r.morning_time, '08:00'),
+    eveningTime: rowString(r.evening_time, '20:00'),
+    timezone: rowString(r.timezone, 'Africa/Addis_Ababa'),
+    skipNextMorningDate: rowString(r.skip_next_morning) || null,
+    skipNextEveningDate: rowString(r.skip_next_evening) || null,
+    overrideMorningDate: rowString(r.override_morning_date) || null,
+    overrideMorningTime: rowString(r.override_morning_time) || null,
+    overrideEveningDate: rowString(r.override_evening_date) || null,
+    overrideEveningTime: rowString(r.override_evening_time) || null,
+    temporaryMorningContent: rowString(r.temp_morning_content) || null,
+    temporaryEveningContent: rowString(r.temp_evening_content) || null,
+    updatedAt: Number(r.updated_at),
+  };
+}
+
+function briefDeliveryFromDbRow(r: Record<string, unknown>): BriefDeliveryRecord {
+  return {
+    id: rowString(r.id),
+    userId: rowString(r.user_id),
+    briefType: rowString(r.brief_type) as BriefType,
+    targetDate: rowString(r.target_date),
+    scheduledFor: Number(r.scheduled_for),
+    status: rowString(r.status) as BriefDeliveryStatus,
+    isManualSend: Boolean(r.is_manual_send),
+    content: rowString(r.content),
+    telegramMessageIds: Array.isArray(r.telegram_message_ids) ? r.telegram_message_ids.map(Number) : [],
+    lastError: rowString(r.last_error),
+    attemptCount: Number(r.attempt_count),
+    maxAttempts: Number(r.max_attempts || 3),
+    deliveredAt: r.delivered_at ? Number(r.delivered_at) : null,
+    createdAt: Number(r.created_at),
+    updatedAt: Number(r.updated_at),
+  };
+}
+
+async function listBriefConfigs(): Promise<BriefConfig[]> {
+  // The app currently issues sessions only for "owner". Load this profile from
+  // the database so settings survive cold starts, and avoid treating test or
+  // stale user IDs as live scheduled recipients.
+  return [await getBriefConfig('owner')];
+}
+
 export async function getBriefConfig(userId = 'owner'): Promise<BriefConfig> {
   const sql = getDb();
   if (sql) {
     await ensureSchema(sql);
     const rows = await sql`SELECT * FROM telegram_brief_settings WHERE user_id = ${userId} LIMIT 1`;
     if (rows.length > 0) {
-      const r = rows[0];
-      return {
-        userId: r.user_id,
-        enabled: Boolean(r.enabled),
-        morningTime: r.morning_time || '08:00',
-        eveningTime: r.evening_time || '20:00',
-        timezone: r.timezone || 'Africa/Addis_Ababa',
-        skipNextMorningDate: r.skip_next_morning || null,
-        skipNextEveningDate: r.skip_next_evening || null,
-        overrideMorningDate: r.override_morning_date || null,
-        overrideMorningTime: r.override_morning_time || null,
-        overrideEveningDate: r.override_evening_date || null,
-        overrideEveningTime: r.override_evening_time || null,
-        temporaryMorningContent: r.temp_morning_content || null,
-        temporaryEveningContent: r.temp_evening_content || null,
-        updatedAt: Number(r.updated_at),
-      };
+      return briefConfigFromDbRow(rows[0] as Record<string, unknown>);
     }
   }
 
@@ -383,11 +417,13 @@ export async function upsertBriefDelivery(record: BriefDeliveryRecord): Promise<
       )
       ON CONFLICT (id) DO UPDATE SET
         status = EXCLUDED.status,
+        scheduled_for = EXCLUDED.scheduled_for,
         is_manual_send = EXCLUDED.is_manual_send,
         content = EXCLUDED.content,
         telegram_message_ids = EXCLUDED.telegram_message_ids,
         last_error = EXCLUDED.last_error,
         attempt_count = EXCLUDED.attempt_count,
+        max_attempts = EXCLUDED.max_attempts,
         delivered_at = EXCLUDED.delivered_at,
         updated_at = EXCLUDED.updated_at
     `;
@@ -400,6 +436,59 @@ export async function upsertBriefDelivery(record: BriefDeliveryRecord): Promise<
   writeJson(DELIVERIES_PATH, all);
 
   return record;
+}
+
+/** Atomically claim a new brief or a due retry so overlapping workers cannot send twice. */
+async function claimBriefDelivery(record: BriefDeliveryRecord): Promise<BriefDeliveryRecord | null> {
+  const sql = getDb();
+  if (sql) {
+    await ensureSchema(sql);
+    const rows = await sql`
+      INSERT INTO telegram_brief_deliveries (
+        id, user_id, brief_type, target_date, scheduled_for, status,
+        is_manual_send, content, telegram_message_ids, last_error,
+        attempt_count, max_attempts, delivered_at, created_at, updated_at
+      ) VALUES (
+        ${record.id}, ${record.userId}, ${record.briefType}, ${record.targetDate},
+        ${record.scheduledFor}, 'processing', false, ${record.content},
+        ${JSON.stringify(record.telegramMessageIds)}::jsonb, '', 1, ${record.maxAttempts},
+        null, ${record.createdAt}, ${record.updatedAt}
+      )
+      ON CONFLICT (id) DO UPDATE SET
+        status = 'processing',
+        last_error = '',
+        attempt_count = telegram_brief_deliveries.attempt_count + 1,
+        updated_at = EXCLUDED.updated_at
+      WHERE telegram_brief_deliveries.status = 'pending'
+        AND telegram_brief_deliveries.scheduled_for <= ${record.updatedAt}
+        AND telegram_brief_deliveries.attempt_count < telegram_brief_deliveries.max_attempts
+      RETURNING *
+    `;
+    return rows.length > 0 ? briefDeliveryFromDbRow(rows[0] as Record<string, unknown>) : null;
+  }
+
+  const all = readJson<BriefDeliveryRecord[]>(DELIVERIES_PATH, []);
+  const index = all.findIndex(item => item.id === record.id);
+  if (index < 0) {
+    all.push(record);
+    writeJson(DELIVERIES_PATH, all);
+    return record;
+  }
+
+  const existing = all[index];
+  if (existing.status !== 'pending' || existing.scheduledFor > record.updatedAt || existing.attemptCount >= existing.maxAttempts) {
+    return null;
+  }
+  const claimed = {
+    ...existing,
+    status: 'processing' as const,
+    attemptCount: existing.attemptCount + 1,
+    lastError: '',
+    updatedAt: record.updatedAt,
+  };
+  all[index] = claimed;
+  writeJson(DELIVERIES_PATH, all);
+  return claimed;
 }
 
 /**
@@ -580,18 +669,16 @@ export async function processDueBriefs(now = Date.now(), targetUserId?: string):
   processed: number;
   completed: number;
   skipped: number;
+  retried: number;
   failed: number;
 }> {
-  const stats = { processed: 0, completed: 0, skipped: 0, failed: 0 };
+  const stats = { processed: 0, completed: 0, skipped: 0, retried: 0, failed: 0 };
 
   let configs: BriefConfig[] = [];
   if (targetUserId) {
     configs = [await getBriefConfig(targetUserId)];
   } else {
-    configs = readJson<BriefConfig[]>(SETTINGS_PATH, []);
-    if (!configs.some(c => c.userId === 'owner')) {
-      configs.push(await getBriefConfig('owner'));
-    }
+    configs = await listBriefConfigs();
   }
 
   for (const config of configs) {
@@ -620,8 +707,8 @@ export async function processDueBriefs(now = Date.now(), targetUserId?: string):
       const id = `${briefType}_${config.userId}_${today}`;
       const existing = await getBriefDelivery(id);
 
-      // Check idempotency: if already completed or skipped today, do not resend!
-      if (existing && (existing.status === 'completed' || existing.status === 'skipped')) {
+      // Terminal records must never be retried by the periodic sweep.
+      if (existing && ['completed', 'skipped', 'failed'].includes(existing.status)) {
         continue;
       }
 
@@ -656,36 +743,50 @@ export async function processDueBriefs(now = Date.now(), targetUserId?: string):
         continue;
       }
 
-      // If currently processing and fresh (< 5 mins), avoid overlapping duplicate sends
-      if (existing?.status === 'processing' && now - existing.updatedAt < 5 * 60 * 1000) {
+      // A stale processing row may have sent to Telegram before the worker died.
+      // Mark it for review rather than risk sending a duplicate.
+      if (existing?.status === 'processing') {
+        if (now - existing.updatedAt < 5 * 60 * 1000) continue;
+        existing.status = 'failed';
+        existing.lastError = 'Delivery status is uncertain after an interrupted send. Check Telegram before retrying.';
+        existing.updatedAt = now;
+        await upsertBriefDelivery(existing);
+        stats.failed++;
         continue;
       }
 
-      stats.processed++;
-      console.log(`[BriefScheduler] 🚀 Delivering automatic ${briefType} brief to Telegram (${today} ${effectiveTime} ${tz})...`);
+      // A pending record uses scheduledFor as its retry-after timestamp.
+      if (existing?.status === 'pending' && existing.scheduledFor > now) continue;
 
-      const content = await generateEnrichedBriefContent(briefType, today, config.userId, tempNote);
-      const deliveryRecord: BriefDeliveryRecord = {
+      const claimRecord: BriefDeliveryRecord = {
         id,
         userId: config.userId,
         briefType,
         targetDate: today,
-        scheduledFor: zonedDateTimeToTimestamp(today, effectiveTime, tz),
+        scheduledFor: existing?.scheduledFor ?? zonedDateTimeToTimestamp(today, effectiveTime, tz),
         status: 'processing',
         isManualSend: false,
-        content,
+        content: existing?.content || '',
         telegramMessageIds: existing?.telegramMessageIds || [],
         lastError: '',
         attemptCount: (existing?.attemptCount || 0) + 1,
-        maxAttempts: 3,
+        maxAttempts: existing?.maxAttempts || 3,
         deliveredAt: null,
         createdAt: existing?.createdAt || now,
         updatedAt: now,
       };
 
-      await upsertBriefDelivery(deliveryRecord);
+      const deliveryRecord = await claimBriefDelivery(claimRecord);
+      if (!deliveryRecord) continue;
+      stats.processed++;
+      console.log(`[BriefScheduler] 🚀 Delivering automatic ${briefType} brief to Telegram (${today} ${effectiveTime} ${tz})...`);
 
       try {
+        const content = await generateEnrichedBriefContent(briefType, today, config.userId, tempNote);
+        deliveryRecord.content = content;
+        deliveryRecord.updatedAt = Date.now();
+        await upsertBriefDelivery(deliveryRecord);
+
         const res = await sendTelegramTextToChannel(content, config.userId);
         deliveryRecord.status = 'completed';
         deliveryRecord.deliveredAt = Date.now();
@@ -715,11 +816,29 @@ export async function processDueBriefs(now = Date.now(), targetUserId?: string):
       } catch (sendErr: any) {
         const errMsg = sendErr instanceof Error ? sendErr.message : 'Brief dispatch failed';
         console.error(`[BriefScheduler] ❌ Failed to dispatch ${briefType} brief:`, errMsg);
-        deliveryRecord.status = deliveryRecord.attemptCount >= deliveryRecord.maxAttempts ? 'failed' : 'pending';
-        deliveryRecord.lastError = errMsg;
+        const sendFailure = sendErr as Error & { uncertain?: boolean; transient?: boolean; retryAfter?: number; messageIds?: number[] };
+        if (sendFailure.messageIds?.length) {
+          deliveryRecord.telegramMessageIds = sendFailure.messageIds;
+        }
+        const uncertain = Boolean(sendFailure.uncertain || sendFailure.transient || deliveryRecord.telegramMessageIds.length > 0);
+        if (uncertain) {
+          deliveryRecord.status = 'failed';
+          deliveryRecord.lastError = `Delivery status is uncertain; check Telegram before retrying. ${errMsg}`;
+          stats.failed++;
+        } else if (deliveryRecord.attemptCount < deliveryRecord.maxAttempts) {
+          const retryDelayMs = Math.min(60 * 60 * 1000, 5 * 60 * 1000 * Math.pow(2, deliveryRecord.attemptCount - 1));
+          const retryAt = Math.max(now + retryDelayMs, now + (sendFailure.retryAfter || 0) * 1000);
+          deliveryRecord.status = 'pending';
+          deliveryRecord.scheduledFor = retryAt;
+          deliveryRecord.lastError = `Temporary error: ${errMsg}. Scheduled retry at ${new Date(retryAt).toISOString()}`;
+          stats.retried++;
+        } else {
+          deliveryRecord.status = 'failed';
+          deliveryRecord.lastError = errMsg;
+          stats.failed++;
+        }
         deliveryRecord.updatedAt = Date.now();
         await upsertBriefDelivery(deliveryRecord);
-        stats.failed++;
       }
     }
   }

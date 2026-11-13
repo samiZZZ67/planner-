@@ -1,0 +1,12 @@
+services:
+  - type: cron
+    name: nightplanner-delivery-trigger
+    runtime: node
+    schedule: "7,22,37,52 * * * *"
+    buildCommand: "true"
+    startCommand: "npm run cron:trigger"
+    envVars:
+      - key: MOON_APP_URL
+        sync: false
+      - key: BOOKS_CRON_SECRET
+        sync: false

@@ -41,18 +41,17 @@
 #     compares against `Date.now()`, so UTC triggers are correct.
 #   • Runs every 15 minutes to stay within GitHub's free-tier budget (~2,880
 #     runs/month) while catching overdue jobs promptly.
-#   • GitHub may delay scheduled runs by 3–15 minutes under heavy load.
-#     The 15-minute interval provides overlapping coverage.
+#   • GitHub schedule events are best-effort and can be delayed or dropped.
+#     Render Cron is the independent primary trigger; this workflow is backup.
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: "📚 Book Delivery & Brief Scheduler"
 
 on:
   schedule:
-    # ── Every 15 minutes, 24/7 ──────────────────────────────────────────────
-    # This ensures that even with GitHub's occasional schedule delays (up to
-    # ~15 min), no delivery window is missed for more than ~30 minutes.
-    - cron: "*/15 * * * *"
+    # ── Staggered 15-minute backup schedule, UTC ────────────────────────────
+    # Run at different minute offsets from the independent Render Cron job.
+    - cron: "12,27,42,57 * * * *"
 
   workflow_dispatch:
     # Manual trigger from GitHub UI or API — useful for testing and on-demand
@@ -80,6 +79,9 @@ jobs:
     name: "🚀 Trigger Scheduled Delivery Cycle"
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: nightplanner-scheduled-delivery
+      cancel-in-progress: false
 
     steps:
       # ────────────────────────────────────────────────────────────────────────
@@ -210,6 +212,7 @@ jobs:
           MSG_RETRIED=$(echo "$RESPONSE" | jq -r '.scheduledMessages.retried // 0' 2>/dev/null || echo "?")
           MSG_FAILED=$(echo "$RESPONSE" | jq -r '.scheduledMessages.failed // 0' 2>/dev/null || echo "?")
           BRIEFS_COMPLETED=$(echo "$RESPONSE" | jq -r '.briefs.completed // 0' 2>/dev/null || echo "?")
+          BRIEFS_RETRIED=$(echo "$RESPONSE" | jq -r '.briefs.retried // 0' 2>/dev/null || echo "?")
           BRIEFS_FAILED=$(echo "$RESPONSE" | jq -r '.briefs.failed // 0' 2>/dev/null || echo "?")
           UNRESOLVED_BOOKS=$(echo "$RESPONSE" | jq -r '.unresolved.bookJobs // 0' 2>/dev/null || echo "?")
           UNRESOLVED_MESSAGES=$(echo "$RESPONSE" | jq -r '.unresolved.scheduledMessages // 0' 2>/dev/null || echo "?")
@@ -224,7 +227,7 @@ jobs:
           echo "═══════════════════════════════════════════════════"
           echo "  📚 Book Jobs:     ${BOOK_CLAIMED} claimed → ${BOOK_COMPLETED} completed, ${BOOK_RETRIED} retrying, ${BOOK_FAILED} failed"
           echo "  ✉️  Messages:      ${MSG_CLAIMED} claimed → ${MSG_COMPLETED} completed, ${MSG_RETRIED} retrying, ${MSG_FAILED} failed"
-          echo "  🌅 Briefs:        ${BRIEFS_COMPLETED} completed, ${BRIEFS_FAILED} failed"
+          echo "  🌅 Briefs:        ${BRIEFS_COMPLETED} completed, ${BRIEFS_RETRIED} retrying, ${BRIEFS_FAILED} failed"
           echo "  ⚠️  Unresolved:    ${UNRESOLVED_BOOKS} book jobs, ${UNRESOLVED_MESSAGES} messages, ${UNRESOLVED_BRIEFS} briefs, ${UNCERTAIN_TELEGRAM} uncertain Telegram deliveries"
           echo "  📖 Auto-Prepare:  ${AUTO_STATUS}"
           echo "  ⏱️  Duration:      ${DURATION}ms"

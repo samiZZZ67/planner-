@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "node server.js",
     "start:next": "node scripts/start-next.mjs",
+    "cron:trigger": "node scripts/trigger-scheduled-delivery.mjs",
     "lint": "eslint",
     "test": "vitest run"
   },

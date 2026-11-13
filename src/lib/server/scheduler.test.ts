@@ -23,7 +23,7 @@ describe('Background Scheduler & Automatic Telegram Delivery Suite', () => {
     vi.restoreAllMocks();
     vi.spyOn(telegramModule, 'getTelegramUpdates').mockResolvedValue([]);
     vi.spyOn(autoPublishModule, 'prepareAutomaticBookPublishing').mockResolvedValue({ status: 'idle' } as any);
-    vi.spyOn(briefsModule, 'processDueBriefs').mockResolvedValue({ processed: 0, completed: 0, skipped: 0, failed: 0 });
+    vi.spyOn(briefsModule, 'processDueBriefs').mockResolvedValue({ processed: 0, completed: 0, skipped: 0, retried: 0, failed: 0 });
   });
 
   afterEach(() => {
@@ -102,7 +102,7 @@ describe('Background Scheduler & Automatic Telegram Delivery Suite', () => {
       await deleteScheduledMessage(futureMsg.id, testUserId);
     });
 
-    it('recovers stale processing jobs interrupted by server restart', async () => {
+    it('marks stale processing messages uncertain instead of risking a duplicate send', async () => {
       const now = Date.now();
       const staleTime = now - 15 * 60 * 1000; // 15 mins ago (stale > 10 mins)
 
@@ -121,12 +121,15 @@ describe('Background Scheduler & Automatic Telegram Delivery Suite', () => {
         updatedAt: staleTime,
       });
 
-      // Running claimDueScheduledMessages should recover it
+      // Stale processing may already have been accepted by Telegram; do not resend.
       const claimed = await claimDueScheduledMessages(now);
       const found = claimed.find(c => c.id === interruptedMsg.id);
 
-      expect(found).toBeDefined();
-      expect(found?.attemptCount).toBe(2);
+      expect(found).toBeUndefined();
+      const all = await listScheduledMessages(testUserId);
+      const updated = all.find(message => message.id === interruptedMsg.id);
+      expect(updated?.status).toBe('failed');
+      expect(updated?.lastError).toContain('delivery status is uncertain');
 
       // Clean up
       await deleteScheduledMessage(interruptedMsg.id, testUserId);

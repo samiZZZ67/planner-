@@ -580,8 +580,8 @@ export async function sendTelegramTextToChannel(
   const parts = splitTelegramHtml(formatted, 3500);
 
   const receiptBase = { id: randomUUID(), userId, channel: connection.channel.title, chatId, createdAt: Date.now() };
+  const sentIds: number[] = [];
   try {
-    const sentIds: number[] = [];
     for (const part of parts) {
       const sent = await sendTelegramMessageWithFallback(chatId, part, true);
       sentIds.push(sent.message_id);
@@ -600,9 +600,28 @@ export async function sendTelegramTextToChannel(
       messageIds: sentIds,
     };
   } catch (error) {
-    const err = error as Error & { uncertain?: boolean };
-    await saveSendReceipt({ ...receiptBase, status: err.uncertain ? 'uncertain' : 'failed', messageId: null, detail: err.message });
-    throw error;
+    const err = error as Error & { uncertain?: boolean; transient?: boolean; retryAfter?: number };
+    // A timeout, Telegram 5xx, or later-part failure can happen after Telegram
+    // accepted one or more parts. Do not automatically resend such a message.
+    const uncertain = Boolean(err.uncertain || err.transient || sentIds.length > 0);
+    const detail = sentIds.length > 0
+      ? `${err.message} Already accepted Telegram message ID(s): ${sentIds.join(', ')}`
+      : err.message;
+    try {
+      await saveSendReceipt({
+        ...receiptBase,
+        status: uncertain ? 'uncertain' : 'failed',
+        messageId: sentIds[0] ?? null,
+        detail,
+      });
+    } catch (receiptError) {
+      console.error('[Telegram] Could not persist failed send receipt:', receiptError);
+    }
+    throw Object.assign(new Error(detail), {
+      uncertain,
+      retryAfter: err.retryAfter,
+      messageIds: sentIds,
+    });
   }
 }
 
