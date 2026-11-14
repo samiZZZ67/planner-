@@ -852,18 +852,22 @@ async function createDelivery(userId: string, bookId: string, assignmentId: stri
   return item;
 }
 
-async function claimDelivery(delivery: TelegramDeliveryRecord): Promise<TelegramDeliveryRecord | null> {
+async function claimDelivery(delivery: TelegramDeliveryRecord, allowBlockedRetry = false): Promise<TelegramDeliveryRecord | null> {
   const now = Date.now();
   const claimed = { ...delivery, status: 'processing' as const, safeToRetry: false, retryAfterAt: null, updatedAt: now };
   const sql = getDb();
   if (sql) {
     await ensureSchema(sql);
     const rows = await sql`UPDATE telegram_deliveries SET status = 'processing', data = ${JSON.stringify(claimed)}::jsonb, updated_at = ${now}
-      WHERE id = ${delivery.id} AND (status = 'pending' OR (status = 'failed' AND COALESCE((data->>'safeToRetry')::boolean, FALSE) = TRUE)) RETURNING id`;
+      WHERE id = ${delivery.id} AND (status = 'pending' OR (status = 'failed' AND COALESCE((data->>'safeToRetry')::boolean, FALSE) = TRUE) OR (${allowBlockedRetry} AND (status = 'uncertain' OR (status = 'failed' AND COALESCE((data->>'safeToRetry')::boolean, FALSE) = FALSE)))) RETURNING id`;
     return rows.length ? saveDelivery(claimed) : null;
   }
   const all = readDeliveries();
-  const index = all.findIndex(item => item.id === delivery.id && (item.status === 'pending' || (item.status === 'failed' && item.safeToRetry)));
+  const index = all.findIndex(item => item.id === delivery.id && (
+    item.status === 'pending'
+    || (item.status === 'failed' && item.safeToRetry)
+    || (allowBlockedRetry && (item.status === 'uncertain' || (item.status === 'failed' && !item.safeToRetry)))
+  ));
   if (index < 0) return null;
   all[index] = claimed;
   writeDeliveries(all);
@@ -984,7 +988,8 @@ export async function publishLoadPlanPagesToTelegram(
   assignment: BookAssignmentRecord,
   pages: BookPageRecord[],
   previousAssignment?: BookAssignmentRecord,
-  enrichment?: EnrichedReadingContent
+  enrichment?: EnrichedReadingContent,
+  options: { forceRetryBlockedDelivery?: boolean } = {}
 ) {
   if (!process.env.VITEST) {
     try {
@@ -1023,11 +1028,17 @@ export async function publishLoadPlanPagesToTelegram(
   } else if (delivery.status === 'completed') {
     return { delivery, channel: delivery.channel || 'Previously delivered Telegram channel', bot: delivery.bot || 'Previously used Telegram bot', messageCount: delivery.telegramMessageIds.length, telegramMessageIds: delivery.telegramMessageIds };
   } else if (delivery.status !== 'pending') {
-    if (delivery.status === 'uncertain' || !delivery.safeToRetry) throw Object.assign(new Error('A previous delivery may have sent part of this assignment. Check Telegram and the delivery record before retrying.'), { delivery });
+    const blockedDelivery = delivery.status === 'uncertain' || (delivery.status === 'failed' && !delivery.safeToRetry);
+    const forceRetryBlockedDelivery = options.forceRetryBlockedDelivery === true && blockedDelivery;
+    if ((delivery.status === 'uncertain' || !delivery.safeToRetry) && !forceRetryBlockedDelivery) {
+      throw Object.assign(new Error('A previous delivery may have sent part of this assignment. Check Telegram and the delivery record before retrying.'), { delivery });
+    }
     if (delivery.retryAfterAt && delivery.retryAfterAt > Date.now()) throw Object.assign(new Error(`Telegram asked us to retry after ${new Date(delivery.retryAfterAt).toISOString()}.`), { delivery });
   }
 
-  const claimed = await claimDelivery(delivery);
+  const allowBlockedRetry = options.forceRetryBlockedDelivery === true
+    && (delivery.status === 'uncertain' || (delivery.status === 'failed' && !delivery.safeToRetry));
+  const claimed = await claimDelivery(delivery, allowBlockedRetry);
   if (!claimed) throw new Error('Another request is already processing this Telegram delivery, or it cannot be retried.');
   delivery = claimed;
 

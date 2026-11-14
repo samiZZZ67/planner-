@@ -444,12 +444,29 @@ export function BookPlannerScreen({ initialBookId, initialAssignmentId }: BookPl
     setError('');
     setNotice('');
     try {
-      const response = await apiFetch(`/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(assignment.id)}/publish`, {
+      const endpoint = `/api/books/${encodeURIComponent(book.id)}/assignments/${encodeURIComponent(assignment.id)}/publish`;
+      const sendNow = (forceRetryBlockedDelivery = false) => apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sendNow: true, override: true }),
+        body: JSON.stringify({ sendNow: true, override: true, forceRetryBlockedDelivery }),
       });
-      const data = await response.json();
+      let response = await sendNow();
+      let data = await response.json();
+
+      const deliveryMayHavePartiallySent = data.delivery?.status === 'uncertain'
+        || (data.delivery?.status === 'failed' && !data.delivery?.safeToRetry);
+      if (!response.ok && deliveryMayHavePartiallySent) {
+        const confirmed = window.confirm(
+          'The previous Telegram attempt may have sent the current message part without confirmation. Retrying resumes from that part: earlier confirmed parts are skipped, but this part may appear twice. Continue?'
+        );
+        if (!confirmed) {
+          showNotice('No retry was sent. The delivery remains marked uncertain; check Telegram before trying again.');
+          return;
+        }
+        response = await sendNow(true);
+        data = await response.json();
+      }
+
       if (!response.ok) throw new Error(data.error || 'Could not send this section to Telegram.');
 
       updateAssignmentState(book.id, { ...assignment, status: 'completed', deliveryStatus: 'sent', deliveredAt: Date.now() });

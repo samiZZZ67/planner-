@@ -19,6 +19,7 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
   const url = new URL(request.url);
   const body = await request.json().catch(() => ({}));
   const isSendNow = Boolean(body?.sendNow || body?.override || url.searchParams.get('sendNow') === 'true');
+  const forceRetryBlockedDelivery = body?.forceRetryBlockedDelivery === true;
 
   if (!isSendNow && (assignment.status !== 'approved' || !assignment.studyNotes)) {
     return NextResponse.json({ error: 'Approve this assignment and its study notes before publishing.' }, { status: 409 });
@@ -45,7 +46,7 @@ export async function POST(request: Request, context: RouteContext<'/api/books/[
     if (!isSendNow && assignment.status === 'approved' && assignment.studyNotes) {
       delivery = await publishApprovedAssignment(session.userId, book, assignment, pages, previous);
     } else {
-      const result = await publishLoadPlanPagesToTelegram(session.userId, book, assignment, pages, previous);
+      const result = await publishLoadPlanPagesToTelegram(session.userId, book, assignment, pages, previous, undefined, { forceRetryBlockedDelivery });
       delivery = result.delivery;
       channel = result.channel;
       bot = result.bot;
