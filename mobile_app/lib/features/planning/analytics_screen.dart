@@ -158,8 +158,9 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
     final minuteByDay = {for (final date in chartDays) date: 0};
     for (final log in logs) {
       final date = log['date']?.toString();
-      if (date != null && minuteByDay.containsKey(date))
+      if (date != null && minuteByDay.containsKey(date)) {
         minuteByDay[date] = minuteByDay[date]! + jsonInt(log['minutes']);
+      }
     }
     final maxMinutes = minuteByDay.values.fold<int>(
       60,

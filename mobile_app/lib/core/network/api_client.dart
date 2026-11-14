@@ -4,9 +4,8 @@ import 'package:flutter/foundation.dart';
 import '../storage/token_store.dart';
 
 class ApiClient {
-  ApiClient({required TokenStore tokenStore, String? baseUrl})
-    : _tokenStore = tokenStore,
-      dio = Dio(
+  ApiClient({required this._tokenStore, String? baseUrl})
+    : dio = Dio(
         BaseOptions(
           baseUrl: _validBase(baseUrl)
               ? _normalizeBase(baseUrl!)

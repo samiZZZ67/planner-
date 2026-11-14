@@ -81,16 +81,18 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
           );
       _status = result.data ?? {};
       _token.clear();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Telegram configuration updated on the server.'),
           ),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -128,14 +130,16 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
           );
       _text.clear();
       await _load();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Telegram message sent.')));
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -150,9 +154,10 @@ class _TelegramScreenState extends ConsumerState<TelegramScreen> {
           .post<void>('/api/telegram/automation', data: {'paused': paused});
       setState(() => _paused = paused);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

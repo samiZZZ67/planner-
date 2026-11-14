@@ -127,12 +127,13 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
     if (_saving || !_formKey.currentState!.validate()) return;
     final sections = await ref.read(sectionListProvider.future);
     if (sections.isEmpty) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Create a category before adding tasks.'),
           ),
         );
+      }
       return;
     }
     _sectionId ??= sections.first['id']?.toString();
@@ -152,12 +153,13 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
           )
           .length;
       if (otherTopTasks >= 3) {
-        if (mounted)
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Choose up to three must-do tasks for a day.'),
             ),
           );
+        }
         return;
       }
     }
@@ -276,8 +278,9 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
                     ),
                   ),
                   data: (items) {
-                    if (_sectionId == null && items.isNotEmpty)
+                    if (_sectionId == null && items.isNotEmpty) {
                       _sectionId = items.first['id']?.toString();
+                    }
                     return Form(
                       key: _formKey,
                       child: Column(
@@ -315,7 +318,7 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
                                   ),
                                   const SizedBox(height: 12),
                                   DropdownButtonFormField<String>(
-                                    value: _sectionId,
+                                    initialValue: _sectionId,
                                     decoration: const InputDecoration(
                                       labelText: 'Category',
                                     ),
@@ -334,7 +337,7 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
                                   ),
                                   const SizedBox(height: 12),
                                   DropdownButtonFormField<String>(
-                                    value: _priority,
+                                    initialValue: _priority,
                                     decoration: const InputDecoration(
                                       labelText: 'Priority',
                                     ),
@@ -473,10 +476,11 @@ class _AddTaskScreenState extends ConsumerState<AddTaskScreen> {
                                         firstDate: DateTime.utc(2000),
                                         lastDate: DateTime.utc(2100),
                                       );
-                                      if (selected != null)
+                                      if (selected != null) {
                                         setState(
                                           () => _deadline = toDateKey(selected),
                                         );
+                                      }
                                     },
                                     icon: const Icon(Icons.event_outlined),
                                     label: Text(

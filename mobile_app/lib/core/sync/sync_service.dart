@@ -28,8 +28,9 @@ class SyncService {
   }
 
   Future<SyncSummary> _syncOnce() async {
-    if (!_api.isConfigured)
+    if (!_api.isConfigured) {
       throw const ApiFailure('Set the planner API URL to sync your data.');
+    }
     final payload = <String, dynamic>{
       'lastServerSeq':
           int.tryParse(await _database.getMeta('lastServerSeq') ?? '') ?? 0,
@@ -55,8 +56,9 @@ class SyncService {
         final ids = acknowledged[collection];
         if (ids is List) await _database.markSynced(collection, ids);
         final incoming = changes[collection];
-        if (incoming is List)
+        if (incoming is List) {
           await _database.applyRemoteRecords(collection, incoming);
+        }
       }
       final sequence = jsonInt(body['currentServerSeq']);
       await _database.setMeta('lastServerSeq', sequence.toString());

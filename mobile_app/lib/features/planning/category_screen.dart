@@ -85,7 +85,7 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                 ),
                 const SizedBox(height: 4),
                 DropdownButtonFormField<String>(
-                  value: type,
+                  initialValue: type,
                   decoration: const InputDecoration(labelText: 'Target rule'),
                   items: const [
                     DropdownMenuItem(
@@ -427,7 +427,7 @@ class _SectionCard extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           subtitle: Text(
-            '${count} task${count == 1 ? '' : 's'} · ${section['dailyTargetMinutes'] ?? 'No'} minute target',
+            '$count task${count == 1 ? '' : 's'} · ${section['dailyTargetMinutes'] ?? 'No'} minute target',
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,

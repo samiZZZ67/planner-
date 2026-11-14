@@ -96,11 +96,12 @@ class _WeeklyPlanTabState extends ConsumerState<_WeeklyPlanTab> {
     _constraints.text = plan?['constraints']?.toString() ?? '';
     _outcomes.text = plan?['outcomes']?.toString() ?? '';
     _report = plan?['aiWeeklyReport']?.toString();
-    if (mounted)
+    if (mounted) {
       setState(() {
         _loading = false;
         _dirty = false;
       });
+    }
   }
 
   int get _wordCount => _prompt.text.trim().isEmpty
@@ -146,11 +147,12 @@ class _WeeklyPlanTabState extends ConsumerState<_WeeklyPlanTab> {
       'deleted': false,
     });
     invalidatePlanningViews(ref);
-    if (mounted)
+    if (mounted) {
       setState(() {
         _saving = false;
         _dirty = false;
       });
+    }
   }
 
   Future<void> _generateReport() async {
@@ -173,10 +175,11 @@ class _WeeklyPlanTabState extends ConsumerState<_WeeklyPlanTab> {
     final plans = await db.getRecords('weeklyPlans');
     final plan = plans.where((item) => item['id'] == range.id).firstOrNull;
     if (plan == null) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Save this weekly plan first.')),
         );
+      }
       return;
     }
     setState(() => _reporting = true);
@@ -205,22 +208,24 @@ class _WeeklyPlanTabState extends ConsumerState<_WeeklyPlanTab> {
             data: {'weeklyPlan': plan, 'tasks': tasks, 'timeLogs': logs},
           );
       final report = response.data?['report']?.toString();
-      if (report == null || report.isEmpty)
+      if (report == null || report.isEmpty) {
         throw const FormatException('The server returned an empty report.');
+      }
       final now = DateTime.now().millisecondsSinceEpoch;
       await db.putLocalRecord('weeklyPlans', {
         ...plan,
         'aiWeeklyReport': report,
         'updatedAt': now,
       });
-      if (mounted)
+      if (mounted) {
         setState(() {
           _report = report;
           _dirty = false;
         });
+      }
       invalidatePlanningViews(ref);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -228,6 +233,7 @@ class _WeeklyPlanTabState extends ConsumerState<_WeeklyPlanTab> {
             ),
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => _reporting = false);
     }
@@ -455,7 +461,7 @@ class _MonthlyPlanTabState extends ConsumerState<_MonthlyPlanTab> {
   Widget build(BuildContext context) {
     final parts = _month.split('-').map(int.parse).toList();
     final monthTitle = DateTime(parts[0], parts[1]).month;
-    final monthLabel = '${_month} · ${_monthName(monthTitle)} ${parts[0]}';
+    final monthLabel = '$_month · ${_monthName(monthTitle)} ${parts[0]}';
     if (_loading) return const Center(child: CircularProgressIndicator());
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),

@@ -170,7 +170,7 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
               'messages': _messages
                   .map((m) => {'role': m['role'], 'content': m['content']})
                   .toList(),
-              if (contextData != null) 'context': contextData,
+              'context': ?contextData,
               'stream': false,
             },
             options: Options(receiveTimeout: const Duration(minutes: 2)),
@@ -192,15 +192,17 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
         await ref.read(syncControllerProvider.notifier).sync();
         ref.invalidate(allTasksProvider);
       }
-      if (mounted)
+      if (mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scroll.hasClients)
+          if (_scroll.hasClients) {
             _scroll.animateTo(
               _scroll.position.maxScrollExtent,
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOut,
             );
+          }
         });
+      }
     } catch (error) {
       if (mounted) setState(() => _error = _message(error));
     } finally {

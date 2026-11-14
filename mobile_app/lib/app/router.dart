@@ -24,22 +24,24 @@ GoRouter createRouter(SessionState Function() sessionState) => GoRouter(
   redirect: (context, state) {
     final path = state.uri.path;
     final session = sessionState();
-    if (session.status == SessionStatus.loading)
+    if (session.status == SessionStatus.loading) {
       return path == '/loading' ? null : '/loading';
-    if (session.status == SessionStatus.signedOut)
+    }
+    if (session.status == SessionStatus.signedOut) {
       return path == '/login' ? null : '/login';
+    }
     if (path == '/login' || path == '/loading') return '/today';
     return null;
   },
   routes: [
-    GoRoute(path: '/loading', builder: (_, __) => const _LoadingScreen()),
-    GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+    GoRoute(path: '/loading', builder: (_, _) => const _LoadingScreen()),
+    GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
     ShellRoute(
       builder: (context, state, child) =>
           AppShell(location: state.uri.path, child: child),
       routes: [
-        GoRoute(path: '/today', builder: (_, __) => const TodayScreen()),
-        GoRoute(path: '/plans', builder: (_, __) => const PlansScreen()),
+        GoRoute(path: '/today', builder: (_, _) => const TodayScreen()),
+        GoRoute(path: '/plans', builder: (_, _) => const PlansScreen()),
         GoRoute(
           path: '/add',
           builder: (_, state) => AddTaskScreen(
@@ -47,21 +49,21 @@ GoRouter createRouter(SessionState Function() sessionState) => GoRouter(
             initialTaskId: state.uri.queryParameters['taskId'],
           ),
         ),
-        GoRoute(path: '/books', builder: (_, __) => const BooksScreen()),
-        GoRoute(path: '/more', builder: (_, __) => const MoreScreen()),
-        GoRoute(path: '/category', builder: (_, __) => const CategoryScreen()),
+        GoRoute(path: '/books', builder: (_, _) => const BooksScreen()),
+        GoRoute(path: '/more', builder: (_, _) => const MoreScreen()),
+        GoRoute(path: '/category', builder: (_, _) => const CategoryScreen()),
         GoRoute(
           path: '/analytics',
-          builder: (_, __) => const AnalyticsScreen(),
+          builder: (_, _) => const AnalyticsScreen(),
         ),
-        GoRoute(path: '/diary', builder: (_, __) => const DiaryScreen()),
-        GoRoute(path: '/notes', builder: (_, __) => const NotesScreen()),
-        GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+        GoRoute(path: '/diary', builder: (_, _) => const DiaryScreen()),
+        GoRoute(path: '/notes', builder: (_, _) => const NotesScreen()),
+        GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
         GoRoute(
           path: '/assistant',
-          builder: (_, __) => const AssistantScreen(),
+          builder: (_, _) => const AssistantScreen(),
         ),
-        GoRoute(path: '/telegram', builder: (_, __) => const TelegramScreen()),
+        GoRoute(path: '/telegram', builder: (_, _) => const TelegramScreen()),
         GoRoute(
           path: '/quiz',
           builder: (_, state) => QuizScreen(

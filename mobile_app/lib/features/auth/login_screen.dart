@@ -12,9 +12,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _url = TextEditingController(
-    text: const String.fromEnvironment('API_BASE_URL'),
-  );
+  final _url = TextEditingController();
   final _password = TextEditingController();
   bool _showPassword = false;
 
@@ -28,8 +26,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final savedUrl = await ref
         .read(localDatabaseProvider)
         .getMeta('apiBaseUrl');
-    if (!mounted || _url.text.trim().isNotEmpty || savedUrl == null) return;
-    _url.text = savedUrl;
+    if (!mounted || _url.text.trim().isNotEmpty) return;
+    _url.text = savedUrl?.trim().isNotEmpty == true
+        ? savedUrl!
+        : plannerApiBaseUrl;
   }
 
   @override
@@ -129,8 +129,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 if (url == null ||
                                     !url.hasAuthority ||
                                     !(url.scheme == 'https' ||
-                                        url.scheme == 'http'))
+                                        url.scheme == 'http')) {
                                   return 'Enter a complete API URL.';
+                                }
                                 return null;
                               },
                             ),

@@ -3,9 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/prepare-next-app.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/prepare-next-app.mjs",
     "build": "next build",
+    "prestart": "node scripts/prepare-next-app.mjs",
     "start": "node server.js",
+    "prestart:next": "node scripts/prepare-next-app.mjs",
     "start:next": "node scripts/start-next.mjs",
     "cron:trigger": "node scripts/trigger-scheduled-delivery.mjs",
     "lint": "eslint",

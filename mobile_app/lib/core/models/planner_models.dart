@@ -2,8 +2,9 @@ typedef JsonMap = Map<String, dynamic>;
 
 JsonMap jsonMap(Object? value) {
   if (value is Map<String, dynamic>) return Map<String, dynamic>.from(value);
-  if (value is Map)
+  if (value is Map) {
     return value.map((key, item) => MapEntry(key.toString(), item));
+  }
   return <String, dynamic>{};
 }
 

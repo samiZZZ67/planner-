@@ -167,8 +167,9 @@ class LocalDatabase {
   Future<void> putLocalRecord(String collection, JsonMap record) async {
     final data = Map<String, dynamic>.from(record);
     final id = data['id']?.toString();
-    if (id == null || id.isEmpty)
+    if (id == null || id.isEmpty) {
       throw ArgumentError('A $collection record needs an id.');
+    }
     data['synced'] = 0;
     await _writeRecord(collection, data);
   }

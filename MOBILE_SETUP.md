@@ -24,7 +24,19 @@ flutter run --dart-define=API_BASE_URL=https://your-planner.example.com
 
 On Android Emulator, the host computer is commonly available at `http://10.0.2.2:3000` when running the backend locally. For a physical phone, use the computer's LAN address and allow the dev server through the local firewall. These HTTP URLs are for debug only. iOS and release builds should use HTTPS.
 
-If `API_BASE_URL` is omitted, enter the API origin on the sign-in screen or save it under **More → Settings → Cloud sync**. The app stores the URL in SQLite preferences. It asks for the existing shared master password; the returned session token is stored in platform secure storage.
+The app defaults to `https://planner-26cd.onrender.com`. Override it with `--dart-define=API_BASE_URL=...`, enter another API origin on the sign-in screen, or save it under **More → Settings → Cloud sync**. The app stores the URL in SQLite preferences. It asks for the existing shared master password; the returned session token is stored in platform secure storage.
+
+## Backend deployment and sync
+
+Flutter sends planner data to the backend's `/api/sync` endpoint; it does not deploy backend source code. Push backend code to the GitHub branch connected to Render to trigger a deployment. The build moves the unused root Flutter starter out of Next.js route discovery so the routes under `src/app/` (including `/api/sync`) are built.
+
+For persistent authenticated cloud sync, configure these on the Render web service:
+
+- `DATABASE_URL`: the Neon PostgreSQL connection string.
+- `APP_PASSWORD`: the password entered in Flutter and the web app.
+- `SESSION_SECRET`: a stable random secret of at least 32 characters; keep it unchanged so existing sessions remain valid.
+
+For scheduled Telegram delivery, also set `BOOKS_CRON_SECRET`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID` on Render. Add the matching `BOOKS_CRON_SECRET` as a GitHub Actions secret. The optional GitHub Actions variable `MOON_APP_URL` defaults to `https://planner-26cd.onrender.com`.
 
 ## Data, offline use, and transfer
 

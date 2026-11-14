@@ -10,6 +10,11 @@ import 'network/api_client.dart';
 import 'storage/token_store.dart';
 import 'sync/sync_service.dart';
 
+const plannerApiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'https://planner-26cd.onrender.com',
+);
+
 final localDatabaseProvider = Provider<LocalDatabase>(
   (ref) =>
       throw UnimplementedError('LocalDatabase must be provided at bootstrap.'),
@@ -18,7 +23,7 @@ final tokenStoreProvider = Provider<TokenStore>((ref) => TokenStore());
 final apiClientProvider = Provider<ApiClient>((ref) {
   final api = ApiClient(
     tokenStore: ref.watch(tokenStoreProvider),
-    baseUrl: const String.fromEnvironment('API_BASE_URL'),
+    baseUrl: plannerApiBaseUrl,
   );
   api.onUnauthorized = () => ref.read(sessionProvider.notifier).expireSession();
   return api;
@@ -72,7 +77,7 @@ class SessionController extends Notifier<SessionState> {
     final savedUrl = await _database.getMeta('apiBaseUrl');
     final configuredUrl = (savedUrl?.isNotEmpty == true)
         ? savedUrl!
-        : const String.fromEnvironment('API_BASE_URL');
+        : plannerApiBaseUrl;
     if (configuredUrl.isNotEmpty) {
       try {
         _api.configureBaseUrl(configuredUrl);
@@ -93,8 +98,9 @@ class SessionController extends Notifier<SessionState> {
       offline: check.offline,
       apiUrl: configuredUrl,
     );
-    if (check.authenticated && !check.offline)
+    if (check.authenticated && !check.offline) {
       unawaited(ref.read(syncControllerProvider.notifier).sync());
+    }
   }
 
   Future<void> login({required String apiUrl, required String password}) async {
@@ -165,13 +171,14 @@ class SyncController extends Notifier<SyncState> {
 
   Future<void> refreshPending() async {
     final pending = await ref.read(localDatabaseProvider).countDirty();
-    if (!state.syncing)
+    if (!state.syncing) {
       state = SyncState(
         pending: pending,
         offline: state.offline,
         lastSyncedAt: state.lastSyncedAt,
         error: state.error,
       );
+    }
   }
 
   Future<void> sync() async {
