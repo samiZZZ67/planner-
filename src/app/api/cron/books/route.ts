@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { runScheduledDeliveryCycle, getSchedulerStatus, initScheduler } from '@/lib/server/scheduler';
 
@@ -12,17 +13,25 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  // Ensure scheduler is running
-  initScheduler();
-
   const secret = process.env.BOOKS_CRON_SECRET?.trim();
-  // If a secret is configured, require authentication; otherwise allow manual trigger in dev/internal
-  if (secret) {
-    const authHeader = request.headers.get('authorization') || '';
-    if (authHeader !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
-    }
+  if (!secret) {
+    return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
   }
+
+  const authHeader = request.headers.get('authorization') || '';
+  const bearerMatch = /^Bearer\s+(\S+)$/i.exec(authHeader);
+  const providedToken = Buffer.from(bearerMatch?.[1] || '', 'utf8');
+  const expectedToken = Buffer.from(secret, 'utf8');
+
+  if (
+    providedToken.length !== expectedToken.length
+    || !timingSafeEqual(providedToken, expectedToken)
+  ) {
+    return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+  }
+
+  // Ensure scheduler is running only after the request has authenticated.
+  initScheduler();
 
   const now = Date.now();
   console.log(`[API /api/cron/books] Manual or external trigger received at ${new Date(now).toISOString()}`);

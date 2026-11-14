@@ -10,8 +10,13 @@ const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
 
+if (!process.env.BOOKS_CRON_SECRET?.trim()) {
+  console.warn('[Startup] BOOKS_CRON_SECRET is missing; /api/cron/books requests will be rejected.');
+}
+
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
+let nextReady = false;
 
 function getCorsOrigin(origin) {
   const clientUrlEnv = process.env.CLIENT_URL || '';
@@ -32,100 +37,117 @@ function isOriginAllowed(origin) {
   return allowed.includes(origin.replace(/\/+$/, ''));
 }
 
-app.prepare().then(() => {
-  const server = createServer(async (req, res) => {
-    try {
-      const parsedUrl = parse(req.url, true);
-      const origin = req.headers.origin;
+const server = createServer(async (req, res) => {
+  try {
+    const parsedUrl = parse(req.url, true);
+    const origin = req.headers.origin;
 
-      // Handle CORS for all API routes and health endpoint
-      if (parsedUrl.pathname.startsWith('/api/') || parsedUrl.pathname === '/health') {
-        const allowOrigin = getCorsOrigin(origin);
-        res.setHeader('Access-Control-Allow-Origin', allowOrigin);
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-session-token');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
+    // Handle CORS for all API routes and health endpoint
+    if (parsedUrl.pathname.startsWith('/api/') || parsedUrl.pathname === '/health') {
+      const allowOrigin = getCorsOrigin(origin);
+      res.setHeader('Access-Control-Allow-Origin', allowOrigin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-session-token');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-        if (req.method === 'OPTIONS') {
-          res.writeHead(204);
-          res.end();
-          return;
-        }
-      }
-
-      // Fast GET /health probe for Render health check
-      if (parsedUrl.pathname === '/health' && req.method === 'GET') {
-        res.writeHead(200, {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store, no-cache',
-        });
-        const schedulerState = global[Symbol.for('__NIGHTPLANNER_CRON_SCHEDULER__')];
-        res.end(
-          JSON.stringify({
-            status: 'ok',
-            service: 'night-planner-backend',
-            uptime: process.uptime(),
-            timestamp: new Date().toISOString(),
-            port: port,
-            scheduler: schedulerState ? {
-              running: Boolean(schedulerState.running),
-              cronExpression: schedulerState.cronExpression,
-              lastRunAt: schedulerState.lastRunAt ? new Date(schedulerState.lastRunAt).toISOString() : null,
-              consecutiveErrors: schedulerState.consecutiveErrors || 0,
-            } : 'initializing',
-          })
-        );
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
         return;
       }
-
-      await handle(req, res, parsedUrl);
-    } catch (err) {
-      console.error('Error handling request:', err);
-      res.statusCode = 500;
-      res.end('Internal Server Error');
     }
-  });
 
-  // Attach Socket.IO for instant phone <-> PC synchronization
-  const io = new SocketIOServer(server, {
-    cors: {
-      origin: (origin, callback) => {
-        if (!origin || isOriginAllowed(origin)) {
-          return callback(null, true);
-        }
-        return callback(null, true); // Fallback to avoid drops while supporting cross-device connections
-      },
-      methods: ['GET', 'POST'],
-      credentials: true,
+    // Fast GET /health probe for Render health check, available before Next.js initializes.
+    if (parsedUrl.pathname === '/health' && req.method === 'GET') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache',
+      });
+      const schedulerState = global[Symbol.for('__NIGHTPLANNER_CRON_SCHEDULER__')];
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          service: 'night-planner-backend',
+          uptime: process.uptime(),
+          timestamp: new Date().toISOString(),
+          port: port,
+          scheduler: schedulerState ? {
+            running: Boolean(schedulerState.running),
+            cronExpression: schedulerState.cronExpression,
+            lastRunAt: schedulerState.lastRunAt ? new Date(schedulerState.lastRunAt).toISOString() : null,
+            consecutiveErrors: schedulerState.consecutiveErrors || 0,
+          } : 'initializing',
+        })
+      );
+      return;
+    }
+
+    if (!nextReady) {
+      res.writeHead(503, {
+        'Content-Type': 'application/json',
+        'Retry-After': '5',
+      });
+      res.end(JSON.stringify({ error: 'Application is initializing.' }));
+      return;
+    }
+    await handle(req, res, parsedUrl);
+  } catch (err) {
+    console.error('Error handling request:', err);
+    res.statusCode = 500;
+    res.end('Internal Server Error');
+  }
+});
+
+// Attach Socket.IO for instant phone <-> PC synchronization
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: (origin, callback) => {
+      if (!origin || isOriginAllowed(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, true); // Fallback to avoid drops while supporting cross-device connections
     },
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
+
+io.on('connection', (socket) => {
+  // When a device pushes updates, broadcast to other connected devices (Phone or PC)
+  socket.on('sync:push', (data) => {
+    socket.broadcast.emit('sync:remote_update', data);
   });
 
-  io.on('connection', (socket) => {
-    // When a device pushes updates, broadcast to other connected devices (Phone or PC)
-    socket.on('sync:push', (data) => {
-      socket.broadcast.emit('sync:remote_update', data);
-    });
-
-    socket.on('ping', () => {
-      socket.emit('pong');
-    });
+  socket.on('ping', () => {
+    socket.emit('pong');
   });
+});
 
-  server.listen(port, hostname, (err) => {
-    if (err) throw err;
-    console.log(`> Sam'Space server ready on http://${hostname}:${port}`);
-    console.log(`> Environment: ${process.env.NODE_ENV || 'production'}`);
-    if (process.env.CLIENT_URL) {
-      console.log(`> CORS & Socket.IO allowed origins: ${process.env.CLIENT_URL}`);
-    }
-    if (process.env.DATABASE_URL) {
-      console.log(`> Database configured (SSL enabled)`);
-    } else {
-      console.log(`> Running in local JSON database mode (DATABASE_URL not set)`);
-    }
-    console.log(`> Background scheduler: node-cron enabled (* * * * *)`);
-  });
-}).catch((err) => {
+server.on('error', (err) => {
   console.error('Failed to start server:', err);
   process.exit(1);
+});
+
+server.listen(port, hostname, () => {
+  console.log(`> Sam'Space server listening on http://${hostname}:${port}`);
+  console.log(`> Environment: ${process.env.NODE_ENV || 'production'}`);
+  if (process.env.CLIENT_URL) {
+    console.log(`> CORS & Socket.IO allowed origins: ${process.env.CLIENT_URL}`);
+  }
+  if (process.env.DATABASE_URL) {
+    console.log(`> Database configured (SSL enabled)`);
+  } else {
+    console.log(`> Running in local JSON database mode (DATABASE_URL not set)`);
+  }
+
+  setImmediate(() => {
+    app.prepare().then(() => {
+      nextReady = true;
+      console.log('> Next.js application initialized');
+      console.log(`> Background scheduler: node-cron enabled (* * * * *)`);
+    }).catch((err) => {
+      console.error('Failed to start server:', err);
+      process.exit(1);
+    });
+  });
 });
