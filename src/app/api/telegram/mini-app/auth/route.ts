@@ -3,8 +3,6 @@ import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/server/auth';
 import { getTelegramBotToken } from '@/lib/server/telegram';
 import { validateTelegramWebAppInitData } from '@/lib/server/telegramWebAppAuth';
 
-export const runtime = 'nodejs';
-
 const MINI_APP_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 function getAllowedTelegramUserIds(): Set<string> {
