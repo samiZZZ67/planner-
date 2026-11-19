@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       secure: process.env.NODE_ENV === 'production' || isCrossDomain,
       sameSite: isCrossDomain ? 'none' : 'lax',
       path: '/',
-      maxAge: 90 * 24 * 60 * 60, // 90 days
+      maxAge: 10 * 365 * 24 * 60 * 60, // 10 years (lifetime cookie)
     });
 
     return response;

@@ -92,6 +92,45 @@ export function getAppOrigin(): string {
   return 'https://your-planner-app.vercel.app';
 }
 
+export function getTelegramMiniAppUrl(): string {
+  const configuredUrl = process.env.TELEGRAM_MINI_APP_URL?.trim();
+  const appUrl = configuredUrl || `${getAppOrigin()}/mini-app`;
+  let parsed: URL;
+  try {
+    parsed = new URL(appUrl);
+  } catch {
+    throw new Error('Telegram Mini App URL must be a valid HTTPS URL.');
+  }
+  if (parsed.protocol !== 'https:') {
+    throw new Error('Telegram Mini App URL must use HTTPS.');
+  }
+  return parsed.toString();
+}
+
+let miniAppMenuConfiguredUrl = '';
+
+export async function configureTelegramMiniAppMenuButton(): Promise<void> {
+  const url = getTelegramMiniAppUrl();
+  if (miniAppMenuConfiguredUrl === url) return;
+  await telegramCall<boolean>('setChatMenuButton', {
+    menu_button: {
+      type: 'web_app',
+      text: 'AI Models',
+      web_app: { url },
+    },
+  });
+  miniAppMenuConfiguredUrl = url;
+}
+
+export async function sendTelegramMiniAppLaunchMessage(chatId: string | number): Promise<{ message_id: number }> {
+  const url = getTelegramMiniAppUrl();
+  return sendTelegramMessageWithKeyboard(
+    String(chatId),
+    'Open Planner AI to choose a model and continue your conversations.',
+    [[{ text: 'Open AI Models', web_app: { url } }]],
+  );
+}
+
 
 function readDeliveries(): TelegramDeliveryRecord[] {
   try {
@@ -319,6 +358,11 @@ export function envConfig() {
   return { token, chatId };
 }
 
+export async function getTelegramBotToken(): Promise<string> {
+  await loadTelegramConfigFromDb();
+  return process.env.TELEGRAM_BOT_TOKEN?.trim() || runtimeTelegramConfig.botToken || DEFAULT_TELEGRAM_BOT_TOKEN;
+}
+
 async function telegramCall<T>(method: string, payload?: unknown): Promise<T> {
   await loadTelegramConfigFromDb();
   const { token } = envConfig();
@@ -400,6 +444,7 @@ export interface InlineKeyboardButton {
   text: string;
   callback_data?: string;
   url?: string;
+  web_app?: { url: string };
 }
 
 export interface SendQuizPollParams {

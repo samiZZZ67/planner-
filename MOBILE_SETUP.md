@@ -28,7 +28,7 @@ The app defaults to `https://planner-26cd.onrender.com`. Override it with `--dar
 
 ## Backend deployment and sync
 
-Flutter sends planner data to the backend's `/api/sync` endpoint; it does not deploy backend source code. Push backend code to the GitHub branch connected to Render to trigger a deployment. The build moves the unused root Flutter starter out of Next.js route discovery so the routes under `src/app/` (including `/api/sync`) are built.
+Flutter sends planner data to the backend's `/api/sync` endpoint; it does not deploy backend source code. Push backend code to the GitHub branch connected to Render to trigger a deployment. Next.js routes live in `src/app/`; the native Flutter client lives in `mobile_app/`.
 
 For persistent authenticated cloud sync, configure these on the Render web service:
 

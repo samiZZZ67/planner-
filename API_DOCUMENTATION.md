@@ -39,9 +39,11 @@ The web browser's IndexedDB is a separate store. Export its JSON backup in web S
 
 ## AI routes
 
+- `POST /api/telegram/mini-app/auth` validates Telegram Web App `initData` with the bot token, checks `TELEGRAM_MINI_APP_ALLOWED_USER_IDS`, and returns a 12-hour signed session for the existing single-owner app.
 - `POST /api/ai/chat` accepts `{ "messages": [{"role":"user|assistant","content":"…"}], "context": {…}, "stream": false }`. The mobile Sam's AI screen supplies local task and section context, receives the `message.content` and actions, and saves history through `/api/ai/history`.
 - `GET /api/ai/history?assistant=sams_ai` returns conversations and messages. `POST /api/ai/history` supports `save_conversation` and `save_message` actions.
 - `POST /api/ai/freellm/chat` accepts the message array and optional model/mode settings; the mobile Moon AI screen currently supports text chat and saves conversations through history with `assistant: "freellm"`.
+- The Telegram Mini App at `/mini-app` uses the same FreeLLM model status, streaming chat, and history APIs. FreeLLM chat requires a signed session; Telegram sessions are issued only after `initData` validation and allowlist checks.
 - `POST /api/ai/weekly-report` generates a report from the saved weekly plan and its task/time-log context.
 - Provider credentials, image/video/speech generation, transcription, voice configuration, and provider selection remain server-side. Mobile does not transmit those secrets.
 

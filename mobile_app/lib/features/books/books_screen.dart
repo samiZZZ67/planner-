@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/planner_models.dart';
+import '../../core/network/api_client.dart';
 import '../../core/providers.dart';
 
 class BooksScreen extends ConsumerStatefulWidget {
@@ -29,11 +30,12 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
   }
 
   Future<void> _load() async {
-    if (mounted)
+    if (mounted) {
       setState(() {
         _loading = true;
         _error = null;
       });
+    }
     try {
       final response = await ref
           .read(apiClientProvider)
@@ -63,30 +65,41 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           .get<Map<String, dynamic>>(
             '/api/books/${Uri.encodeComponent(bookId)}/assignments',
           );
-      if (mounted)
+      if (mounted) {
         setState(
           () => _assignments[bookId] =
               (response.data?['assignments'] as List? ?? [])
                   .map(jsonMap)
                   .toList(),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     }
   }
 
   Future<void> _uploadBook() async {
-    final selected = await FilePicker.pickFiles(
+    final file = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: const ['pdf'],
-      withData: true,
-      allowMultiple: false,
     );
-    if (selected == null || selected.files.isEmpty) return;
-    final file = selected.files.single;
-    if (file.bytes == null) {
+    if (!mounted || file == null) return;
+
+    final Uint8List fileBytes;
+    try {
+      fileBytes = await file.readAsBytes();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
+      return;
+    }
+    if (!mounted) return;
+    if (fileBytes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('The selected PDF could not be read.')),
       );
@@ -187,8 +200,9 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           ),
           FilledButton(
             onPressed: () {
-              if (formKey.currentState?.validate() == true)
+              if (formKey.currentState?.validate() == true) {
                 Navigator.pop(dialogContext, true);
+              }
             },
             child: const Text('Upload'),
           ),
@@ -200,7 +214,7 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
     try {
       final form = FormData.fromMap({
         'pdf': MultipartFile.fromBytes(
-          file.bytes!,
+          fileBytes,
           filename: file.name,
           contentType: DioMediaType('application', 'pdf'),
         ),
@@ -224,7 +238,7 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
             options: Options(receiveTimeout: const Duration(minutes: 3)),
           );
       await _load();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -232,10 +246,12 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
             ),
           ),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     } finally {
       if (mounted) setState(() => _busyBook = null);
       title.dispose();
@@ -278,7 +294,7 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
         if (complete || jsonInt(data['batchProcessed']) == 0) break;
       }
       await _load();
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -286,10 +302,12 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
             ),
           ),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     } finally {
       if (mounted) setState(() => _busyBook = null);
     }
@@ -308,14 +326,16 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
             options: Options(receiveTimeout: const Duration(minutes: 3)),
           );
       await _loadAssignments(id);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Reading plan generated.')),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     } finally {
       if (mounted) setState(() => _busyBook = null);
     }
@@ -359,9 +379,10 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
         ),
       );
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     }
   }
 
@@ -399,14 +420,16 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           );
       await _load();
       await _loadAssignments(book['id'].toString());
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Reading assignment sent.')),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     }
   }
 
@@ -426,9 +449,10 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           );
       await _loadAssignments(book['id'].toString());
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     }
   }
 
@@ -446,9 +470,10 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           );
       await _loadAssignments(book['id'].toString());
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     }
   }
 
@@ -465,8 +490,9 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
             ),
           );
       final bytes = response.data;
-      if (bytes == null || bytes.isEmpty)
+      if (bytes == null || bytes.isEmpty) {
         throw const ApiFailure('The server returned an empty PDF.');
+      }
       final title = (book['title']?.toString() ?? 'book')
           .replaceAll(RegExp(r'[^a-zA-Z0-9 _-]'), '')
           .trim();
@@ -475,16 +501,18 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
         bytes: Uint8List.fromList(bytes),
         mimeType: 'application/pdf',
       );
-      if (uri != null && mounted)
+      if (uri != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('PDF saved to ${uri.path.isEmpty ? uri : uri.path}'),
           ),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     }
   }
 
@@ -518,9 +546,10 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
           );
       await _load();
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(_message(error))));
+      }
     }
   }
 
@@ -582,8 +611,9 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
               busy: _busyBook == book['id'],
               assignments: _assignments[book['id']?.toString()],
               onExpand: () {
-                if (!_assignments.containsKey(book['id']?.toString()))
+                if (!_assignments.containsKey(book['id']?.toString())) {
                   _loadAssignments(book['id'].toString());
+                }
               },
               onExtract: () => _extract(book),
               onGeneratePlan: () => _generatePlan(book),

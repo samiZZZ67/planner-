@@ -85,10 +85,11 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
     invalidatePlanningViews(ref);
     if (mounted) {
       setState(() => _saving = false);
-      if (!quiet)
+      if (!quiet) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Diary saved on this device.')),
         );
+      }
     }
   }
 
@@ -106,10 +107,11 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
       );
       if (image == null) return;
       final session = ref.read(sessionProvider);
-      if (session.status != SessionStatus.signedIn)
+      if (session.status != SessionStatus.signedIn) {
         throw const ApiFailure(
           'Sign in before uploading diary photos. Your written entry can still be saved locally.',
         );
+      }
       final form = FormData.fromMap({
         'file': await MultipartFile.fromFile(
           image.path,
@@ -128,14 +130,15 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
           .post<Map<String, dynamic>>('/api/files', data: form);
       final uploaded = jsonMap(response.data?['file']);
       final url = uploaded['secureUrl']?.toString();
-      if (url == null || url.isEmpty)
+      if (url == null || url.isEmpty) {
         throw const ApiFailure(
           'The server did not return the uploaded photo URL.',
         );
+      }
       final now = DateTime.now().millisecondsSinceEpoch;
       setState(
         () => _photos.add({
-          'id': uploaded['id']?.toString() ?? '${now.toRadixString(36)}',
+          'id': uploaded['id']?.toString() ?? now.toRadixString(36),
           'url': url,
           'filename': uploaded['originalFilename']?.toString() ?? image.name,
           'uploadedAt': jsonInt(uploaded['createdAt'], now),
@@ -192,9 +195,10 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
           ? (error.response?.data as Map)['error']?.toString() ??
                 'Could not delete the uploaded photo.'
           : 'Could not delete the uploaded photo: $error';
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(message)));
+      }
     }
   }
 
@@ -292,7 +296,7 @@ class _DiaryScreenState extends ConsumerState<DiaryScreen> {
                     child: Image.network(
                       photo['url']?.toString() ?? '',
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const ColoredBox(
+                      errorBuilder: (_, _, _) => const ColoredBox(
                         color: Colors.black12,
                         child: Icon(Icons.broken_image_outlined),
                       ),

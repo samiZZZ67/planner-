@@ -121,8 +121,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
           FilledButton(
             onPressed: () {
               final parsed = int.tryParse(minutes.text.trim());
-              if (parsed != null && parsed > 0 && parsed <= 1440)
+              if (parsed != null && parsed > 0 && parsed <= 1440) {
                 Navigator.pop(context, parsed);
+              }
             },
             child: const Text('Save time'),
           ),
@@ -233,8 +234,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
                               firstDate: DateTime.utc(2000),
                               lastDate: DateTime.utc(2100),
                             );
-                            if (selected != null)
+                            if (selected != null) {
                               setState(() => _date = toDateKey(selected));
+                            }
                           },
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8),

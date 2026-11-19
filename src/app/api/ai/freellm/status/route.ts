@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifySession } from '@/lib/server/auth';
 import {
   checkGatewayStatus,
   getGatewayConfig,
@@ -84,6 +85,9 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!(await verifySession(req))) {
+      return NextResponse.json({ ok: false, error: 'Sign in to update AI gateway settings.', code: 'AUTH_REQUIRED' }, { status: 401, headers: corsHeaders() });
+    }
     const body = await req.json().catch(() => ({}));
     if (body.clear) {
       await persistGatewayRuntimeConfig({ clear: true });

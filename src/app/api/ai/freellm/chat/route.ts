@@ -36,7 +36,10 @@ export async function OPTIONS() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getSessionUser(req);
-    const userId = session?.userId || 'owner';
+    if (!session?.authenticated) {
+      return NextResponse.json({ ok: false, error: 'Sign in to use the AI assistant.', code: 'AUTH_REQUIRED' }, { status: 401, headers: corsHeaders() });
+    }
+    const userId = session.userId;
     const body = await req.json().catch(() => null);
     if (!body) {
       return NextResponse.json(

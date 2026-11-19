@@ -101,6 +101,7 @@ export interface FreeLLMMessage {
   provider?: string;
   fallbackFrom?: string;
   latencyMs?: number;
+  operation?: boolean;
   attachments?: AttachmentItem[];
   generatedMedia?: GeneratedMedia;
 }
@@ -196,6 +197,7 @@ function formatFetchError(err: any): string {
 
 export function FreeLLMAssistant({
   isPhone = false,
+  miniAppMode = false,
   theme: propTheme,
   currentTab,
   onNavigateTab,
@@ -206,6 +208,7 @@ export function FreeLLMAssistant({
   currentTab?: string;
   onNavigateTab?: (tab: any) => void;
   currentDate?: string;
+  miniAppMode?: boolean;
 }) {
   // ── Theme State & Observer ──
   const [theme, setTheme] = useState<'dark' | 'light'>(propTheme || 'dark');
@@ -230,7 +233,7 @@ export function FreeLLMAssistant({
   const isDark = theme !== 'light';
 
   // ── 1. Assistant Visibility & Window States ──
-  const [windowState, setWindowState] = useState<'collapsed' | 'expanded' | 'maximized'>('collapsed');
+  const [windowState, setWindowState] = useState<'collapsed' | 'expanded' | 'maximized'>(() => miniAppMode ? 'maximized' : 'collapsed');
 
   // ── 2. Conversations & Hamburger Sidebar State ──
   const [conversations, setConversations] = useState<FreeLLMConversation[]>([]);
@@ -644,11 +647,18 @@ export function FreeLLMAssistant({
     setIsTestingGateway(true);
     setGatewayError(null);
     try {
+      const settingsHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      try {
+        const sessionToken = localStorage.getItem('np_session_token');
+        if (sessionToken) settingsHeaders.Authorization = `Bearer ${sessionToken}`;
+      } catch {
+        // The same-origin session cookie is still sent when browser storage is unavailable.
+      }
       const res = await fetchWithTimeout(
         '/api/ai/freellm/status',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: settingsHeaders,
           body: JSON.stringify(
             clear
               ? { clear: true }
@@ -1693,21 +1703,35 @@ export function FreeLLMAssistant({
   }, [wakeWordsList]);
 
   // ── Send Message to FreeLLMAPI Gateway & Multimodal Router ──
-  const handleSendMessage = async (customPrompt?: string, mode?: 'chat' | 'image_gen' | 'video_gen', isFromVoice = false) => {
-    const text = (customPrompt || input).trim();
-    if ((!text && attachments.length === 0) || isLoading) return;
+  const handleSendMessage = async (
+    customPrompt?: string,
+    mode?: 'chat' | 'image_gen' | 'video_gen',
+    isFromVoice = false,
+    regenerateUserMessageId?: string,
+  ) => {
+    const text = (customPrompt ?? input).trim();
+    const regenerationUserIndex = regenerateUserMessageId
+      ? messages.findIndex(message => message.id === regenerateUserMessageId && message.role === 'user')
+      : -1;
+    const regenerationUser = regenerationUserIndex >= 0 ? messages[regenerationUserIndex] : undefined;
+    if (regenerateUserMessageId && !regenerationUser) return;
+    const requestAttachments = regenerationUser?.attachments || attachments;
+    if ((!text && requestAttachments.length === 0) || isLoading) return;
 
-    const userMsg: FreeLLMMessage = {
-      id: `usr-${Date.now()}`,
-      role: 'user',
-      content: text,
-      timestamp: Date.now(),
-      attachments: attachments.length > 0 ? [...attachments] : undefined,
-    };
+    const userMsg: FreeLLMMessage = regenerationUser
+      ? { ...regenerationUser, id: `usr-${Date.now()}`, timestamp: Date.now() }
+      : {
+          id: `usr-${Date.now()}`,
+          role: 'user',
+          content: text,
+          timestamp: Date.now(),
+          attachments: attachments.length > 0 ? [...attachments] : undefined,
+        };
 
-    const updated = [...messages, userMsg];
+    const baseMessages = regenerationUser ? messages.slice(0, regenerationUserIndex) : messages;
+    const updated = [...baseMessages, userMsg];
     updateMessages(updated);
-    if (!customPrompt) setInput('');
+    if (!regenerateUserMessageId && !customPrompt) setInput('');
     setAttachments([]);
     setIsLoading(true);
 
@@ -1719,7 +1743,7 @@ export function FreeLLMAssistant({
     } else if (mode === 'video_gen' || isVideoGenModel(selectedModel) || isVideoGenerationRequest(text)) {
       initialLabel = 'Generating video stream...';
       initialLifecycle = 'using_tool';
-    } else if (attachments.some(a => a.dataUrl && (a.type?.startsWith('image/') || a.type?.includes('pdf') || a.dataUrl?.startsWith('data:image/')))) {
+    } else if (requestAttachments.some(a => a.dataUrl && (a.type?.startsWith('image/') || a.type?.includes('pdf') || a.dataUrl?.startsWith('data:image/')))) {
       initialLabel = 'Analyzing attachment with Gemini...';
       initialLifecycle = 'using_tool';
     } else if (/\b(?:telegram|post to telegram|send to telegram)\b/i.test(text)) {
@@ -1851,6 +1875,7 @@ export function FreeLLMAssistant({
         provider: data.provider,
         fallbackFrom: data.fallbackFrom,
         latencyMs: data.latencyMs,
+        operation: data.operation === true,
         generatedMedia: data.generatedMedia,
       };
 
@@ -1942,6 +1967,15 @@ export function FreeLLMAssistant({
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleRegenerateResponse = (assistantMessageId: string) => {
+    if (isLoading) return;
+    const responseIndex = messages.findIndex(message => message.id === assistantMessageId && message.role === 'assistant');
+    if (responseIndex < 0) return;
+    const sourceMessage = messages.slice(0, responseIndex).reverse().find(message => message.role === 'user');
+    if (!sourceMessage) return;
+    void handleSendMessage(sourceMessage.content, 'chat', false, sourceMessage.id);
   };
 
   // ── Drag & Drop Event Handlers ──
@@ -2114,12 +2148,14 @@ export function FreeLLMAssistant({
 
   return (
     <>
-    <TelegramQuickSend
-      isPhone={isPhone}
-      theme={isDark ? 'dark' : 'light'}
-      anchor={btnPos}
-      showTrigger={false}
-    />
+    {!miniAppMode && (
+      <TelegramQuickSend
+        isPhone={isPhone}
+        theme={isDark ? 'dark' : 'light'}
+        anchor={btnPos}
+        showTrigger={false}
+      />
+    )}
     <div
       role="dialog"
       aria-label="FreeLLM Multimodal Assistant Window"
@@ -2132,7 +2168,7 @@ export function FreeLLMAssistant({
         right: isPhone || isMax ? 0 : 20,
         bottom: isPhone || isMax ? 0 : 20,
         width: isPhone || isMax ? '100vw' : isSidebarOpen ? 'min(760px, calc(100vw - 32px))' : 'min(500px, calc(100vw - 32px))',
-        height: isPhone || isMax ? '100vh' : 'min(730px, calc(100vh - 40px))',
+        height: miniAppMode ? 'var(--tg-viewport-height, 100dvh)' : isPhone || isMax ? '100vh' : 'min(730px, calc(100vh - 40px))',
         zIndex: 85,
         display: 'flex',
         flexDirection: 'column',
@@ -2219,7 +2255,7 @@ export function FreeLLMAssistant({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontWeight: 600, fontSize: 13.5, letterSpacing: '0.01em', color: 'var(--text-primary)' }}>
-                FreeLLM Moon Assistant
+                {miniAppMode ? 'AI Models' : 'FreeLLM Moon Assistant'}
               </span>
               <span
                 style={{
@@ -2234,7 +2270,7 @@ export function FreeLLMAssistant({
                   letterSpacing: '0.05em',
                 }}
               >
-                Multimodal
+                {miniAppMode ? 'Telegram' : 'Multimodal'}
               </span>
             </div>
 
@@ -2261,6 +2297,7 @@ export function FreeLLMAssistant({
 
         {/* Window Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {!miniAppMode && <>
           {/* Voice Mode Toggle */}
           <button
             onClick={toggleVoiceMode}
@@ -2374,9 +2411,10 @@ export function FreeLLMAssistant({
           >
             <Trash2 style={{ width: 14, height: 14 }} />
           </button>
+          </>}
 
           {/* Maximize / Restore Toggle (desktop) */}
-          {!isPhone && (
+          {!miniAppMode && !isPhone && (
             <button
               onClick={() => setWindowState(prev => (prev === 'maximized' ? 'expanded' : 'maximized'))}
               aria-label={isMax ? 'Restore window size' : 'Maximize window'}
@@ -2398,7 +2436,7 @@ export function FreeLLMAssistant({
           )}
 
           {/* Minimize / Collapse to Moon Button */}
-          <button
+          {!miniAppMode && <button
             onClick={() => setWindowState('collapsed')}
             aria-label="Collapse to floating Moon button"
             title="Collapse to Moon button"
@@ -2415,7 +2453,7 @@ export function FreeLLMAssistant({
             }}
           >
             <X style={{ width: 14, height: 14 }} />
-          </button>
+          </button>}
         </div>
       </header>
 
@@ -4015,8 +4053,9 @@ export function FreeLLMAssistant({
           gap: 14,
         }}
       >
-        {messages.map(msg => {
+        {messages.map((msg, messageIndex) => {
           const isUser = msg.role === 'user';
+          const canRegenerate = !isUser && !msg.operation && messages.slice(0, messageIndex).some(message => message.role === 'user');
           return (
             <div
               key={msg.id}
@@ -4314,6 +4353,27 @@ export function FreeLLMAssistant({
                         <Copy style={{ width: 12, height: 12 }} /> Copy
                       </>
                     )}
+                  </button>
+
+                  <button
+                    onClick={() => handleRegenerateResponse(msg.id)}
+                    title="Regenerate response"
+                    aria-label="Regenerate response"
+                    disabled={isLoading || !msg.content.trim() || !canRegenerate}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      fontSize: 11,
+                      cursor: isLoading || !msg.content.trim() || !canRegenerate ? 'not-allowed' : 'pointer',
+                      opacity: isLoading || !msg.content.trim() || !canRegenerate ? 0.45 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: 2,
+                    }}
+                  >
+                    <RefreshCw style={{ width: 12, height: 12 }} /> Regenerate
                   </button>
 
                   {/* Upgraded Neural Voice Playback Controls & Status */}

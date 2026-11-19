@@ -103,15 +103,21 @@ export function clearRateLimit(ip: string): void {
   memoryAttempts.delete(ip);
 }
 
+const ONE_HUNDRED_YEARS_MS = 100 * 365 * 24 * 60 * 60 * 1000;
+
 /**
- * Create 90-day signed session token
+ * Create lifetime signed session token (default 100 years)
  */
-export async function createSessionToken(userId: string = 'owner'): Promise<string> {
+export async function createSessionToken(
+  userId: string = 'owner',
+  expiresInMs: number = ONE_HUNDRED_YEARS_MS
+): Promise<string> {
+  const now = Date.now();
   const payload = JSON.stringify({
     authenticated: true,
     userId,
-    issuedAt: Date.now(),
-    expiresAt: Date.now() + 90 * 24 * 60 * 60 * 1000, // 90 days
+    issuedAt: now,
+    expiresAt: expiresInMs > 0 ? now + expiresInMs : 0,
   });
   return await sign(Buffer.from(payload).toString('base64url'), getSecretKey());
 }
@@ -157,7 +163,8 @@ export async function getSessionUser(req?: Request | any): Promise<SessionUser |
     if (!rawPayload) return null;
 
     const data = JSON.parse(Buffer.from(rawPayload, 'base64url').toString('utf8'));
-    if (!data.authenticated || Date.now() > data.expiresAt) {
+    const isExpired = typeof data.expiresAt === 'number' && data.expiresAt > 0 && Date.now() > data.expiresAt;
+    if (!data.authenticated || isExpired) {
       return null;
     }
     return {

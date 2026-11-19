@@ -42,6 +42,23 @@ describe('Authoritative Master Password Auth System', () => {
     expect(isValid).toBe(true);
   });
 
+  it('should accept non-expiring lifetime tokens with expiresAt: 0', async () => {
+    const lifetimeToken = await createSessionToken('owner', 0);
+    const fakeReq = {
+      headers: {
+        get: (name: string) => (name.toLowerCase() === 'authorization' ? `Bearer ${lifetimeToken}` : null),
+      },
+    };
+
+    const user = await getSessionUser(fakeReq);
+    expect(user).not.toBeNull();
+    expect(user?.authenticated).toBe(true);
+    expect(user?.expiresAt).toBe(0);
+
+    const isValid = await verifySession(fakeReq);
+    expect(isValid).toBe(true);
+  });
+
   it('should reject tampered tokens', async () => {
     const token = await createSessionToken('owner');
     const tampered = token.slice(0, -4) + 'abcd';

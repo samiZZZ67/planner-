@@ -117,7 +117,7 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
     final book = jsonMap(_quiz['book']);
     final questions = (_quiz['questions'] as List? ?? []).map(jsonMap).toList();
     final results = (_result?['results'] as List? ?? []).map(jsonMap).toList();
-    if (_error != null && questions.isEmpty)
+    if (_error != null && questions.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -131,6 +131,7 @@ class _QuizScreenState extends ConsumerState<QuizScreen> {
           ),
         ),
       );
+    }
     return ListView(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
       children: [

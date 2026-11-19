@@ -6,7 +6,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/theme.dart';
 import '../../core/providers.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -54,24 +53,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await ref
           .read(localDatabaseProvider)
           .setMeta('apiBaseUrl', api.dio.options.baseUrl);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('API URL saved on this device.')),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
     }
   }
 
   Future<void> _setCalendarMode(String value) async {
     setState(() => _calendarMode = value);
     await ref.read(calendarModeProvider.notifier).setMode(value);
-    if (mounted)
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Calendar preference saved.')),
       );
+    }
   }
 
   Future<void> _export() async {
@@ -94,7 +96,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         mimeType: 'application/json',
         dialogTitle: 'Save Sam\'Space backup',
       );
-      if (uri != null && mounted)
+      if (uri != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -102,11 +104,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not export data: $error')),
         );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -119,7 +123,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       withData: true,
       allowMultiple: false,
     );
-    if (result == null || result.files.isEmpty) return;
+    if (result.files.isEmpty) return;
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -147,8 +151,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ? utf8.decode(file.bytes!)
           : await File(file.path!).readAsString();
       final root = jsonDecode(raw);
-      if (root is! Map || root['data'] is! Map)
+      if (root is! Map || root['data'] is! Map) {
         throw const FormatException('This file is not a Sam\'Space backup.');
+      }
       final data = (root['data'] as Map).map(
         (key, value) => MapEntry(key.toString(), value),
       );
@@ -165,7 +170,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (records is List) await db.putImportedRecords(collection, records);
       }
       invalidatePlanningViews(ref);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -173,11 +178,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not import this backup: $error')),
         );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
