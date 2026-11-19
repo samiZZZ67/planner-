@@ -5,13 +5,27 @@ import { validateTelegramWebAppInitData } from '@/lib/server/telegramWebAppAuth'
 
 const MINI_APP_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
-function getAllowedTelegramUserIds(): Set<string> {
-  return new Set(
-    (process.env.TELEGRAM_MINI_APP_ALLOWED_USER_IDS || '')
-      .split(',')
-      .map(id => id.trim())
+function getAllowedTelegramUserIds(): { ids: Set<string>; configured: boolean } {
+  const pluralValue = process.env.TELEGRAM_MINI_APP_ALLOWED_USER_IDS?.trim();
+  const singularValue = process.env.TELEGRAM_MINI_APP_ALLOWED_USER_ID?.trim();
+  const value = pluralValue || singularValue || '';
+  let candidates: string[];
+
+  try {
+    const parsed = value.startsWith('[') ? JSON.parse(value) : null;
+    candidates = Array.isArray(parsed)
+      ? parsed.map(id => String(id))
+      : value.split(/[,;\s]+/);
+  } catch {
+    candidates = value.split(/[,;\s]+/);
+  }
+
+  const ids = new Set(
+    candidates
+      .map(id => id.trim().replace(/^['"]|['"]$/g, ''))
       .filter(id => /^\d+$/.test(id)),
   );
+  return { ids, configured: Boolean(value) };
 }
 
 export async function POST(request: Request) {
@@ -29,17 +43,21 @@ export async function POST(request: Request) {
     }
 
     const telegramUserId = String(verified.user.id);
-    const allowedUserIds = getAllowedTelegramUserIds();
-    if (allowedUserIds.size === 0) {
+    const allowlist = getAllowedTelegramUserIds();
+    if (allowlist.ids.size === 0) {
+      const reason = allowlist.configured
+        ? 'The server received the allowlist setting but could not parse a numeric Telegram ID from it.'
+        : 'The server is not receiving the Mini App allowlist setting.';
       return NextResponse.json({
         ok: false,
-        error: `Mini App access is not configured. Add Telegram user ID ${telegramUserId} to TELEGRAM_MINI_APP_ALLOWED_USER_IDS.`,
+        error: `${reason} Set TELEGRAM_MINI_APP_ALLOWED_USER_IDS=${telegramUserId} on the Render web service, then redeploy.`,
         code: 'MINI_APP_NOT_CONFIGURED',
         telegramUserId,
+        allowlistConfigured: allowlist.configured,
       }, { status: 503 });
     }
 
-    if (!allowedUserIds.has(telegramUserId)) {
+    if (!allowlist.ids.has(telegramUserId)) {
       return NextResponse.json({
         ok: false,
         error: `This Telegram account is not authorized for the Planner Mini App. Telegram user ID: ${telegramUserId}.`,
