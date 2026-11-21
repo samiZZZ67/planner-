@@ -70,9 +70,9 @@ Add the following environment variables in your Render Web Service dashboard und
 | `BOOK_DATA_DIR` | Recommended for book uploads | `/var/data` | Directory for private uploaded PDFs and cached OCR language data. Mount a persistent disk at the same path in Render. |
 | `TELEGRAM_BOT_TOKEN` | For Telegram publishing | *(BotFather token)* | Secret backend environment variable. Do not use a `NEXT_PUBLIC_` name or paste the token into chat. |
 | `TELEGRAM_CHAT_ID` | For Telegram publishing | `@your_channel` or numeric ID | Backend environment variable for the destination channel. The bot must be an administrator with permission to post. |
-| `TELEGRAM_WEBHOOK_SECRET` | Required for Telegram `/start` launch command | *(random secret)* | Validates Telegram webhook requests. Configure the same value as the webhook's Telegram `secret_token`; keep server-side only. |
+| `TELEGRAM_WEBHOOK_SECRET` | Required for Telegram bot chat and Mini App launch | *(random secret)* | Validates Telegram webhook requests. Configure the same value as the webhook's Telegram `secret_token`; keep server-side only. |
 | `TELEGRAM_MINI_APP_URL` | Optional | `https://your-planner.onrender.com/mini-app` | Public HTTPS Telegram Mini App URL. Defaults to the deployed app origin plus `/mini-app`. |
-| `TELEGRAM_MINI_APP_ALLOWED_USER_IDS` | Required for Mini App access | `123456789` | Comma-separated numeric Telegram user IDs allowed to use the planner owner account and shared AI history. |
+| `TELEGRAM_MINI_APP_ALLOWED_USER_IDS` | Required for Telegram AI access | `123456789` | Comma-separated numeric Telegram user IDs allowed to use the Planner Mini App and direct private AI chat. |
 | `BOOKS_CRON_SECRET` | For scheduled publishing | *(random secret, 32+ characters)* | Same secret on the web service and Render Cron service. It protects the scheduler endpoint. |
 | `BRIEFS_CRON_SECRET` | For scheduled briefs | *(random secret, 32+ characters)* | Protects the scheduled briefs endpoint. |
 | `PDF_OCR_LANGS` | Optional | `eng` | Tesseract OCR language code(s), joined with `+`, such as `eng+fra`. The first OCR run downloads language data unless `TESSERACT_LANG_PATH` is configured in the application environment. |
@@ -86,11 +86,15 @@ For book PDFs on Render, attach a persistent disk to the **web service** at `/va
 
 To connect Telegram, open Render **Dashboard → your NightPlanner web service → Environment**, add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`, and redeploy. The connection check is available in the authenticated endpoint `GET /api/telegram/status`; delivery history is `GET /api/telegram/deliveries`. A manual publish request is `POST /api/books/{bookId}/assignments/{assignmentId}/publish` and requires an approved assignment. The application checks the bot's channel membership and posting permission before sending. Never include the bot token in frontend settings or client requests.
 
+### Telegram direct AI chat
+
+Authorized users can chat with Moon in a private conversation with the Planner bot. Send `/start`, then send a text message; use `/model` to open the paginated model buttons, `/new` to start another conversation, `/history` to browse saved chats, and `/help` to see the commands. The chat uses the existing FreeLLM gateway and Planner context. Each Telegram user ID has its own selected model and saved conversation history in Neon (with the app's local data store as fallback).
+
 ### Telegram AI Mini App
 
 The existing FreeLLM assistant is also available at `/mini-app`. It uses the current model catalog, streaming chat endpoint, and FreeLLM conversation history. The app validates Telegram's signed `initData` on the backend before issuing a 12-hour owner session. Access is restricted to the IDs in `TELEGRAM_MINI_APP_ALLOWED_USER_IDS` because Planner and FreeLLM history currently share the single-owner account. When the allowlist is empty, the Mini App displays the signed Telegram user ID so it can be added to Render's environment.
 
-Set `TELEGRAM_MINI_APP_ALLOWED_USER_IDS` to your Telegram numeric user ID, and set `TELEGRAM_MINI_APP_URL` to the deployed HTTPS Mini App URL if the automatic app origin does not match. In production, the backend registers `/api/telegram/webhook` with Telegram using `TELEGRAM_WEBHOOK_SECRET` and configures the bot menu button at startup. After deploying these changes and environment variables, send `/start` to the bot in a private chat; it replies with an **Open AI Models** button.
+Set `TELEGRAM_MINI_APP_ALLOWED_USER_IDS` to your Telegram numeric user ID, and set `TELEGRAM_MINI_APP_URL` to the deployed HTTPS Mini App URL if the automatic app origin does not match. In production, the backend registers `/api/telegram/webhook` with Telegram using `TELEGRAM_WEBHOOK_SECRET` and configures the bot menu button at startup. After deploying these settings, send `/start` to the bot in a private chat; it offers direct chat and the existing Mini App launch button. The bot menu button continues to open the Mini App.
 
 ### Scheduled Telegram Publishing & Automatic Background Scheduler (`node-cron`)
 

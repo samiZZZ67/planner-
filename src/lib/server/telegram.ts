@@ -440,6 +440,33 @@ export async function sendTelegramMessageWithFallback(
   }
 }
 
+/** Send unformatted Telegram text without HTML parsing or markup interpretation. */
+export async function sendTelegramPlainText(
+  chatId: string | number,
+  text: string,
+  disableWebPagePreview = true,
+): Promise<{ message_id: number }> {
+  return telegramCall<{ message_id: number }>('sendMessage', {
+    chat_id: String(chatId),
+    text: sanitizeUtf8(text),
+    disable_web_page_preview: disableWebPagePreview,
+  });
+}
+
+export async function sendTelegramPlainTextWithKeyboard(
+  chatId: string | number,
+  text: string,
+  keyboard: InlineKeyboardButton[][],
+  disableWebPagePreview = true,
+): Promise<{ message_id: number }> {
+  return telegramCall<{ message_id: number }>('sendMessage', {
+    chat_id: String(chatId),
+    text: sanitizeUtf8(text),
+    disable_web_page_preview: disableWebPagePreview,
+    reply_markup: { inline_keyboard: keyboard },
+  });
+}
+
 export interface InlineKeyboardButton {
   text: string;
   callback_data?: string;

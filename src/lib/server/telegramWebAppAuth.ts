@@ -14,6 +14,29 @@ export interface VerifiedTelegramWebAppInitData {
   user: VerifiedTelegramWebAppUser;
 }
 
+export function getAllowedTelegramUserIds(): { ids: Set<string>; configured: boolean } {
+  const pluralValue = process.env.TELEGRAM_MINI_APP_ALLOWED_USER_IDS?.trim();
+  const singularValue = process.env.TELEGRAM_MINI_APP_ALLOWED_USER_ID?.trim();
+  const value = pluralValue || singularValue || '';
+  let candidates: string[];
+
+  try {
+    const parsed = value.startsWith('[') ? JSON.parse(value) : null;
+    candidates = Array.isArray(parsed)
+      ? parsed.map(id => String(id))
+      : value.split(/[,;\s]+/);
+  } catch {
+    candidates = value.split(/[,;\s]+/);
+  }
+
+  const ids = new Set(
+    candidates
+      .map(id => id.trim().replace(/^['"]|['"]$/g, ''))
+      .filter(id => /^\d+$/.test(id)),
+  );
+  return { ids, configured: Boolean(value) };
+}
+
 const MAX_INIT_DATA_AGE_SECONDS = 24 * 60 * 60;
 const ALLOWED_FUTURE_SKEW_SECONDS = 60;
 

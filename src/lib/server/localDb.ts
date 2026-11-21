@@ -14,6 +14,7 @@ interface ServerDbData {
   aiConversations?: Record<string, any>;
   aiMessages?: Record<string, any>;
   freellmConversations?: Record<string, any>;
+  telegramAiChats?: Record<string, { telegramUserId: string }>;
 }
 
 const DATA_DIR = path.join(process.cwd(), '.data');
@@ -33,6 +34,7 @@ function ensureDataFile(): ServerDbData {
       if (!parsed.aiConversations) parsed.aiConversations = {};
       if (!parsed.aiMessages) parsed.aiMessages = {};
       if (!parsed.freellmConversations) parsed.freellmConversations = {};
+      if (!parsed.telegramAiChats) parsed.telegramAiChats = {};
       return parsed;
     }
   } catch {
@@ -51,6 +53,7 @@ function ensureDataFile(): ServerDbData {
     aiConversations: {},
     aiMessages: {},
     freellmConversations: {},
+    telegramAiChats: {},
   };
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), 'utf-8');
@@ -414,6 +417,20 @@ export function deleteFreeLLMConversationLocal(id: string) {
     saveDb(db);
   }
   return true;
+}
+
+export function getTelegramAiChatLocal(telegramUserId: string): unknown {
+  const db = getDb();
+  if (!db.telegramAiChats) db.telegramAiChats = {};
+  return db.telegramAiChats[telegramUserId] || null;
+}
+
+export function saveTelegramAiChatLocal<T extends { telegramUserId: string }>(state: T): T {
+  const db = getDb();
+  if (!db.telegramAiChats) db.telegramAiChats = {};
+  db.telegramAiChats[state.telegramUserId] = state;
+  saveDb(db);
+  return state;
 }
 
 

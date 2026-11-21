@@ -40,6 +40,7 @@ The web browser's IndexedDB is a separate store. Export its JSON backup in web S
 ## AI routes
 
 - `POST /api/telegram/mini-app/auth` validates Telegram Web App `initData` with the bot token, checks `TELEGRAM_MINI_APP_ALLOWED_USER_IDS`, and returns a 12-hour signed session for the existing single-owner app.
+- The Telegram bot also supports private direct AI chat with `/start`, `/model`, `/new`, `/history`, and `/help`. It uses the same FreeLLM gateway and Planner context as Moon, and saves conversations by authorized Telegram user ID. Configure `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_MINI_APP_ALLOWED_USER_IDS` on the backend; `/start` keeps the Mini App launch button available.
 - `POST /api/ai/chat` accepts `{ "messages": [{"role":"user|assistant","content":"…"}], "context": {…}, "stream": false }`. The mobile Sam's AI screen supplies local task and section context, receives the `message.content` and actions, and saves history through `/api/ai/history`.
 - `GET /api/ai/history?assistant=sams_ai` returns conversations and messages. `POST /api/ai/history` supports `save_conversation` and `save_message` actions.
 - `POST /api/ai/freellm/chat` accepts the message array and optional model/mode settings; the mobile Moon AI screen currently supports text chat and saves conversations through history with `assistant: "freellm"`.

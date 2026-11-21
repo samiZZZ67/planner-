@@ -1,32 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createSessionToken, SESSION_COOKIE_NAME } from '@/lib/server/auth';
 import { getTelegramBotToken } from '@/lib/server/telegram';
-import { validateTelegramWebAppInitData } from '@/lib/server/telegramWebAppAuth';
+import { getAllowedTelegramUserIds, validateTelegramWebAppInitData } from '@/lib/server/telegramWebAppAuth';
 
 const MINI_APP_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-
-function getAllowedTelegramUserIds(): { ids: Set<string>; configured: boolean } {
-  const pluralValue = process.env.TELEGRAM_MINI_APP_ALLOWED_USER_IDS?.trim();
-  const singularValue = process.env.TELEGRAM_MINI_APP_ALLOWED_USER_ID?.trim();
-  const value = pluralValue || singularValue || '';
-  let candidates: string[];
-
-  try {
-    const parsed = value.startsWith('[') ? JSON.parse(value) : null;
-    candidates = Array.isArray(parsed)
-      ? parsed.map(id => String(id))
-      : value.split(/[,;\s]+/);
-  } catch {
-    candidates = value.split(/[,;\s]+/);
-  }
-
-  const ids = new Set(
-    candidates
-      .map(id => id.trim().replace(/^['"]|['"]$/g, ''))
-      .filter(id => /^\d+$/.test(id)),
-  );
-  return { ids, configured: Boolean(value) };
-}
 
 export async function POST(request: Request) {
   try {
