@@ -216,6 +216,9 @@ describe('AI-Powered Telegram Message Formatting Suite', () => {
         sentRequests.push(payload);
         return new Response(JSON.stringify({ ok: true, result: { message_id: 501 + sentRequests.length } }), { status: 200 });
       }
+      if (u.endsWith('/sendDocument')) {
+        return new Response(JSON.stringify({ ok: true, result: { message_id: 901 } }), { status: 200 });
+      }
       return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
     }));
 

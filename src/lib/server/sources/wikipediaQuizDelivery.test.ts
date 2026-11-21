@@ -354,7 +354,7 @@ describe('Wikipedia Research, Concept Grounding, Deduplication & Telegram Quiz L
 
       vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
         const u = String(url);
-        const body = init?.body ? JSON.parse(String(init.body)) : null;
+        const body = u.endsWith('/sendDocument') ? null : (init?.body ? JSON.parse(String(init.body)) : null);
         sentRequests.push({ url: u, body });
 
         if (u.endsWith('/getMe')) {
@@ -368,6 +368,9 @@ describe('Wikipedia Research, Concept Grounding, Deduplication & Telegram Quiz L
         }
         if (u.endsWith('/sendMessage')) {
           return new Response(JSON.stringify({ ok: true, result: { message_id: 5001 + sentRequests.length } }), { status: 200 });
+        }
+        if (u.endsWith('/sendDocument')) {
+          return new Response(JSON.stringify({ ok: true, result: { message_id: 6001 + sentRequests.length } }), { status: 200 });
         }
         if (u.endsWith('/sendPoll')) {
           throw new Error('sendPoll should NEVER be called when delivering reading assignments to Telegram!');

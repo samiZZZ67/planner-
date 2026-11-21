@@ -308,6 +308,7 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
   describe('2. Delivery Execution & Duplicate Delivery Prevention', () => {
     it('dispatches all message parts to Telegram Bot API with parse_mode HTML', async () => {
       const dispatchedBodies: any[] = [];
+      const dispatchedDocuments: Array<{ filename: string; content: string }> = [];
       vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
         const u = String(url);
         if (u.endsWith('/getMe')) {
@@ -324,6 +325,11 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
           dispatchedBodies.push(body);
           return new Response(JSON.stringify({ ok: true, result: { message_id: 1000 + dispatchedBodies.length } }), { status: 200 });
         }
+        if (u.endsWith('/sendDocument')) {
+          const file = (init?.body as FormData).get('document') as File;
+          dispatchedDocuments.push({ filename: file.name, content: await file.text() });
+          return new Response(JSON.stringify({ ok: true, result: { message_id: 2000 + dispatchedDocuments.length } }), { status: 200 });
+        }
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       }));
 
@@ -338,7 +344,10 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
 
       expect(delivery.status).toBe('completed');
       expect(delivery.telegramMessageIds.length).toBeGreaterThanOrEqual(1);
-      expect(dispatchedBodies.length).toBe(delivery.telegramMessageIds.length);
+      expect(dispatchedBodies.length + dispatchedDocuments.length).toBe(delivery.telegramMessageIds.length);
+      expect(dispatchedDocuments[0].filename).toMatch(/\.md$/);
+      expect(dispatchedDocuments[0].content).toContain('## [PDF Page 10]');
+      expect(dispatchedDocuments[0].content).toContain('Habits are the compound interest of self-improvement.');
       expect(dispatchedBodies[0].parse_mode).toBe('HTML');
       expect(dispatchedBodies[0].chat_id).toBe('@SamSpac');
     });
@@ -350,6 +359,7 @@ describe('Telegram Book Delivery Content Structure & 7 Sections Suite', () => {
         if (u.endsWith('/getChat')) return new Response(JSON.stringify({ ok: true, result: { id: -1, title: 'Chan', type: 'channel' } }));
         if (u.endsWith('/getChatMember')) return new Response(JSON.stringify({ ok: true, result: { status: 'administrator', can_post_messages: true } }));
         if (u.endsWith('/sendMessage')) return new Response(JSON.stringify({ ok: true, result: { message_id: 999 } }));
+        if (u.endsWith('/sendDocument')) return new Response(JSON.stringify({ ok: true, result: { message_id: 1000 } }));
         return new Response(JSON.stringify({ ok: true }));
       }));
 

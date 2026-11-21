@@ -92,6 +92,8 @@ describe('Telegram reading assignment formatting', () => {
     process.env.TELEGRAM_BOT_TOKEN = 'test-token';
     process.env.TELEGRAM_CHAT_ID = '-1001234567890';
     const sentMessages: any[] = [];
+    const sentDocuments: Array<{ filename: string; content: string }> = [];
+    const sentOrder: string[] = [];
 
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       const u = String(url);
@@ -107,7 +109,15 @@ describe('Telegram reading assignment formatting', () => {
       if (u.endsWith('/sendMessage')) {
         const body = JSON.parse(String(init?.body || '{}'));
         sentMessages.push(body);
-        return new Response(JSON.stringify({ ok: true, result: { message_id: 100 + sentMessages.length } }), { status: 200 });
+        sentOrder.push('message');
+        return new Response(JSON.stringify({ ok: true, result: { message_id: 100 + sentMessages.length + sentDocuments.length } }), { status: 200 });
+      }
+      if (u.endsWith('/sendDocument')) {
+        const form = init?.body as FormData;
+        const file = form.get('document') as File;
+        sentDocuments.push({ filename: file.name, content: await file.text() });
+        sentOrder.push('document');
+        return new Response(JSON.stringify({ ok: true, result: { message_id: 100 + sentMessages.length + sentDocuments.length } }), { status: 200 });
       }
       return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
     }));
@@ -127,10 +137,18 @@ describe('Telegram reading assignment formatting', () => {
       expect(result.delivery.telegramMessageIds.length).toBeGreaterThan(0);
       expect(sentMessages.length).toBeGreaterThan(0);
       expect(sentMessages[0].text).toContain('Reading Load Plan');
+      expect(sentDocuments).toHaveLength(1);
+      expect(sentDocuments[0].filename).toMatch(/\.md$/);
+      expect(sentDocuments[0].content).toContain('## [PDF Page 1]');
+      expect(sentDocuments[0].content).toContain(`Exact source\ntext ${String.fromCharCode(0x2014)} with punctuation.`);
+      expect(sentDocuments[0].content).not.toMatch(/Study Summary|Key Concepts/);
+      expect(sentOrder[0]).toBe('document');
+      expect(sentMessages.some(body => body.text.includes('Original Extracted Text'))).toBe(false);
       const firstDeliveryCount = sentMessages.length;
       const repeated = await publishLoadPlanPagesToTelegram('owner', book, testAssignment, [page]);
       expect(repeated.delivery.id).toBe(result.delivery.id);
       expect(sentMessages.length).toBe(firstDeliveryCount);
+      expect(sentDocuments).toHaveLength(1);
       // Original assignment scheduled date was NOT modified by the delivery
       expect(testAssignment.scheduledDate).toBe('2026-10-15');
       expect(testAssignment.dayNumber).toBe(1);

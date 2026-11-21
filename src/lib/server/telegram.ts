@@ -11,6 +11,11 @@ export { formatTelegramMessage, splitTelegramHtml, stripHtml, sanitizeUtf8, sani
 export { researchReadingEnrichment, type EnrichedReadingContent } from './sources/enrichment';
 
 export type TelegramDeliveryStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'uncertain';
+export interface TelegramMarkdownFile {
+  filename: string;
+  content: string;
+}
+
 export interface TelegramDeliveryRecord {
   id: string;
   userId: string;
@@ -19,6 +24,8 @@ export interface TelegramDeliveryRecord {
   status: TelegramDeliveryStatus;
   messageParts: string[];
   nextPart: number;
+  markdownFiles?: TelegramMarkdownFile[];
+  nextMarkdownFile?: number;
   telegramMessageIds: number[];
   imageFilename?: string;
   imagePage?: number;
@@ -467,6 +474,50 @@ export async function sendTelegramPlainTextWithKeyboard(
   });
 }
 
+export async function sendTelegramMarkdownDocument(
+  chatId: string | number,
+  filename: string,
+  content: string,
+): Promise<{ message_id: number }> {
+  const bytes = new TextEncoder().encode(content);
+  if (!filename.toLowerCase().endsWith('.md')) throw new Error('Telegram book exports must use the .md extension.');
+  if (bytes.byteLength <= 0 || bytes.byteLength > MAX_MARKDOWN_DOCUMENT_BYTES) {
+    throw new Error('The Markdown export is empty or exceeds Telegram’s document size limit.');
+  }
+  const { token } = envConfig();
+  const form = new FormData();
+  form.set('chat_id', String(chatId));
+  form.set('document', new Blob([bytes], { type: 'text/markdown; charset=utf-8' }), filename);
+
+  let response: Response;
+  try {
+    response = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+      method: 'POST',
+      body: form,
+      signal: AbortSignal.timeout(60_000),
+      cache: 'no-store',
+    });
+  } catch {
+    throw Object.assign(new Error('Telegram Markdown upload timed out or could not connect. Check the channel before retrying.'), { uncertain: true });
+  }
+  const data = await response.json().catch(() => null) as {
+    ok?: boolean;
+    result?: { message_id?: number };
+    description?: string;
+    error_code?: number;
+    parameters?: { retry_after?: number };
+  } | null;
+  if (!response.ok || !data?.ok || !data.result?.message_id) {
+    const code = data?.error_code ?? response.status;
+    if (code === 429 && data?.parameters?.retry_after) {
+      throw Object.assign(new Error(`Telegram rate limited the Markdown upload; retry after ${data.parameters.retry_after} seconds.`), { retryAfter: data.parameters.retry_after });
+    }
+    if (code >= 500) throw Object.assign(new Error('Telegram is temporarily unavailable while uploading the Markdown file.'), { transient: true });
+    throw new Error(data?.description || `Telegram Markdown upload failed (${code}).`);
+  }
+  return { message_id: data.result.message_id };
+}
+
 export interface InlineKeyboardButton {
   text: string;
   callback_data?: string;
@@ -774,6 +825,50 @@ export function splitTelegramText(text: string, max = 3500): string[] {
   return parts.length ? parts.map(part => sanitizeUtf8(part)) : [''];
 }
 
+const MAX_MARKDOWN_DOCUMENT_BYTES = 40 * 1024 * 1024;
+
+/** Build verbatim, page-labelled Markdown documents directly from extracted PDF text. */
+export function createOriginalBookMarkdownFiles(
+  book: BookRecord,
+  assignment: BookAssignmentRecord,
+  pages: BookPageRecord[],
+): TelegramMarkdownFile[] {
+  const orderedPages = orderCompleteAssignmentPages(assignment, pages);
+  const groups: string[][] = [];
+  let currentGroup: string[] = [];
+  let currentBytes = 0;
+  const encoder = new TextEncoder();
+
+  for (const page of orderedPages) {
+    const text = sanitizeUtf8(page.text || '');
+    const section = `## [PDF Page ${page.pdfPage}]\n\n${text}`;
+    const sectionBytes = encoder.encode(section).byteLength;
+    if (sectionBytes > MAX_MARKDOWN_DOCUMENT_BYTES) {
+      throw new Error(`Extracted text for PDF page ${page.pdfPage} is too large to send as a Telegram Markdown document.`);
+    }
+    if (currentGroup.length && currentBytes + sectionBytes + 2 > MAX_MARKDOWN_DOCUMENT_BYTES) {
+      groups.push(currentGroup);
+      currentGroup = [];
+      currentBytes = 0;
+    }
+    currentGroup.push(section);
+    currentBytes += sectionBytes + (currentGroup.length > 1 ? 2 : 0);
+  }
+  if (currentGroup.length) groups.push(currentGroup);
+
+  const slug = book.title
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 70) || 'book';
+  const pageRange = `pages-${assignment.startPdfPage}-${assignment.endPdfPage}`;
+  return groups.map((sections, index) => ({
+    filename: `${slug}-day-${assignment.dayNumber}-${pageRange}${groups.length > 1 ? `-part-${String(index + 1).padStart(2, '0')}` : ''}.md`,
+    content: sections.join('\n\n'),
+  }));
+}
+
 function buildAssignmentTelegramContent(
   book: BookRecord,
   assignment: BookAssignmentRecord,
@@ -781,6 +876,7 @@ function buildAssignmentTelegramContent(
   previousAssignment?: BookAssignmentRecord,
   enrichment?: EnrichedReadingContent,
   requireApproved = false,
+  includeOriginalText = true,
 ): string[] {
   if (requireApproved && (assignment.status !== 'approved' || !assignment.studyNotes)) {
     throw new Error('Only assignments with approved study notes can be published.');
@@ -822,7 +918,7 @@ function buildAssignmentTelegramContent(
   const quizUrl = `${getAppOrigin() || 'http://localhost:3000'}/quiz?assignmentId=${encodeURIComponent(assignment.id)}`;
   const content = [
     `<b>${escapeTelegramHtml(book.title)}${book.author ? ` - ${escapeTelegramHtml(book.author)}` : ''}</b>\n${requireApproved ? 'Approved reading assignment' : `Reading Load Plan \u00b7 Day ${assignment.dayNumber} (${assignment.scheduledDate})`}\n${requireApproved ? `PDF pages ${assignment.startPdfPage}\u2013${assignment.endPdfPage}` : `PDF Pages: ${assignment.startPdfPage}\u2013${assignment.endPdfPage}`}`,
-    '<b>1. Original Extracted Text</b>', ...original,
+    ...(includeOriginalText ? ['<b>1. Original Extracted Text</b>', ...original] : []),
     `<b>2. Study Summary</b>\n${escapeTelegramHtml(sanitizeUtf8(summary))}${concepts.length ? `\n\n<b>Key Concepts</b>\n${concepts.map(item => `\u25AA ${escapeTelegramHtml(item)}`).join('\n')}` : ''}`,
     `<b>3. Definitions</b>\n${definitions.length ? definitions.map(item => `\u25AA ${escapeTelegramHtml(item.term)} (PDF p. ${item.pdfPage}): ${escapeTelegramHtml(item.explanation)}`).join('\n') : 'No source-grounded definitions were identified for this unit.'}`,
     `<b>4. Connection to Yesterday's Post</b>\n${escapeTelegramHtml(sanitizeUtf8(connection))}`,
@@ -841,9 +937,10 @@ export function formatReadingAssignment(
   assignment: BookAssignmentRecord,
   pages: BookPageRecord[],
   previousAssignment?: BookAssignmentRecord,
-  enrichment?: EnrichedReadingContent
+  enrichment?: EnrichedReadingContent,
+  includeOriginalText = true,
 ): string[] {
-  return buildAssignmentTelegramContent(book, assignment, pages, previousAssignment, enrichment, true);
+  return buildAssignmentTelegramContent(book, assignment, pages, previousAssignment, enrichment, true, includeOriginalText);
 }
 
 export function formatLoadPlanPages(
@@ -851,9 +948,10 @@ export function formatLoadPlanPages(
   assignment: BookAssignmentRecord,
   pages: BookPageRecord[],
   previousAssignment?: BookAssignmentRecord,
-  enrichment?: EnrichedReadingContent
+  enrichment?: EnrichedReadingContent,
+  includeOriginalText = true,
 ): string[] {
-  return buildAssignmentTelegramContent(book, assignment, pages, previousAssignment, enrichment, false);
+  return buildAssignmentTelegramContent(book, assignment, pages, previousAssignment, enrichment, false, includeOriginalText);
 }
 
 export async function listTelegramDeliveries(userId: string) {
@@ -901,10 +999,17 @@ async function saveDelivery(delivery: TelegramDeliveryRecord) {
   return delivery;
 }
 
-async function createDelivery(userId: string, bookId: string, assignmentId: string, parts: string[], image?: { filename: string; page: number }) {
+async function createDelivery(
+  userId: string,
+  bookId: string,
+  assignmentId: string,
+  parts: string[],
+  image?: { filename: string; page: number },
+  markdownFiles: TelegramMarkdownFile[] = [],
+) {
   const sql = getDb();
   const now = Date.now();
-  const item: TelegramDeliveryRecord = { id: randomUUID(), userId, bookId, assignmentId, status: 'pending', messageParts: parts, nextPart: 0, telegramMessageIds: [], ...(image ? { imageFilename: image.filename, imagePage: image.page, imageSent: false } : {}), lastError: '', safeToRetry: false, retryAfterAt: null, createdAt: now, updatedAt: now };
+  const item: TelegramDeliveryRecord = { id: randomUUID(), userId, bookId, assignmentId, status: 'pending', messageParts: parts, nextPart: 0, markdownFiles, nextMarkdownFile: 0, telegramMessageIds: [], ...(image ? { imageFilename: image.filename, imagePage: image.page, imageSent: false } : {}), lastError: '', safeToRetry: false, retryAfterAt: null, createdAt: now, updatedAt: now };
   if (sql) {
     await ensureSchema(sql);
     const rows = await sql`INSERT INTO telegram_deliveries (id, user_id, book_id, assignment_id, status, data, created_at, updated_at)
@@ -1007,7 +1112,8 @@ export async function publishApprovedAssignment(
     }
   }
 
-  const parts = formatReadingAssignment(book, assignment, pages, postedPrevious, activeEnrichment);
+  const markdownFiles = createOriginalBookMarkdownFiles(book, assignment, pages);
+  const parts = formatReadingAssignment(book, assignment, pages, postedPrevious, activeEnrichment, false);
   let delivery = await getAssignmentDelivery(userId, assignment.id);
   if (delivery?.status === 'completed') return delivery;
   if (delivery && delivery.status !== 'pending') {
@@ -1016,7 +1122,20 @@ export async function publishApprovedAssignment(
   }
   if (!delivery) {
     const imagePage = pages.find(page => page.visualPreview?.filename);
-    delivery = await createDelivery(userId, book.id, assignment.id, parts, imagePage?.visualPreview ? { filename: imagePage.visualPreview.filename, page: imagePage.pdfPage } : undefined);
+    delivery = await createDelivery(
+      userId,
+      book.id,
+      assignment.id,
+      parts,
+      imagePage?.visualPreview ? { filename: imagePage.visualPreview.filename, page: imagePage.pdfPage } : undefined,
+      markdownFiles,
+    );
+  }
+  if (!delivery.markdownFiles?.length) {
+    const migratedMessageParts = delivery.nextPart === 0 && delivery.messageParts.some(part => part.includes('Original Extracted Text'))
+      ? parts
+      : delivery.messageParts;
+    delivery = await saveDelivery({ ...delivery, messageParts: migratedMessageParts, markdownFiles, nextMarkdownFile: 0, updatedAt: Date.now() });
   }
   const claimed = await claimDelivery(delivery);
   if (!claimed) throw new Error('Another request is already processing this Telegram delivery, or the saved delivery can no longer be retried.');
@@ -1026,6 +1145,19 @@ export async function publishApprovedAssignment(
     const connection = await checkTelegramChannel();
     if (!connection.canPost) throw new Error(connection.message);
     const { chatId } = envConfig();
+    while ((delivery.nextMarkdownFile || 0) < (delivery.markdownFiles?.length || 0)) {
+      sendingStarted = true;
+      const file = delivery.markdownFiles![delivery.nextMarkdownFile || 0];
+      const document = await sendTelegramMarkdownDocument(chatId, file.filename, file.content);
+      const nextMarkdownFile = (delivery.nextMarkdownFile || 0) + 1;
+      delivery = await saveDelivery({
+        ...delivery,
+        nextMarkdownFile,
+        telegramMessageIds: [...delivery.telegramMessageIds, document.message_id],
+        updatedAt: Date.now(),
+      });
+      sendingStarted = false;
+    }
     while (delivery.nextPart < delivery.messageParts.length) {
       sendingStarted = true;
       const part = delivery.messageParts[delivery.nextPart];
@@ -1086,7 +1218,8 @@ export async function publishLoadPlanPagesToTelegram(
     }
   }
 
-  const parts = formatLoadPlanPages(book, assignment, pages, previousAssignment, activeEnrichment);
+  const markdownFiles = createOriginalBookMarkdownFiles(book, assignment, pages);
+  const parts = formatLoadPlanPages(book, assignment, pages, previousAssignment, activeEnrichment, false);
   let delivery = await getAssignmentDelivery(userId, assignment.id);
   if (!delivery) {
     const imagePage = pages.find(page => page.visualPreview?.filename);
@@ -1095,7 +1228,8 @@ export async function publishLoadPlanPagesToTelegram(
       book.id,
       assignment.id,
       parts,
-      imagePage?.visualPreview ? { filename: imagePage.visualPreview.filename, page: imagePage.pdfPage } : undefined
+      imagePage?.visualPreview ? { filename: imagePage.visualPreview.filename, page: imagePage.pdfPage } : undefined,
+      markdownFiles,
     );
   } else if (delivery.status === 'completed') {
     return { delivery, channel: delivery.channel || 'Previously delivered Telegram channel', bot: delivery.bot || 'Previously used Telegram bot', messageCount: delivery.telegramMessageIds.length, telegramMessageIds: delivery.telegramMessageIds };
@@ -1106,6 +1240,13 @@ export async function publishLoadPlanPagesToTelegram(
       throw Object.assign(new Error('A previous delivery may have sent part of this assignment. Check Telegram and the delivery record before retrying.'), { delivery });
     }
     if (delivery.retryAfterAt && delivery.retryAfterAt > Date.now()) throw Object.assign(new Error(`Telegram asked us to retry after ${new Date(delivery.retryAfterAt).toISOString()}.`), { delivery });
+  }
+
+  if (!delivery.markdownFiles?.length) {
+    const migratedMessageParts = delivery.nextPart === 0 && delivery.messageParts.some(part => part.includes('Original Extracted Text'))
+      ? parts
+      : delivery.messageParts;
+    delivery = await saveDelivery({ ...delivery, messageParts: migratedMessageParts, markdownFiles, nextMarkdownFile: 0, updatedAt: Date.now() });
   }
 
   const allowBlockedRetry = options.forceRetryBlockedDelivery === true
@@ -1120,6 +1261,19 @@ export async function publishLoadPlanPagesToTelegram(
     if (!connection.canPost) throw new Error(connection.message);
 
     const { chatId } = envConfig();
+    while ((delivery.nextMarkdownFile || 0) < (delivery.markdownFiles?.length || 0)) {
+      sendingStarted = true;
+      const file = delivery.markdownFiles![delivery.nextMarkdownFile || 0];
+      const document = await sendTelegramMarkdownDocument(chatId, file.filename, file.content);
+      const nextMarkdownFile = (delivery.nextMarkdownFile || 0) + 1;
+      delivery = await saveDelivery({
+        ...delivery,
+        nextMarkdownFile,
+        telegramMessageIds: [...delivery.telegramMessageIds, document.message_id],
+        updatedAt: Date.now(),
+      });
+      sendingStarted = false;
+    }
     while (delivery.nextPart < delivery.messageParts.length) {
       sendingStarted = true;
       const part = delivery.messageParts[delivery.nextPart];

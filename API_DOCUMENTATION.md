@@ -53,6 +53,7 @@ The web browser's IndexedDB is a separate store. Export its JSON backup in web S
 - `GET /api/telegram/status` reports server-side configuration and channel connectivity.
 - `POST /api/telegram/status` accepts optional `{ "botToken": "…", "chatId": "…" }` to update backend configuration. The mobile form clears the token after sending and never saves it in local preferences; use HTTPS.
 - `POST /api/telegram/send` sends `{ "text": "…" }` to the configured channel after a send confirmation.
+- Book assignment publishing sends the assigned original PDF text first as a page-labelled `.md` document built from the extracted source, then sends the existing generated study sections separately.
 - `GET /api/telegram/deliveries` lists server delivery history.
 - `GET`, `POST /api/telegram/automation` reads or changes `{ "paused": true|false }` for scheduled book publishing.
 
